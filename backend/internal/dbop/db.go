@@ -1,0 +1,85 @@
+// Package dbop 是数据访问层：基于 GORM，不手写 SQL 语句。
+// 每张表一个文件，模型对象与它的增删改查放在一起；
+// 跨多张表的查询逻辑放公共文件（db.go / 需要时另建 query.go）。
+package dbop
+
+import (
+	"errors"
+	"log"
+	"os"
+	"time"
+
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+)
+
+// DB 是数据库句柄。
+type DB struct {
+	gdb *gorm.DB
+}
+
+// Open 打开 SQLite 数据库并自动迁移全部表结构。
+// dsn 形如 "tietie.db"（相对运行目录）或绝对路径。
+func Open(dsn string) (*DB, error) {
+	gdb, err := gorm.Open(
+		sqlite.Open("file:"+dsn+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"),
+		&gorm.Config{Logger: logger.New(
+			log.New(os.Stdout, "", log.LstdFlags),
+			logger.Config{
+				SlowThreshold:             500 * time.Millisecond,
+				LogLevel:                  logger.Warn,
+				IgnoreRecordNotFoundError: true, // 查无记录是正常业务分支，不打错误日志
+				Colorful:                  false,
+			},
+		)},
+	)
+	if err != nil {
+		return nil, err
+	}
+	sqlDB, err := gdb.DB()
+	if err != nil {
+		return nil, err
+	}
+	// SQLite 单写者：限制单连接，避免 SQLITE_BUSY。
+	sqlDB.SetMaxOpenConns(1)
+
+	if err := gdb.AutoMigrate(
+		&User{},
+		&Binding{},
+		&Session{},
+		&Message{},
+		&File{},
+	); err != nil {
+		return nil, err
+	}
+	return &DB{gdb: gdb}, nil
+}
+
+// Close 关闭数据库。
+func (db *DB) Close() error {
+	if db == nil || db.gdb == nil {
+		return nil
+	}
+	sqlDB, err := db.gdb.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.Close()
+}
+
+// enabled 报告数据库是否可用（nil 安全）。
+func (db *DB) enabled() bool { return db != nil && db.gdb != nil }
+
+// firstOrNil 把 GORM 的"记录不存在"统一转成 (nil, nil)。
+func firstOrNil[T any](v *T, err error) (*T, error) {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
+var errNoDB = errors.New("数据库未启用")

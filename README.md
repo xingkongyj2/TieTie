@@ -4,51 +4,65 @@
 
 ## 运行
 
-使用 Node.js 22.12+。
+仓库分两个模块：`frontend/`（React + Vite）与 `backend/`（Go 服务）。前端需要 Node.js 22.12+，后端需要 Go 1.22+。
 
 ```bash
+cd frontend
 npm install
-cp .env.example .env.local # 仅首次配置；已有 .env.local 时不要覆盖
+cd ../backend
+cp .env.example .env.local   # 仅首次配置；已有 .env.local 时不要覆盖
 ```
 
-在 `.env.local` 中填写服务端配置：
+在 `backend/.env.local` 中填写服务端配置：
 
 ```dotenv
 QODER_ACCESS_TOKEN=你的令牌
 QODER_DEFAULT_SESSION_ID=可选的已有会话ID
 ```
 
-```bash
-npm run dev
-```
-
-打开终端显示的地址（默认 `http://127.0.0.1:5173`）。令牌仅由 Node 服务端读取，禁止加 `VITE_` 前缀；`.env.local` 已被忽略，不应提交或发送给浏览器。修改配置后重启服务。
+两个终端分别启动（npm 命令都在 `frontend/` 下执行）：
 
 ```bash
-npm test        # 后端接口、分页、错误处理和访问边界测试，无真实云端写入
-npm run build   # TypeScript 检查并构建到 dist/
-npm run preview # 预览产物，同时提供会话代理
-npm start       # Node 同时托管 dist/ 和 API，默认 127.0.0.1:4173
+npm start      # 即 cd ../backend && go run ./cmd/server，Go 后端监听 127.0.0.1:4173
+npm run dev    # Vite 开发服务，/api 自动代理到 Go 后端
 ```
 
-已有端口占用时可用 `PORT=4175 npm start`。`dist/` 单独放到静态托管不会提供会话接口，需要同时运行 Node 服务或移植代理到现有后端。
+打开终端显示的地址（默认 `http://127.0.0.1:5173`）。令牌仅由 Go 后端读取，禁止加 `VITE_` 前缀；`.env.local` 已被忽略，不应提交或发送给浏览器。修改配置后重启后端。
+
+```bash
+npm test        # Go 后端单元测试（qoder 转换、文档抽取），无真实云端写入
+npm run build   # TypeScript 检查并构建到 frontend/dist/
+npm run preview # 预览产物，/api 同样代理到 Go 后端
+```
+
+生产部署时 Go 后端直接托管 `frontend/dist/`（`STATIC_DIR`，默认 `../frontend/dist`），单进程即可，无需 Vite。端口占用等环境变量见 `backend/README.md`。
+
+## 登录、邀请码与绑定
+
+- **注册/登录**：用户名（2-24 位中文/字母/数字）+ 密码（≥6 位，bcrypt 哈希存储）；登录成功签发 JWT（默认 30 天），前端保存后所有 `/api` 请求自动携带 `Authorization: Bearer`，401 时自动回到登录页。
+- 注册后生成 **8 位专属邀请码**（去掉易混淆字符）。未绑定时显示绑定引导页：可复制邀请码或分享链接（`?invite=CODE`，微信里发给对方，打开自动预填）。
+- **绑定**：输入对方邀请码 → 两个用户 ID 按字典序组成唯一键写入 `bindings` 表；已有记录直接复用历史会话，没有则自动在云端新建专属会话（agent/环境自动探测，可用 `QODER_AGENT_ID` / `QODER_ENVIRONMENT_ID` 指定）后落库。
+- 绑定后聊天页固定使用该共享会话；**会话接口按绑定关系鉴权**，非绑定双方访问返回 403。双方并发绑定只会产生一个会话（后到者自动清理多余会话）。
+- 数据存于 SQLite（`backend/tietie.db`，GORM 自动建表），表模型与增删改查合并在 `backend/internal/dbop/`（每表一文件）。详情页底部可退出登录。
 
 ## 云端会话
 
-- 自动读取可访问的会话列表，在右上角“小窝详情”页底部切换、刷新并记住上次选择；初次使用优先选择 `QODER_DEFAULT_SESSION_ID`。
-- 加载完整分页历史，按事件 ID 去重、按本地日期显示。Agent 回复按 Markdown 展示标题、清单、链接、代码块和表格；宽表可在消息内横向滚动，提醒内容以提示卡片显示。工具调用及思考事件不作为聊天正文。
+- 绑定成功后自动加载两人共享的专属会话，按事件 ID 去重、按本地日期显示。Agent 回复按 Markdown 展示标题、清单、链接、代码块和表格；宽表可在消息内横向滚动，提醒内容以提示卡片显示。工具调用及思考事件不作为聊天正文。
 - 发送文字到当前 Session，接收成功后展示云端确认的消息；忙碌时每 3 秒、空闲时每 12 秒增量同步。完成本轮后恢复发送，发送失败保留草稿。
 - 认证失败、限流、会话忙碌、网络中断等情况显示错误。发送超时时可能已被云端接受，应先刷新确认后再决定是否重发。
-- 聊天框可添加 PNG/JPEG/WebP/GIF 图片，也可上传 Qoder Files API 支持的文本类文件：任意 `text/*` MIME、文档列出的 `application/*` 文本 MIME、代码/配置扩展名及 `Dockerfile`、`Makefile` 等无扩展名文件。Excel（`.xlsx/.xls/.xlsm/.xlsb`）和 Word（`.docx/.doc`）由本地服务提取文字和工作表数据，再作为文本资源挂载到当前 Session；图表、图片及宏不会作为原文件交给 Agent。PDF、音视频和压缩包仍不支持。图片通过消息图片块发送，不走 Files 上传接口，聊天中的图片可点击放大。[Qoder Files 支持清单](https://docs.qoder.cn/cloud-agents/files-schemas#%E6%94%AF%E6%8C%81%E4%B8%8A%E4%BC%A0%E7%9A%84%E6%96%87%E4%BB%B6%E7%B1%BB%E5%9E%8B)。
+- 聊天框可添加 PNG/JPEG/WebP/GIF 图片，也可上传 Qoder Files API 支持的文本类文件：任意 `text/*` MIME、文档列出的 `application/*` 文本 MIME、代码/配置扩展名及 `Dockerfile`、`Makefile` 等无扩展名文件。Excel（`.xlsx/.xlsm`）和 Word（`.docx`）由 Go 后端提取文字和工作表数据，再作为文本资源挂载到当前 Session（旧版 `.doc/.xls/.xlsb` 暂不支持，需转存为新格式）；前端不做任何解析，原文件直接交给后端。图表、图片及宏不会作为原文件交给 Agent。PDF、音视频和压缩包仍不支持。图片通过消息图片块发送，不走 Files 上传接口，聊天中的图片可点击放大。[Qoder Files 支持清单](https://docs.qoder.cn/cloud-agents/files-schemas#%E6%94%AF%E6%8C%81%E4%B8%8A%E4%BC%A0%E7%9A%84%E6%96%87%E4%BB%B6%E7%B1%BB%E5%9E%8B)。
 
-浏览器只调用同源 `/api/qoder`：
+浏览器只调用同源 `/api`（除注册/登录外均需 JWT）：
 
-| 本地接口 | 用途 |
-| --- | --- |
-| `GET /api/qoder/sessions` | 会话列表及默认会话 |
-| `GET /api/qoder/sessions/:id/messages` | 完整历史和会话状态 |
-| `GET /api/qoder/sessions/:id/messages?after=evt_...` | 增量历史和会话状态 |
-| `POST /api/qoder/sessions/:id/messages` | 发送文字、图片和文本附件 |
+| 本地接口 | 鉴权 | 用途 |
+| --- | --- | --- |
+| `POST /api/auth/register` | 公开 | 注册并登录，返回 JWT、用户与邀请码 |
+| `POST /api/auth/login` | 公开 | 登录，返回 JWT 与当前绑定 |
+| `GET /api/account/me` | JWT | 当前账号与绑定状态 |
+| `POST /api/account/bind` | JWT | 用对方邀请码绑定，返回共享会话 ID |
+| `GET /api/qoder/sessions/:id/messages` | JWT+绑定 | 完整/增量历史和会话状态 |
+| `POST /api/qoder/sessions/:id/messages` | JWT+绑定 | 发送文字、图片和文本附件 |
+| `GET /api/qoder/sessions/:id/stream` | JWT+绑定 | SSE 实时事件流 |
 
 代理仅接受上述接口，剔除 Session 中的环境变量、资源凭据、系统指令等字段，并拒绝跨站调用。默认只在本机使用；手机局域网测试需显式设置监听地址和 `QODER_ALLOWED_ORIGIN` 为实际访问地址。公开部署前需要在自己的网关完成用户认证和会话访问权限控制；当前应用使用一份服务端令牌，不具备多用户隔离。
 
@@ -68,17 +82,19 @@ Qoder 接口依据：[Session 使用说明](https://docs.qoder.cn/cloud-agents/s
 ## 代码结构
 
 ```text
-server/qoder.mjs           Qoder 客户端、字段映射与同源 API
-server/qoder.test.mjs      API 边界与分页测试
-server/vite-plugin.mjs     开发/预览 API 中间件
-server/index.mjs           生产静态资源与 API 服务
-src/App.tsx               会话选择、消息展示和顶层交互
-src/hooks/useCloudChat.ts  云端消息、发送与轮询状态
-src/api/qoder.ts           浏览器会话 API
-src/api/client.ts          请求与错误处理
-src/hooks/useRelationship.ts 本地资料和提醒状态
-src/api/relationship.ts    本地资料和提醒持久化
-src/components/           聊天、输入栏、资料与工具弹层
+backend/                       Go 后端（结构详见 backend/README.md）
+backend/internal/api/          路由汇聚、同源防护、SSE 转发、附件校验
+backend/internal/qoder/        Qoder 云端客户端与字段映射
+backend/internal/dbop/         MySQL 落库（可选，DB_DSN 留空则关闭）
+backend/internal/document/     docx/xlsx 文字提取（.doc/.xls 旧格式暂不支持，需转存）
+frontend/src/api/upload-types.json 上传白名单契约（前端校验用，后端 dto 有同步副本）
+frontend/src/App.tsx           会话选择、消息展示和顶层交互
+frontend/src/hooks/useCloudChat.ts 云端消息、发送与轮询状态
+frontend/src/api/qoder.ts      浏览器会话 API
+frontend/src/api/client.ts     请求与错误处理
+frontend/src/hooks/useRelationship.ts 本地资料和提醒状态
+frontend/src/api/relationship.ts 本地资料和提醒持久化
+frontend/src/components/       聊天、输入栏、资料与工具弹层
 ```
 
 后续迁移到 Taro 仍需替换 HTML 控件、请求与存储适配器，并适配小程序路由、样式和权限。
@@ -88,4 +104,5 @@ src/components/           聊天、输入栏、资料与工具弹层
 - 真实云端会话列表、详情、历史及增量读取均返回 HTTP 200；当前读取到 11 个会话。
 - 浏览器验证了会话切换、刷新后保留选择，以及 320 / 375 / 390 / 430px 宽度无页面横向溢出。
 - 发送使用隔离的模拟上游验证：正常回复、无文字回复后恢复发送、409 保留草稿、提交成功后同步失败和恢复；未向现有云端会话发送测试消息。
-- `npm test` 的 14 项后端测试及 `npm run build` 通过；前端源码和构建产物未包含令牌。
+- `npm test`（Go 后端单元测试）及 `npm run build` 通过；前端源码和构建产物未包含令牌。
+- 后端已由 Node（server/，已删除）迁移至 Go（backend/）：真实云端会话列表、历史消息、SSE 流及 Vite 代理链路均验证通过，接口与错误码与原 Node 版一致。

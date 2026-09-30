@@ -5,3 +5,8 @@ dist/
 .env
 .env.local
 artifacts/
+backend/bin/
+.vite/
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
