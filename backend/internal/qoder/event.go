@@ -119,6 +119,22 @@ func (c *Client) SendMessage(ctx context.Context, sessionID string, input Messag
 	body := map[string]any{
 		"events": []map[string]any{{"type": "user.message", "content": content}},
 	}
+	return c.postEvents(ctx, sessionID, body)
+}
+
+// SendCustomToolResult 回传自定义工具（AskUserQuestion）的执行结果，让云端挂起的那一轮继续。
+// toolUseID 必须是 agent.custom_tool_use 事件自身的 ID。
+func (c *Client) SendCustomToolResult(ctx context.Context, sessionID, toolUseID, text string) (*SendResult, error) {
+	body := map[string]any{"events": []map[string]any{{
+		"type":               "user.custom_tool_result",
+		"custom_tool_use_id": toolUseID,
+		"content":            []ContentBlock{{Type: "text", Text: text}},
+	}}}
+	return c.postEvents(ctx, sessionID, body)
+}
+
+// postEvents 是向 /sessions/{id}/events 投递事件的统一出口。
+func (c *Client) postEvents(ctx context.Context, sessionID string, body map[string]any) (*SendResult, error) {
 	var env struct {
 		Data *[]Event `json:"data"`
 	}

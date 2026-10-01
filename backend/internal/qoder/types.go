@@ -2,6 +2,7 @@ package qoder
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"regexp"
 	"strings"
 	"time"
@@ -80,11 +81,14 @@ type eventError struct {
 
 // Event 是上游会话事件。
 type Event struct {
-	ID          string         `json:"id"`
-	Type        string         `json:"type"`
-	Content     []ContentBlock `json:"content"`
-	ProcessedAt string         `json:"processed_at"`
-	Error       *eventError    `json:"error"`
+	ID              string          `json:"id"`
+	Type            string          `json:"type"`
+	Content         []ContentBlock  `json:"content"`
+	ProcessedAt     string          `json:"processed_at"`
+	Error           *eventError     `json:"error"`
+	Name            string          `json:"name"`
+	Input           json.RawMessage `json:"input"`
+	CustomToolUseID string          `json:"custom_tool_use_id"`
 }
 
 // ---- 对前端的公开结构 ----
@@ -108,6 +112,23 @@ type PublicMessage struct {
 	Time      string   `json:"time"`
 	CreatedAt string   `json:"createdAt"`
 	Kind      string   `json:"kind"`
+	// Kind 为 ask 时：Agent 通过自定义工具（AskUserQuestion）抛出的选择题。
+	Ask      []AskQuestion `json:"ask,omitempty"`
+	Answered bool          `json:"answered,omitempty"`
+}
+
+// AskQuestion 是一道选择题，字段名与云端工具 input 保持一致。
+type AskQuestion struct {
+	Header      string      `json:"header,omitempty"`
+	Question    string      `json:"question"`
+	MultiSelect bool        `json:"multiSelect,omitempty"`
+	Options     []AskOption `json:"options,omitempty"`
+}
+
+// AskOption 是一道题里的一个选项。
+type AskOption struct {
+	Label       string `json:"label"`
+	Description string `json:"description,omitempty"`
 }
 
 // publicSession 转换并校验上游会话（对应 qoder.mjs publicSession）。
@@ -139,12 +160,31 @@ func publicSession(s *rawSession) (*PublicSession, error) {
 
 // publicMessages 把上游事件转换为前端消息列表（对应 qoder.mjs publicMessages）。
 func publicMessages(events []Event) []PublicMessage {
+	// 云端在等待工具应答时会把会话标成 idle，所以"是否已回答"只能靠事件配对判断。
+	answered := make(map[string]bool)
+	for _, ev := range events {
+		if ev.Type == "user.custom_tool_result" && ev.CustomToolUseID != "" {
+			answered[ev.CustomToolUseID] = true
+		}
+	}
 	out := []PublicMessage{}
 	for _, ev := range events {
-		if ev.Type != "user.message" && ev.Type != "agent.message" {
+		if !eventIDRe.MatchString(ev.ID) {
 			continue
 		}
-		if !eventIDRe.MatchString(ev.ID) {
+		if ev.Type == "agent.custom_tool_use" {
+			questions, ok := parseAskInput(ev.Input)
+			if !ok {
+				continue
+			}
+			out = append(out, PublicMessage{
+				ID: ev.ID, Sender: "ai", Text: questions[0].Question, Kind: "ask",
+				Ask: questions, Answered: answered[ev.ID],
+				Time: formatClock(ev.ProcessedAt), CreatedAt: ev.ProcessedAt,
+			})
+			continue
+		}
+		if ev.Type != "user.message" && ev.Type != "agent.message" {
 			continue
 		}
 		var images []string
@@ -199,6 +239,38 @@ func publicMessages(events []Event) []PublicMessage {
 		out = append(out, msg)
 	}
 	return out
+}
+
+// parseAskInput 解析 agent.custom_tool_use 的 input：只认带 questions 的提问类工具。
+// 其他自定义工具应用内无法应答，返回 false 让调用方跳过，避免渲染出答不了的卡片。
+func parseAskInput(raw json.RawMessage) ([]AskQuestion, bool) {
+	var payload struct {
+		Questions []AskQuestion `json:"questions"`
+	}
+	if len(raw) == 0 || json.Unmarshal(raw, &payload) != nil {
+		return nil, false
+	}
+	questions := make([]AskQuestion, 0, len(payload.Questions))
+	for _, q := range payload.Questions {
+		q.Question = strings.TrimSpace(q.Question)
+		if q.Question == "" {
+			continue
+		}
+		options := make([]AskOption, 0, len(q.Options))
+		for _, o := range q.Options {
+			o.Label = strings.TrimSpace(o.Label)
+			if o.Label == "" {
+				continue
+			}
+			options = append(options, o)
+		}
+		q.Options = options
+		questions = append(questions, q)
+	}
+	if len(questions) == 0 {
+		return nil, false
+	}
+	return questions, true
 }
 
 // uploadMarker 是发送附件时拼接在用户文本后的固定标记（与 sendMessage 保持一致）。

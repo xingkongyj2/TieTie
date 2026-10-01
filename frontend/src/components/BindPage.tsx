@@ -1,6 +1,6 @@
-import { Copy, Heart, Link2 } from 'lucide-react';
+import { Copy, Link, Link2 } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
-import { SpaceBuddy } from './SpaceBuddies';
+import { SpaceBuddies } from './SpaceBuddies';
 
 interface Props {
   code: string;
@@ -47,7 +47,7 @@ export function BindPage({ code, onBind, notify, embedded = false }: Props) {
   // 分享链接带 ?invite=CODE 打开时自动预填。
   useEffect(() => {
     const prefilled = new URLSearchParams(window.location.search).get('invite');
-    if (prefilled) setInvite(prefilled.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8));
+    if (prefilled) setInvite(prefilled.replace(/[^0-9]/g, '').slice(0, 4));
   }, []);
 
   const copyCode = async () => {
@@ -60,7 +60,7 @@ export function BindPage({ code, onBind, notify, embedded = false }: Props) {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const target = invite.trim().toUpperCase();
+    const target = invite.trim();
     if (!target || binding) return;
     setBinding(true);
     setError('');
@@ -75,8 +75,11 @@ export function BindPage({ code, onBind, notify, embedded = false }: Props) {
   };
 
   return <div className={embedded ? 'bind-page bind-page-embedded' : 'app-shell bind-page'}>
-    <header className="bind-header"><div><h1>我们<span className="page-title-dot" /></h1></div><Heart size={21} aria-hidden="true" /></header>
-    <div className="bind-welcome"><SpaceBuddy variant="blue" className="bind-buddy" /><h2>两个人，刚刚好</h2><p>邀请在意的人，一起收集日常的小美好。</p></div>
+    <header className="bind-header"><h1>贴贴清单</h1></header>
+    <div className="bind-welcome">
+      <SpaceBuddies className="bind-buddy" />
+      <h2>两个人，刚刚好</h2>
+    </div>
 
     <div className="bind-code-card">
       <span className="bind-code-label">我的邀请码</span>
@@ -88,21 +91,20 @@ export function BindPage({ code, onBind, notify, embedded = false }: Props) {
     </div>
 
     <form className="bind-form" onSubmit={(event) => void submit(event)}>
-      <label htmlFor="invite-code">输入对方的邀请码</label>
       <div className="bind-form-row">
         <input
-          id="invite-code"
           value={invite}
-          onChange={(event) => { setInvite(event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8)); setError(''); }}
-          placeholder="例如 QSMVXTN6"
+          onChange={(event) => { setInvite(event.target.value.replace(/[^0-9]/g, '').slice(0, 4)); setError(''); }}
+          aria-label="对方邀请码"
+          placeholder="对方邀请码"
           autoComplete="off"
-          autoCapitalize="characters"
+          inputMode="numeric"
           spellCheck={false}
-          maxLength={8}
+          maxLength={4}
           disabled={binding}
         />
-        <button type="submit" className="primary-button" disabled={binding || invite.trim().length < 6}>
-          <Heart size={15} />{binding ? '正在绑定…' : '绑定'}
+        <button type="submit" className="primary-button" disabled={binding || invite.trim().length < 4}>
+          <Link size={15} />{binding ? '正在绑定…' : '绑定'}
         </button>
       </div>
       {error && <p className="bind-error" role="alert">{error}</p>}

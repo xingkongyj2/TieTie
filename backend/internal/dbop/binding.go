@@ -3,13 +3,18 @@ package dbop
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
 var ErrAlreadyBound = errors.New("user already bound to another partner")
+
+// sessionTitlePrefix 是配对会话标题的前缀，便于在云端会话列表里认出是贴贴建的会话。
+const sessionTitlePrefix = "tietie-"
 
 // Binding 是一对用户的绑定关系（bindings 表）。
 // 两个用户 ID 按数值顺序组成复合主键，即"一对用户只有一个共享会话"。
@@ -29,6 +34,13 @@ func PairKey(id1, id2 int64) (a, b int64) {
 		return id1, id2
 	}
 	return id2, id1
+}
+
+// SessionTitle 是一对绑定共用的云端会话标题：小 ID 在前、大 ID 在后。
+// 绑定记录删除后，重新绑定同一人靠这个标题在云端找回历史会话，本地不必保留映射。
+func SessionTitle(id1, id2 int64) string {
+	a, b := PairKey(id1, id2)
+	return fmt.Sprintf("%s%d-%d", sessionTitlePrefix, a, b)
 }
 
 // OtherUser 返回绑定中对方的用户 ID。
@@ -93,4 +105,28 @@ func (db *DB) CreateBinding(ctx context.Context, id1, id2 int64, sessionID strin
 		return false, res.Error
 	}
 	return res.RowsAffected > 0, nil
+}
+
+// Unbind 解除用户当前生效的绑定：原记录归档进 archived_bindings 后从 bindings 删除。
+// 一行绑定由双方共享，所以解绑后两人都回到未绑定状态；云端会话不删除，历史仍在云端。
+// 没有绑定时返回 (nil, nil)。
+func (db *DB) Unbind(ctx context.Context, userID int64) (*Binding, error) {
+	if !db.enabled() {
+		return nil, errNoDB
+	}
+	binding, err := db.GetLatestBindingByUser(ctx, userID)
+	if err != nil || binding == nil {
+		return nil, err
+	}
+	err = db.gdb.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec(`INSERT OR IGNORE INTO archived_bindings (user_a, user_b, session_id, created_at) VALUES (?, ?, ?, ?)`,
+			binding.UserA, binding.UserB, binding.SessionID, binding.CreatedAt).Error; err != nil {
+			return err
+		}
+		return tx.Where("user_a = ? AND user_b = ?", binding.UserA, binding.UserB).Delete(&Binding{}).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	return binding, nil
 }

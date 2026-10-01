@@ -68,29 +68,29 @@ export default function App() {
 
   const ai = state.members.find((m) => m.id === 'ai')!;
   const sendMessage = async (text: string, files: File[] = []) => {
-    if (!chat.canSend) throw new Error(chat.error || (chat.busy ? '伙伴还在回复，等这一轮结束后再发送吧。' : '请先加载一个可聊天的云端会话。'));
+    if (!chat.canSend) throw new Error(chat.error || (chat.awaitingAsk ? '云端助手在等你回答上面那道选择题，先选一个才能继续。' : chat.busy ? '伙伴还在回复，等这一轮结束后再发送吧。' : '请先加载一个可聊天的云端会话。'));
     return chat.sendMessage(text, files);
   };
 
   return <div className={`app-shell ${view !== 'details' ? 'has-bottom-nav' : ''}`} data-view={view}>
     <div className="chat-view" hidden={view !== 'we'}>
       {account.account.binding ? <>
-      <header className="chat-header"><div className="chat-heading"><h1>我们<span className="page-title-dot" /></h1></div><button className="icon-button details-button" aria-label="查看角色信息" onClick={() => setView('details')}><Ellipsis size={23} /></button></header>
+      <header className="chat-header"><div className="chat-heading"><h1>我们</h1></div><button className="icon-button details-button" aria-label="查看角色信息" onClick={() => setView('details')}><Ellipsis size={18} /></button></header>
       {chat.error && <div className="cloud-error" role="alert"><span>{chat.error}</span><button disabled={chat.loading || chat.refreshing || chat.submitting} onClick={() => void chat.reload()}>重试</button></div>}
       <main className={`chat-scroll ${!chat.messages.length ? 'is-empty' : ''}`} ref={chatRef} aria-label="云端聊天记录" aria-busy={chat.loading} onScroll={() => { const el = chatRef.current; if (el) nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100; }}>
         {chat.loading && !chat.messages.length ? <div className="cloud-empty" role="status"><span className="spinner" /><p>正在找回我们聊过的话…</p></div> : !chat.messages.length && !chat.error ? <div className="cloud-empty chat-welcome"><span className="welcome-eyebrow"><Sparkles size={13} />我们的专属空间</span><SpaceBuddy variant="blue" className="chat-welcome-buddy" /><h2>把日常，聊成我们的故事</h2><p>{chat.session ? '分享一件小事，让今天再靠近一点。' : '正在准备我们的专属小窝…'}</p></div> : null}
         <div className="messages">{chat.messages.map((message, index) => <Fragment key={message.id}>
           {(index === 0 || messageDay(chat.messages[index - 1].createdAt) !== messageDay(message.createdAt)) && <div className="chat-date"><span /><strong>{messageDayLabel(message.createdAt)}</strong><span /></div>}
-          <ChatMessage message={message} members={state.members} reminders={state.reminders} onToggle={toggleReminder} onError={notify} onOpenImage={(src, alt) => setPreviewImage({ src, alt })} />
+          <ChatMessage message={message} members={state.members} reminders={state.reminders} onToggle={toggleReminder} onError={notify} onOpenImage={(src, alt) => setPreviewImage({ src, alt })} onAnswer={chat.answerAsk} />
         </Fragment>)}</div>
         {(chat.busy || chat.submitting || chat.thinking) && <div className="typing-indicator" role="status"><Avatar member={ai} size="small" /><span>{chat.submitting ? '正在发送给云端伙伴' : chat.thinking ? `${ai.name}正在思考` : `${ai.name}正在回复`}</span><span className="typing-dots"><i /><i /><i /></span></div>}
         {chat.turnError && <div className="turn-error" role="alert">{chat.turnError}</div>}
       </main>
-      <Composer key={chat.selectedId ?? 'no-session'} sending={chat.submitting} disabled={!chat.canSend} placeholder={chat.busy ? '伙伴正在回复，可以先写下一句…' : '说点什么，让我们更近一点…'} onSend={sendMessage} onTool={setTool} onError={notify} />
+      <Composer key={chat.selectedId ?? 'no-session'} sending={chat.submitting} disabled={!chat.canSend} placeholder={chat.awaitingAsk ? '先回答上面那道选择题…' : chat.busy ? '伙伴正在回复，可以先写下一句…' : '说点什么，让我们更近一点…'} onSend={sendMessage} onTool={setTool} onError={notify} />
       </> : <BindPage code={account.account.user.code} onBind={account.bind} notify={notify} embedded />}
     </div>
     {view === 'things' && <LittleThings state={state} onSaveSettings={saveSettings} onToggle={toggleReminder} notify={notify} />}
-    {view === 'mine' && <Mine state={state} username={account.account.user.username} code={account.account.user.code} onSaveMember={saveMember} onLogout={account.logout} notify={notify} />}
+    {view === 'mine' && <Mine state={state} username={account.account.user.username} code={account.account.user.code} hasSession={!!account.account.binding} onSaveMember={saveMember} onLogout={account.logout} onExitSession={account.unbind} notify={notify} />}
     {view === 'details' && <Details state={state} onBack={() => setView('we')} onSaveMember={saveMember} onSaveSettings={saveSettings} notify={notify} />}
     {view !== 'details' && <BottomNav view={view} onChange={setView} />}
     {tool && <Tools tool={tool} state={state} onClose={() => setTool(null)} onAdd={addReminder} notify={notify} />}

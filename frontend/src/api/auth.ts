@@ -37,4 +37,8 @@ export const authApi = {
   bind(code: string): Promise<AccountResult> {
     return request('/api/account/bind', { method: 'POST', body: { code }, timeoutMs: 90_000 })
   },
+  /** 退出当前会话：删除绑定记录，云端会话和历史都保留。 */
+  unbind(): Promise<AccountResult> {
+    return request('/api/account/unbind', { method: 'POST' })
+  },
 }

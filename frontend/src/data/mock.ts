@@ -40,7 +40,6 @@ export const initialRelationshipState: RelationshipState = {
   settings: {
     name: '贴贴',
     tone: 'playful',
-    sharedReminders: true,
     weatherCare: false,
     anniversaryReminders: true,
     quietHours: true,

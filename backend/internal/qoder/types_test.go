@@ -136,3 +136,29 @@ func TestDecodeBase64(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestPublicMessagesAskToolUse(t *testing.T) {
+	input := json.RawMessage(`{"questions":[{"header":"晚餐详情","multiSelect":false,"question":"要不要补充一下时间或细节再发呀？","options":[{"label":"就发这条，不用时间","description":"不设具体时间"},{"label":"   ","description":"空标签应被丢掉"},{"label":"设置成提醒"}]}]}`)
+	answered := publicMessages([]Event{
+		{ID: "evt_ask", Type: "agent.custom_tool_use", Name: "AskUserQuestion", ProcessedAt: "2026-10-01T04:53:08Z", Input: input},
+		{ID: "evt_ans", Type: "user.custom_tool_result", CustomToolUseID: "evt_ask", Content: []ContentBlock{{Type: "text", Text: "就发这条，不用时间"}}},
+		{ID: "evt_unknown", Type: "agent.custom_tool_use", Name: "SomeOtherTool", Input: json.RawMessage(`{"foo":1}`)},
+	})
+	if len(answered) != 1 {
+		t.Fatalf("只应留下可应答的提问，且工具应答本身不进正文: %+v", answered)
+	}
+	msg := answered[0]
+	if msg.Kind != "ask" || msg.Sender != "ai" || !msg.Answered {
+		t.Fatalf("提问消息不对: %+v", msg)
+	}
+	if msg.Text != "要不要补充一下时间或细节再发呀？" || len(msg.Ask) != 1 || msg.Ask[0].Header != "晚餐详情" {
+		t.Fatalf("题目内容不对: %+v", msg)
+	}
+	if len(msg.Ask[0].Options) != 2 || msg.Ask[0].Options[1].Label != "设置成提醒" {
+		t.Fatalf("选项应过滤空标签: %+v", msg.Ask[0].Options)
+	}
+	pending := publicMessages([]Event{{ID: "evt_ask", Type: "agent.custom_tool_use", Input: input}})
+	if len(pending) != 1 || pending[0].Answered {
+		t.Fatalf("没有应答事件时应为待回答: %+v", pending)
+	}
+}

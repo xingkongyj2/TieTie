@@ -113,7 +113,9 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     if (!mounted.current || sendLock.current) return
     const id = pinnedId
     if (!id) {
-      update({ loading: false, refreshing: false })
+      // 解绑后清空会话状态，SSE 与轮询随 selectedId 归零一起停掉。
+      cancelRead()
+      update(current.current.selectedId ? { ...initialState, loading: false } : { loading: false, refreshing: false })
       return
     }
     cancelRead()
@@ -200,6 +202,39 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     return () => { mounted.current = false; cancelRead() }
   }, [cancelRead, reload])
 
+  /** 回答云端选择题（AskUserQuestion）：回传后本轮继续，所以按发送一样置忙并刷新。 */
+  const answerAsk = useCallback(async (toolUseId: string, text: string): Promise<boolean> => {
+    const snapshot = current.current
+    const id = snapshot.selectedId
+    if (!id || sendLock.current) throw new Error('会话还没准备好，请稍后再试。')
+    sendLock.current = true
+    cancelRead()
+    pendingTurns.current.set(id, {
+      status: (snapshot.session?.status ?? 'idle').toLowerCase(),
+      messageIds: new Set(snapshot.messages.map((message) => message.id)),
+      idleEventId: snapshot.lastIdleEventId,
+    })
+    update({ submitting: true, pending: true, error: '' })
+    try {
+      await qoderApi.sendToolResult(id, toolUseId, text)
+      if (mounted.current && current.current.selectedId === id) {
+        // 增量刷新取不到更早的 ask 事件，先本地标记已回答，免得卡片还能再点一次。
+        update({ messages: current.current.messages.map((message) => (message.id === toolUseId ? { ...message, answered: true } : message)) })
+      }
+      return true
+    } catch (error) {
+      pendingTurns.current.delete(id)
+      if (mounted.current && current.current.selectedId === id) update({ pending: false, error: errorMessage(error) })
+      throw error
+    } finally {
+      sendLock.current = false
+      if (mounted.current && current.current.selectedId === id) {
+        update({ submitting: false })
+        void readRef.current()
+      }
+    }
+  }, [cancelRead, update])
+
   useEffect(() => {
     const id = state.selectedId
     if (!state.loaded || !id) return
@@ -245,14 +280,16 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
   }, [state.selectedId, state.loaded, update])
 
   const busy = state.pending || isRemoteBusy(state.session)
+  // 云端在等待工具应答时状态仍是 idle，但此时发消息会被上游拒 409，所以按忙处理。
+  const awaitingAsk = state.messages.some((message) => message.kind === 'ask' && !message.answered)
   const canSend = state.loaded && !!state.selectedId && !state.error && !state.submitting
-    && !busy && state.session?.status.toLowerCase() === 'idle'
+    && !busy && !awaitingAsk && state.session?.status.toLowerCase() === 'idle'
   return {
     selectedId: state.selectedId, session: state.session, pinned: !!pinnedId,
     messages: state.messages, loading: state.loading, refreshing: state.refreshing,
-    error: state.error, submitting: state.submitting, busy, canSend,
+    error: state.error, submitting: state.submitting, busy, awaitingAsk, canSend,
     thinking: state.thinking, streaming: state.streaming,
     turnError: state.turnError,
-    reload, sendMessage,
+    reload, sendMessage, answerAsk,
   }
 }

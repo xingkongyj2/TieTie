@@ -5,7 +5,7 @@ import type { AISettings, Member, MemberId, Message, RelationshipState, Reminder
 const STORAGE_KEY = 'tietie.relationship.v1'
 const MEMBER_IDS: MemberId[] = ['ai', 'self', 'partner']
 const TONES: AISettings['tone'][] = ['warm', 'playful', 'concise']
-const SETTING_FLAGS = ['sharedReminders', 'weatherCare', 'anniversaryReminders', 'quietHours'] as const
+const SETTING_FLAGS = ['weatherCare', 'anniversaryReminders', 'quietHours'] as const
 
 const delay = () => new Promise<void>((resolve) => setTimeout(resolve, 120 + Math.random() * 180))
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T

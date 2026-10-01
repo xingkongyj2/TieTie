@@ -4,8 +4,11 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"strings"
+	"unicode/utf8"
 
 	"tietie/backend/internal/dbop"
+	"tietie/backend/internal/dto"
 	"tietie/backend/internal/qoder"
 )
 
@@ -65,6 +68,48 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request, id string) 
 		return
 	}
 	s.recordMessages(r.Context(), id, result.Messages)
+	writeJSON(w, http.StatusOK, result)
+}
+
+// handleToolResult 处理 POST /api/qoder/sessions/{id}/tool-result：
+// 把用户对 AskUserQuestion 这类提问的选择回传给云端，让挂起的那一轮继续。
+func (s *Server) handleToolResult(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeMethodNotAllowed(w)
+		return
+	}
+	id := r.PathValue("id")
+	if !qoder.ValidSessionID(id) {
+		writeRouteNotFound(w)
+		return
+	}
+	if apiErr := s.ensureBoundSession(r.Context(), id); apiErr != nil {
+		writeError(w, apiErr)
+		return
+	}
+	var body struct {
+		ToolUseID string `json:"toolUseId"`
+		Text      string `json:"text"`
+	}
+	if apiErr := decodeJSONBody(r, &body, 4096); apiErr != nil {
+		writeError(w, apiErr)
+		return
+	}
+	toolUseID := strings.TrimSpace(body.ToolUseID)
+	if !qoder.ValidEventID(toolUseID) {
+		writeError(w, qoder.NewApiError(400, "invalid_tool_use_id", "这道提问已经失效，请刷新会话。"))
+		return
+	}
+	text := strings.TrimSpace(body.Text)
+	if text == "" || utf8.RuneCountInString(text) > dto.MaxTextRunes {
+		writeError(w, qoder.NewApiError(400, "invalid_answer", "答案不能为空，且不超过 2000 字。"))
+		return
+	}
+	result, err := s.Qoder.SendCustomToolResult(r.Context(), id, toolUseID, text)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, result)
 }
 

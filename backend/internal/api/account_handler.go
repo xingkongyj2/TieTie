@@ -76,7 +76,7 @@ func (s *Server) handleBind(w http.ResponseWriter, r *http.Request) {
 		writeError(w, apiErr)
 		return
 	}
-	body.Code = strings.ToUpper(strings.TrimSpace(body.Code))
+	body.Code = strings.TrimSpace(body.Code)
 	if body.Code == "" {
 		writeError(w, qoder.NewApiError(400, "invalid_code", "请输入对方的邀请码。"))
 		return
@@ -137,20 +137,38 @@ func (s *Server) handleBind(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 首次绑定：云端新建会话 → 落库。
-	agentID, envID, err := s.Qoder.ResolveAgentAndEnv(r.Context(), s.Cfg.AgentID, s.Cfg.EnvironmentID)
+	// 本地没有这对的绑定记录：先按配对标题在云端找回历史会话（解绑后重绑同一人），找不到才新建。
+	title := dbop.SessionTitle(self.ID, partner.ID)
+	recovered, err := s.Qoder.FindSessionByTitle(r.Context(), title)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	session, err := s.Qoder.CreateSession(r.Context(), agentID, envID)
-	if err != nil {
-		writeError(w, err)
-		return
+	var sessionID string
+	var createdSession *qoder.PublicSession
+	if recovered != nil {
+		sessionID = recovered.ID
+	} else {
+		agentID, envID, err := s.Qoder.ResolveAgentAndEnv(r.Context(), s.Cfg.AgentID, s.Cfg.EnvironmentID)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		createdSession, err = s.Qoder.CreateSession(r.Context(), agentID, envID, title)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		sessionID = createdSession.ID
 	}
-	created, err := s.DB.CreateBinding(r.Context(), self.ID, partner.ID, session.ID)
+	discarded := func() {
+		if createdSession != nil {
+			s.cleanupOrphanSession(createdSession.ID)
+		}
+	}
+	created, err := s.DB.CreateBinding(r.Context(), self.ID, partner.ID, sessionID)
 	if err != nil {
-		s.cleanupOrphanSession(session.ID)
+		discarded()
 		if errors.Is(err, dbop.ErrAlreadyBound) {
 			writeError(w, qoder.NewApiError(409, "already_bound", "你或对方已和其他人绑定，不能重复绑定。"))
 			return
@@ -158,9 +176,8 @@ func (s *Server) handleBind(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	sessionID := session.ID
 	if !created {
-		s.cleanupOrphanSession(session.ID)
+		discarded()
 		// 对方几乎同时也发起了绑定并先写入：以已存在的记录为准。
 		existing, err = s.DB.GetBindingByPair(r.Context(), self.ID, partner.ID)
 		if err != nil {
@@ -177,6 +194,33 @@ func (s *Server) handleBind(w http.ResponseWriter, r *http.Request) {
 		User:    userPayload(self),
 		Binding: &BindingPayload{SessionID: sessionID, PartnerID: partner.ID},
 	})
+}
+
+// handleUnbind 处理 POST /api/account/unbind：退出当前会话，即解除绑定关系。
+// 双方共享同一行绑定，解绑后两人都回到绑定引导页；云端会话与其中的历史都不删除。
+func (s *Server) handleUnbind(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeMethodNotAllowed(w)
+		return
+	}
+	self, err := s.DB.GetUserByID(r.Context(), auth.UserIDFrom(r.Context()))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if self == nil {
+		writeError(w, qoder.NewApiError(401, "user_not_found", "账号不存在，请重新注册。"))
+		return
+	}
+	binding, err := s.DB.Unbind(r.Context(), self.ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if binding != nil {
+		logf("用户 %d 退出会话 %s", self.ID, binding.SessionID)
+	}
+	writeJSON(w, http.StatusOK, AccountResult{User: userPayload(self)})
 }
 
 func (s *Server) cleanupOrphanSession(sessionID string) {
@@ -215,13 +259,14 @@ func (s *Server) ensureBoundSession(ctx context.Context, sessionID string) *qode
 	return nil
 }
 
+// generateCode 生成 4 位数字邀请码（0000-9999）；撞车由调用方重试。
 func generateCode() (string, error) {
-	buf := make([]byte, 8)
+	buf := make([]byte, 4)
 	if _, err := rand.Read(buf); err != nil {
 		return "", err
 	}
 	for i, b := range buf {
-		buf[i] = codeAlphabet[int(b)%len(codeAlphabet)]
+		buf[i] = byte('0' + b%10)
 	}
 	return string(buf), nil
 }

@@ -1,5 +1,6 @@
 import { LogIn, UserPlus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
+import { SpaceBuddies } from './SpaceBuddies';
 
 interface Props {
   onLogin: (username: string, password: string) => Promise<void>;
@@ -52,8 +53,8 @@ export function LoginPage({ onLogin, onRegister, notify }: Props) {
   };
 
   return <div className="app-shell login-page">
-    <div className="brand-mark"><img src="/brand-notes.png" alt="" /></div>
-    <h1>贴贴</h1>
+    <header className="login-header"><h1>贴贴清单</h1></header>
+    <SpaceBuddies className="login-buddies" />
 
     <div className="login-tabs" role="tablist">
       <button type="button" role="tab" aria-selected={mode === 'login'} className={mode === 'login' ? 'is-active' : ''} onClick={() => switchMode('login')}>登录</button>
@@ -61,40 +62,35 @@ export function LoginPage({ onLogin, onRegister, notify }: Props) {
     </div>
 
     <form className="login-form" onSubmit={(event) => void submit(event)}>
-      <label htmlFor="login-username">用户名</label>
       <input
-        id="login-username"
         value={username}
         onChange={(event) => { setUsername(event.target.value); setError(''); }}
-        placeholder="2-24 位中文、字母或数字"
+        aria-label="用户名"
+        placeholder="用户名"
         autoComplete="username"
         maxLength={24}
         disabled={busy}
       />
-      <label htmlFor="login-password">密码</label>
       <input
-        id="login-password"
         type="password"
         value={password}
         onChange={(event) => { setPassword(event.target.value); setError(''); }}
-        placeholder={mode === 'register' ? '至少 6 位' : '请输入密码'}
+        aria-label="密码"
+        placeholder={mode === 'register' ? '密码，至少 6 位' : '密码'}
         autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
         maxLength={64}
         disabled={busy}
       />
-      {mode === 'register' && <>
-        <label htmlFor="login-confirm">确认密码</label>
-        <input
-          id="login-confirm"
-          type="password"
-          value={confirm}
-          onChange={(event) => { setConfirm(event.target.value); setError(''); }}
-          placeholder="再输入一次密码"
-          autoComplete="new-password"
-          maxLength={64}
-          disabled={busy}
-        />
-      </>}
+      {mode === 'register' && <input
+        type="password"
+        value={confirm}
+        onChange={(event) => { setConfirm(event.target.value); setError(''); }}
+        aria-label="确认密码"
+        placeholder="再输一次"
+        autoComplete="new-password"
+        maxLength={64}
+        disabled={busy}
+      />}
       {error && <p className="login-error" role="alert">{error}</p>}
       <button type="submit" className="primary-button" disabled={busy}>
         {mode === 'register' ? <UserPlus size={15} /> : <LogIn size={15} />}

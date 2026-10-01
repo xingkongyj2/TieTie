@@ -4,7 +4,7 @@ import { clearToken, getToken } from '../lib/token'
 
 /**
  * 账号状态：启动时用本地 JWT 拉取 me；未登录/令牌失效则 account 为 null，
- * 界面显示登录页。登录、注册、绑定、退出都收敛在这里。
+ * 界面显示登录页。登录、注册、绑定、解绑、退出都收敛在这里。
  */
 export function useAccount() {
   const [account, setAccount] = useState<AccountResult | null>(null)
@@ -44,10 +44,16 @@ export function useAccount() {
     setAccount((current) => (current ? { ...current, binding: result.binding } : result))
   }, [])
 
+  /** 退出当前会话：后端解绑后绑定状态清空，聊天页回到绑定引导页。 */
+  const unbind = useCallback(async () => {
+    const result = await authApi.unbind()
+    setAccount((current) => (current ? { ...current, binding: result.binding } : result))
+  }, [])
+
   const logout = useCallback(() => {
     clearToken()
     setAccount(null)
   }, [])
 
-  return { account, ready, error, reload: bootstrap, login, register, bind, logout }
+  return { account, ready, error, reload: bootstrap, login, register, bind, unbind, logout }
 }

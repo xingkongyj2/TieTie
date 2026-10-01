@@ -15,7 +15,6 @@ export interface Member {
 export interface AISettings {
   name: string
   tone: 'warm' | 'playful' | 'concise'
-  sharedReminders: boolean
   weatherCare: boolean
   anniversaryReminders: boolean
   quietHours: boolean
@@ -30,6 +29,19 @@ export interface Reminder {
   completed: boolean
 }
 
+/** Agent 通过云端自定义工具（AskUserQuestion）抛出的选择题。 */
+export interface AskOption {
+  label: string
+  description?: string
+}
+
+export interface AskQuestion {
+  header?: string
+  question: string
+  multiSelect?: boolean
+  options?: AskOption[]
+}
+
 export interface Message {
   id: string
   sender: MemberId
@@ -37,11 +49,14 @@ export interface Message {
   time: string
   /** Cloud event timestamp, used for local-time display and day separators. */
   createdAt?: string
-  kind?: 'text' | 'reminder'
+  kind?: 'text' | 'reminder' | 'ask'
   reminderId?: string
   /** Temporary text assembled from SSE deltas until the buffered event arrives. */
   streaming?: boolean
   images?: string[]
+  /** kind === 'ask'：题目内容；answered 表示云端已收到本条工具应答。 */
+  ask?: AskQuestion[]
+  answered?: boolean
 }
 
 export interface RelationshipState {

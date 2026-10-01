@@ -129,6 +129,10 @@ export const qoderApi = {
     }))
     return request(sessionPath(id), { method: 'POST', body: { text, attachments }, timeoutMs: 120_000 })
   },
+  /** 回答云端 Agent 抛出的选择题（AskUserQuestion），让挂起的那一轮继续。 */
+  sendToolResult(id: string, toolUseId: string, text: string): Promise<{ messages: Message[] }> {
+    return request(`/api/qoder/sessions/${encodeURIComponent(id)}/tool-result`, { method: 'POST', body: { toolUseId, text } })
+  },
   stream(id: string, after: string | null): EventSource {
     const query = after ? `?${new URLSearchParams({ after })}` : ''
     return new EventSource(`/api/qoder/sessions/${encodeURIComponent(id)}/stream${query}`)

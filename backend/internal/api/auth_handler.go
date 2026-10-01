@@ -15,9 +15,6 @@ import (
 	"tietie/backend/internal/qoder"
 )
 
-// 邀请码字符集：去掉 0/O、1/I/L 等易混淆字符。
-const codeAlphabet = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
-
 // 用户名：2-24 位中文、字母、数字、下划线或短横线。
 var usernameRe = regexp.MustCompile(`^[\p{Han}A-Za-z0-9_-]{2,24}$`)
 

@@ -19,7 +19,7 @@ export function BottomNav({ view, onChange }: { view: MainView; onChange: (view:
       aria-current={view === id ? 'page' : undefined}
       onClick={() => onChange(id)}
     >
-      <span className="nav-icon"><Icon size={23} strokeWidth={1.7} aria-hidden="true" /></span>
+      <span className="nav-icon"><Icon size={19} strokeWidth={1.7} aria-hidden="true" /></span>
     </button>)}
   </nav>
 }

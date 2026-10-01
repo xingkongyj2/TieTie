@@ -12,7 +12,7 @@ type User struct {
 	ID        int64     `json:"userId"    gorm:"column:id;primaryKey;autoIncrement"`
 	Username  string    `json:"username"  gorm:"column:username;uniqueIndex;size:24;not null"`
 	Password  string    `json:"-"         gorm:"column:password;not null"`
-	Code      string    `json:"code"      gorm:"column:code;uniqueIndex;size:8;not null"`
+	Code      string    `json:"code"      gorm:"column:code;uniqueIndex;size:4;not null"`
 	CreatedAt time.Time `json:"createdAt" gorm:"column:created_at;autoCreateTime"`
 }
 

@@ -1,11 +1,11 @@
-import { Bell, Cake, CloudSun, Moon } from 'lucide-react'
+import { Cake, CloudSun, Moon } from 'lucide-react'
 import { useId, useState, type ReactNode } from 'react'
 import type { AISettings, RelationshipState } from '../types'
 import { Anniversary, ReminderBoard } from './Tools'
 import { SpaceBuddy } from './SpaceBuddies'
 import './LittleThings.css'
 
-type CareKey = 'sharedReminders' | 'weatherCare' | 'anniversaryReminders' | 'quietHours'
+type CareKey = 'weatherCare' | 'anniversaryReminders' | 'quietHours'
 
 interface Props {
   state: RelationshipState
@@ -58,10 +58,9 @@ export function LittleThings({ state, onSaveSettings, onToggle, notify }: Props)
           event.preventDefault()
           setActiveTab(tabs[next].id)
           document.getElementById(`things-${tabs[next].id}-tab`)?.focus()
-        }}><span className="things-tab-label">{label}</span></button>)}
+        }}>{label}</button>)}
           </div>
         </div>
-        <span className="things-header-icon" aria-hidden="true"><Bell size={21} strokeWidth={1.7} /></span>
       </header>
     <div className="tab-page-scroll things-scroll">
       <section role="tabpanel" id="things-reminders-panel" aria-labelledby="things-reminders-tab" className="things-tab-panel" hidden={activeTab !== 'reminders'}>
@@ -98,16 +97,13 @@ export function LittleThings({ state, onSaveSettings, onToggle, notify }: Props)
       </section>
       <section role="tabpanel" id="things-anniversary-panel" aria-labelledby="things-anniversary-tab" className="things-tab-panel" hidden={activeTab !== 'anniversary'}>
         <Anniversary state={state} />
-        <p className="things-footnote">平凡的一天，也因为你而特别。</p>
       </section>
       <section role="tabpanel" id="things-care-panel" aria-labelledby="things-care-tab" className="things-tab-panel" hidden={activeTab !== 'care'}>
         <div className="form-card settings-card" aria-label="提醒偏好">
-          <CareRow icon={<Bell size={18} />} title="共享提醒" description="希望两个人一起查看记录的提醒" checked={state.settings.sharedReminders} disabled={busyKey !== null} onChange={() => void change('sharedReminders')} />
           <CareRow icon={<CloudSun size={19} />} title="天气关怀" description="希望天气变化时收到关心提示" checked={state.settings.weatherCare} disabled={busyKey !== null} onChange={() => void change('weatherCare')} />
           <CareRow icon={<Cake size={18} />} title="纪念日提醒" description="希望提前 3 天收到纪念日提示" checked={state.settings.anniversaryReminders} disabled={busyKey !== null} onChange={() => void change('anniversaryReminders')} />
           <CareRow icon={<Moon size={18} />} title="安静模式" description="希望在 23:00–08:00 暂停打扰" checked={state.settings.quietHours} disabled={busyKey !== null} onChange={() => void change('quietHours')} />
         </div>
-        <p className="care-local-note">偏好保存在当前设备，暂不自动发送通知。</p>
       </section>
     </div>
   </section>

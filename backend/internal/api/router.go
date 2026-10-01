@@ -38,7 +38,9 @@ func NewRouter(s *Server) http.Handler {
 	}
 	mux.Handle("/api/account/me", authed(s.handleMe))
 	mux.Handle("/api/account/bind", authed(s.handleBind))
+	mux.Handle("/api/account/unbind", authed(s.handleUnbind))
 	mux.Handle("/api/qoder/sessions/{id}/messages", authed(s.handleMessages))
+	mux.Handle("/api/qoder/sessions/{id}/tool-result", authed(s.handleToolResult))
 	mux.Handle("/api/qoder/sessions/{id}/stream", authed(s.handleStream))
 
 	// ---- 未知 API 路径统一 JSON 404 ----

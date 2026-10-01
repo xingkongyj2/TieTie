@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -41,15 +42,45 @@ func (c *Client) ListSessions(ctx context.Context, defaultSessionID string) (*Se
 }
 
 // CreateSession 在云端新建一个会话（绑定流程用）。
-// 上游需要 agent 与 environment_id，二者由 ResolveAgentAndEnv 确定。
-func (c *Client) CreateSession(ctx context.Context, agentID, environmentID string) (*PublicSession, error) {
+// 上游需要 agent 与 environment_id，二者由 ResolveAgentAndEnv 确定；title 为空时沿用云端默认命名。
+func (c *Client) CreateSession(ctx context.Context, agentID, environmentID, title string) (*PublicSession, error) {
 	body := map[string]any{"agent": agentID, "environment_id": environmentID}
+	if strings.TrimSpace(title) != "" {
+		body["title"] = title
+	}
 	var raw rawSession
 	// 建会话可能涉及环境调度，单独放宽到 60s。
 	if err := c.doJSON(ctx, http.MethodPost, "/sessions", body, &raw, 60*time.Second); err != nil {
 		return nil, err
 	}
 	return publicSession(&raw)
+}
+
+// FindSessionByTitle 按标题在云端精确找回历史会话（解绑后重新绑定同一人时用）。
+// 上游列表接口不支持按标题过滤，这里翻页拉全量后本地匹配；命中多个时取最新创建的，已归档的不参与恢复。
+func (c *Client) FindSessionByTitle(ctx context.Context, title string) (*PublicSession, error) {
+	if strings.TrimSpace(title) == "" {
+		return nil, nil
+	}
+	raw, err := listAll[rawSession](c, ctx, "/sessions", listOpts{})
+	if err != nil {
+		return nil, err
+	}
+	var found *PublicSession
+	for i := range raw {
+		item := raw[i]
+		if strings.TrimSpace(item.Title) != title || item.ArchivedAt != "" {
+			continue
+		}
+		session, err := publicSession(&item)
+		if err != nil {
+			return nil, err
+		}
+		if found == nil || session.CreatedAt > found.CreatedAt {
+			found = session
+		}
+	}
+	return found, nil
 }
 
 // DeleteSession 删除云端会话（并发绑定时清理多余新建的会话用）。
