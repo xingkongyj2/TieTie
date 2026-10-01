@@ -3,7 +3,7 @@ package api
 import (
 	"context"
 	"crypto/rand"
-	"encoding/hex"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -15,12 +15,12 @@ import (
 // BindingPayload 是返回给前端的绑定信息。
 type BindingPayload struct {
 	SessionID string `json:"sessionId"`
-	PartnerID string `json:"partnerId"`
+	PartnerID int64  `json:"partnerId"`
 }
 
-// UserPayload 是返回给前端的用户信息（永不含密码哈希）。
+// UserPayload 是返回给前端的用户信息（永不含密码）。
 type UserPayload struct {
-	UserID   string `json:"userId"`
+	UserID   int64  `json:"userId"`
 	Username string `json:"username"`
 	Code     string `json:"code"`
 }
@@ -63,7 +63,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleBind 处理 POST /api/account/bind：
-// 用邀请码找到对方 → 两人 ID 组成唯一键查绑定 → 有历史会话直接返回，没有则云端新建后落库。
+// 用邀请码找到对方 → 复用同一对的历史会话或校验双方均未绑定 → 云端新建后落库。
 func (s *Server) handleBind(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeMethodNotAllowed(w)
@@ -118,6 +118,24 @@ func (s *Server) handleBind(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	selfBinding, err := s.DB.GetLatestBindingByUser(r.Context(), self.ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if selfBinding != nil {
+		writeError(w, qoder.NewApiError(409, "already_bound", "你已和其他人绑定，不能再绑定新用户。"))
+		return
+	}
+	partnerBinding, err := s.DB.GetLatestBindingByUser(r.Context(), partner.ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if partnerBinding != nil {
+		writeError(w, qoder.NewApiError(409, "partner_already_bound", "对方已和其他人绑定，不能重复绑定。"))
+		return
+	}
 
 	// 首次绑定：云端新建会话 → 落库。
 	agentID, envID, err := s.Qoder.ResolveAgentAndEnv(r.Context(), s.Cfg.AgentID, s.Cfg.EnvironmentID)
@@ -132,12 +150,18 @@ func (s *Server) handleBind(w http.ResponseWriter, r *http.Request) {
 	}
 	created, err := s.DB.CreateBinding(r.Context(), self.ID, partner.ID, session.ID)
 	if err != nil {
+		s.cleanupOrphanSession(session.ID)
+		if errors.Is(err, dbop.ErrAlreadyBound) {
+			writeError(w, qoder.NewApiError(409, "already_bound", "你或对方已和其他人绑定，不能重复绑定。"))
+			return
+		}
 		writeError(w, err)
 		return
 	}
 	sessionID := session.ID
 	if !created {
-		// 对方几乎同时也发起了绑定并先写入：以已存在的记录为准，删掉刚多建的会话。
+		s.cleanupOrphanSession(session.ID)
+		// 对方几乎同时也发起了绑定并先写入：以已存在的记录为准。
 		existing, err = s.DB.GetBindingByPair(r.Context(), self.ID, partner.ID)
 		if err != nil {
 			writeError(w, err)
@@ -148,16 +172,19 @@ func (s *Server) handleBind(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		sessionID = existing.SessionID
-		go func(orphan string) {
-			if derr := s.Qoder.DeleteSession(context.WithoutCancel(context.Background()), orphan); derr != nil {
-				logf("清理多余云端会话 %s 失败: %v", orphan, derr)
-			}
-		}(session.ID)
 	}
 	writeJSON(w, http.StatusOK, AccountResult{
 		User:    userPayload(self),
 		Binding: &BindingPayload{SessionID: sessionID, PartnerID: partner.ID},
 	})
+}
+
+func (s *Server) cleanupOrphanSession(sessionID string) {
+	go func() {
+		if err := s.Qoder.DeleteSession(context.WithoutCancel(context.Background()), sessionID); err != nil {
+			logf("清理多余云端会话 %s 失败: %v", sessionID, err)
+		}
+	}()
 }
 
 // bindingPayload 查询用户当前生效的绑定。
@@ -175,7 +202,7 @@ func (s *Server) bindingPayload(ctx context.Context, user *dbop.User) (*BindingP
 // ensureBoundSession 校验目标会话属于当前登录用户的绑定，防止越权读写他人会话。
 func (s *Server) ensureBoundSession(ctx context.Context, sessionID string) *qoder.ApiError {
 	userID := auth.UserIDFrom(ctx)
-	if userID == "" {
+	if userID == 0 {
 		return qoder.NewApiError(401, "unauthorized", "请先登录。")
 	}
 	binding, err := s.DB.GetLatestBindingByUser(ctx, userID)
@@ -197,12 +224,4 @@ func generateCode() (string, error) {
 		buf[i] = codeAlphabet[int(b)%len(codeAlphabet)]
 	}
 	return string(buf), nil
-}
-
-func randomID(prefix string, n int) (string, error) {
-	buf := make([]byte, n)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
-	}
-	return prefix + hex.EncodeToString(buf), nil
 }

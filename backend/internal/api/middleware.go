@@ -3,9 +3,7 @@ package api
 import (
 	"errors"
 	"log"
-	"net"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -91,44 +89,20 @@ func recoverer(next http.Handler) http.Handler {
 // SSE handler 自行保证 panic 不会发生在头已写出之后（relay 循环内不 panic）。
 func headerWritten(*http.Request) bool { return false }
 
-// localHostnames 是未配置 AllowedOrigin 时允许的主机名。
-var localHostnames = map[string]bool{
-	"127.0.0.1": true, "localhost": true, "::1": true, "[::1]": true,
-}
-
-// ensureSameOrigin 复刻 qoder.mjs 的同源防护：
-//   - Host 必须是本机回环，或与 QODER_ALLOWED_ORIGIN 完全一致；
-//   - Origin / Sec-Fetch-Site 头不允许跨站。
-func ensureSameOrigin(r *http.Request, allowedOrigin string) *qoder.ApiError {
-	host := r.Host
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
-	}
-	origin := scheme + "://" + host
-
-	hostname := host
-	if h, _, err := net.SplitHostPort(host); err == nil {
-		hostname = h
-	}
-
-	if allowedOrigin != "" {
-		u, err := url.Parse(allowedOrigin)
-		if err != nil || u.Host == "" || u.Host != host {
-			return qoder.NewApiError(403, "invalid_host", "此主机不允许访问云端会话。")
+// openCORS 对 API 开放跨域访问，JWT 仍由各需登录路由校验。
+func openCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 		}
-		origin = u.Scheme + "://" + u.Host
-	} else if !localHostnames[hostname] {
-		return qoder.NewApiError(403, "invalid_host", "此主机不允许访问云端会话。")
-	}
-
-	if o := r.Header.Get("Origin"); o != "" && o != origin {
-		return qoder.NewApiError(403, "cross_origin_denied", "仅允许从当前应用访问云端会话。")
-	}
-	if sfs := r.Header.Get("Sec-Fetch-Site"); sfs != "" && sfs != "same-origin" && sfs != "none" {
-		return qoder.NewApiError(403, "cross_origin_denied", "仅允许从当前应用访问云端会话。")
-	}
-	return nil
+		next.ServeHTTP(w, r)
+	})
 }
 
 // isClientGone 判断错误是否由客户端断开引起（SSE 场景下静默结束）。

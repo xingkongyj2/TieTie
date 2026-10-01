@@ -1,10 +1,11 @@
-// Package auth 提供登录鉴权能力：JWT 签发/解析与密码哈希。
+// Package auth 提供登录鉴权能力：JWT 签发/解析与旧密码迁移校验。
 // 纯逻辑包，不依赖 HTTP；Bearer 校验中间件在 api 层（复用统一错误响应）。
 package auth
 
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -24,20 +25,20 @@ func NewService(secret string, ttl time.Duration) *Service {
 
 // Claims 是令牌载荷：用户 ID 与用户名。
 type Claims struct {
-	UserID   string `json:"userId"`
+	UserID   int64  `json:"userId"`
 	Username string `json:"username"`
 	jwt.RegisteredClaims
 }
 
 // IssueToken 为登录成功的用户签发令牌。
-func (s *Service) IssueToken(userID, username string) (string, error) {
+func (s *Service) IssueToken(userID int64, username string) (string, error) {
 	now := time.Now()
 	claims := Claims{
 		UserID:   userID,
 		Username: username,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    s.issuer,
-			Subject:   userID,
+			Subject:   strconv.FormatInt(userID, 10),
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.ttl)),
 		},
@@ -67,7 +68,7 @@ func (s *Service) ParseToken(tokenStr string) (*Claims, error) {
 		return nil, ErrInvalidToken
 	}
 	claims, ok := token.Claims.(*Claims)
-	if !ok || !token.Valid {
+	if !ok || !token.Valid || claims.UserID <= 0 || claims.Subject != strconv.FormatInt(claims.UserID, 10) {
 		return nil, ErrInvalidToken
 	}
 	return claims, nil
@@ -88,10 +89,10 @@ func ClaimsFrom(ctx context.Context) *Claims {
 	return claims
 }
 
-// UserIDFrom 从上下文取当前登录用户 ID；未登录返回空串。
-func UserIDFrom(ctx context.Context) string {
+// UserIDFrom 从上下文取当前登录用户 ID；未登录返回 0。
+func UserIDFrom(ctx context.Context) int64 {
 	if claims := ClaimsFrom(ctx); claims != nil {
 		return claims.UserID
 	}
-	return ""
+	return 0
 }

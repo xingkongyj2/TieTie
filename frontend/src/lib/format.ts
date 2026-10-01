@@ -16,10 +16,3 @@ export function formatReminderTime(value: string) {
   const prefix = isToday ? '今天' : `${date.getMonth() + 1}月${date.getDate()}日`;
   return `${prefix} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
-
-export function defaultReminderTime() {
-  const date = new Date(Date.now() + 60 * 60 * 1000);
-  date.setMinutes(0);
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
-}

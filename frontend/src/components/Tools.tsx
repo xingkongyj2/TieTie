@@ -1,39 +1,67 @@
-import { CalendarHeart, Check, Heart, Plus } from 'lucide-react';
+import { CalendarHeart, Check, ChevronDown, Heart, Plus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import type { RelationshipState, Reminder } from '../types';
-import { defaultReminderTime, daysTogether } from '../lib/format';
+import { daysTogether } from '../lib/format';
 import { Avatar } from './Avatar';
 import { ReminderCard } from './ReminderCard';
 import { Sheet } from './Sheet';
 
 export type ToolName = 'reminders' | 'anniversary';
-interface Props { tool: ToolName; state: RelationshipState; onClose: () => void; onAdd: (input: Omit<Reminder, 'id' | 'completed'>) => Promise<void>; onToggle: (id: string) => Promise<void>; notify: (text: string) => void }
+interface Props { tool: ToolName; state: RelationshipState; onClose: () => void; onAdd: (input: Omit<Reminder, 'id' | 'completed'>) => Promise<void>; notify: (text: string) => void }
+interface ReminderBoardProps { state: RelationshipState; onToggle: (id: string) => Promise<void>; notify: (text: string) => void; pendingAssignee?: 'both' | 'self' | 'partner' | null }
 
-function Reminders({ state, onAdd, onToggle, notify }: Pick<Props, 'state' | 'onAdd' | 'onToggle' | 'notify'>) {
-  const [title, setTitle] = useState('');
-  const [time, setTime] = useState(defaultReminderTime);
-  const [assignee, setAssignee] = useState<Reminder['assignee']>('both');
+export function ReminderBoard({ state, onToggle, notify, pendingAssignee = null }: ReminderBoardProps) {
+  const pending = state.reminders.filter((reminder) => !reminder.completed && (pendingAssignee === null || reminder.assignee === pendingAssignee));
+  const completed = state.reminders.filter((reminder) => reminder.completed);
+  const emptyNote = pendingAssignee === null
+    ? completed.length ? '待完成的提醒都处理好啦。' : '还没有提醒，先添加一条吧。'
+    : `暂时没有提醒${{ both: '我们', self: '我', partner: '他' }[pendingAssignee]}的待完成事项。`;
+  return <div className="reminder-board">
+    <section id="things-pending-list" aria-label="待完成" aria-live="polite">
+      <div className="reminders-list">{pending.length ? pending.map((reminder) => <ReminderCard reminder={reminder} key={reminder.id} members={state.members} onToggle={onToggle} onError={notify} />) : <p className="empty-note">{emptyNote}</p>}</div>
+    </section>
+    <section aria-label="已完成">
+      <div className="reminder-completed-divider"><h2><span className="reminder-title-lettering">已完成</span></h2></div>
+      <div className="reminders-list">{completed.length ? completed.map((reminder) => <ReminderCard reminder={reminder} key={reminder.id} members={state.members} onToggle={onToggle} onError={notify} />) : <p className="empty-note">还没有已完成的提醒。</p>}</div>
+    </section>
+  </div>;
+}
+
+function ReminderCompose({ onAdd, onClose, notify }: Pick<Props, 'onAdd' | 'onClose' | 'notify'>) {
+  const [content, setContent] = useState('');
+  const [assignee, setAssignee] = useState<'both' | 'self' | 'partner'>('both');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (new Date(time).getTime() <= Date.now()) { setError('选一个还没到的时间吧，好给心意留点余地。'); return; }
+    const title = content.trim();
+    if (!title || busy) return;
     setBusy(true);
-    try { await onAdd({ title: title.trim(), time, assignee }); setTitle(''); setError(''); notify('小事已保存到此设备的提醒板 🐾'); }
-    catch { setError('没能保存这件小事，请再试一次。'); }
+    setError('');
+    try { await onAdd({ title, assignee }); notify('提醒已添加'); onClose(); }
+    catch (error) { setError(error instanceof Error ? error.message : '提醒添加失败，请再试一次。'); }
     finally { setBusy(false); }
   };
-  return <div className="tool-content"><div className="reminders-list">{state.reminders.length ? state.reminders.map((reminder) => <ReminderCard reminder={reminder} key={reminder.id} members={state.members} onToggle={onToggle} onError={notify} />) : <p className="empty-note">还没有小事，先记一件吧。</p>}</div>
-    <form className="new-reminder-form" onSubmit={(event) => void submit(event)}><h3><Plus size={15} />再记一件小事</h3><label className="sr-only" htmlFor="reminder-title">提醒内容</label><input id="reminder-title" className="tool-input" placeholder="例如：一起去超市买水果 🍊" value={title} onChange={(event) => setTitle(event.target.value)} maxLength={60} required /><div className="reminder-fields"><label>什么时候<input aria-label="提醒时间" type="datetime-local" required value={time} onChange={(event) => setTime(event.target.value)} /></label><label>和谁一起<select aria-label="提醒对象" value={assignee} onChange={(event) => setAssignee(event.target.value as Reminder['assignee'])}><option value="both">我们一起</option>{state.members.filter((m) => m.id !== 'ai').map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label></div>{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button" disabled={busy || !title.trim()} type="submit">{busy ? '正在记下来…' : '交给贴贴记着'}<Plus size={17} /></button></form><p className="settings-note">本地提醒板演示 · 暂不发送实际通知</p></div>;
+  return <form className="reminder-compose" onSubmit={(event) => void submit(event)}>
+    <div className="reminder-editor">
+      <label className="sr-only" htmlFor="quick-reminder-content">提醒内容</label>
+      <textarea id="quick-reminder-content" rows={5} maxLength={500} placeholder="写下提醒内容…" value={content} onChange={(event) => { setContent(event.target.value); setError(''); }} />
+      <div className="reminder-editor-footer">
+        <label className="reminder-mention"><span className="sr-only">提醒对象</span><select value={assignee} onChange={(event) => setAssignee(event.target.value as typeof assignee)}><option value="both">@全部</option><option value="self">@我</option><option value="partner">@他</option></select><ChevronDown size={14} aria-hidden="true" /></label>
+      </div>
+    </div>
+    {error && <p className="form-error" role="alert">{error}</p>}
+    <button className="primary-button" type="submit" disabled={busy || !content.trim()}>{busy ? '正在添加…' : '添加提醒'}<Plus size={17} /></button>
+  </form>;
 }
 
-function Anniversary({ state, onClose }: Pick<Props, 'state' | 'onClose'>) {
+export function Anniversary({ state, onClose }: { state: RelationshipState; onClose?: () => void }) {
   const humans = state.members.filter((m) => m.id !== 'ai');
-  return <div className="tool-content"><div className="anniversary-postcard"><CalendarHeart size={27} /><span className="eyebrow">BETTER, TOGETHER</span><div className="anniversary-number">{daysTogether(state.togetherSince)}<span>天</span></div><h3>把普通的日子，过成我们的日子。</h3><div className="postcard-avatars"><Avatar member={humans[0]} size="large" /><Heart size={20} /><Avatar member={humans[1]} size="large" /></div><p>{humans.map((m) => m.name).join(' & ')}<br /><span>从 {state.togetherSince.replaceAll('-', '.')} 开始，还要一起走好远。</span></p></div><p className="anniversary-quote">“喜欢是，连今天吃什么，<br />都想和你一起决定。”</p><button className="primary-button" onClick={onClose}>收好今天的小幸福<Check size={17} /></button></div>;
+  return <div className="tool-content"><div className="anniversary-postcard"><CalendarHeart size={27} /><div className="anniversary-number">{daysTogether(state.togetherSince)}<span>天</span></div><div className="postcard-avatars"><Avatar member={humans[0]} size="large" /><Heart size={20} /><Avatar member={humans[1]} size="large" /></div><p>{humans.map((m) => m.name).join(' 和 ')}<br /><span>从 {state.togetherSince.replaceAll('-', '.')} 开始</span></p></div>{onClose && <button className="primary-button" onClick={onClose}>关闭<Check size={17} /></button>}</div>;
 }
 
 export function Tools(props: Props) {
   const { tool, onClose } = props;
-  const labels = { reminders: ['一起记的小事', '把「别忘了」变成「有我呢」。'], anniversary: ['我们的小纪念', '每个平凡的今天，都很值得。'] };
-  return <Sheet title={labels[tool][0]} subtitle={labels[tool][1]} onClose={onClose}>{(close) => tool === 'reminders' ? <Reminders {...props} /> : <Anniversary {...props} onClose={close} />}</Sheet>;
+  const labels = { reminders: '添加提醒', anniversary: '我们的小纪念' };
+  return <Sheet title={labels[tool]} onClose={onClose}>{(close) => tool === 'reminders' ? <ReminderCompose onAdd={props.onAdd} onClose={close} notify={props.notify} /> : <Anniversary state={props.state} onClose={close} />}</Sheet>;
 }

@@ -14,7 +14,6 @@ type Config struct {
 	StaticDir        string        // 前端构建产物目录，默认 ../frontend/dist
 	Upstream         string        // Qoder 云端地址
 	Token            string        // QODER_ACCESS_TOKEN
-	AllowedOrigin    string        // QODER_ALLOWED_ORIGIN，显式规范源（反向代理场景）
 	DefaultSessionID string        // QODER_DEFAULT_SESSION_ID
 	Timeout          time.Duration // 上游普通请求超时
 	UploadTimeout    time.Duration // 上游文件上传超时
@@ -45,7 +44,6 @@ func Load() Config {
 		StaticDir:        envOr("STATIC_DIR", "../frontend/dist"),
 		Upstream:         envOr("QODER_UPSTREAM", "https://api.qoder.com.cn/api/v1/cloud"),
 		Token:            os.Getenv("QODER_ACCESS_TOKEN"),
-		AllowedOrigin:    os.Getenv("QODER_ALLOWED_ORIGIN"),
 		DefaultSessionID: os.Getenv("QODER_DEFAULT_SESSION_ID"),
 		Timeout:          timeout,
 		UploadTimeout:    60 * time.Second,

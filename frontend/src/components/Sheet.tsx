@@ -2,7 +2,7 @@ import { X } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 
 /** H5 弹层的焦点恢复与键盘约束集中管理，迁移时可替换为小程序弹层。 */
-export function Sheet({ title, subtitle, children, onClose }: { title: string; subtitle: string; children: ReactNode | ((close: () => void) => ReactNode); onClose: () => void }) {
+export function Sheet({ title, children, onClose }: { title: string; children: ReactNode | ((close: () => void) => ReactNode); onClose: () => void }) {
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
@@ -39,5 +39,5 @@ export function Sheet({ title, subtitle, children, onClose }: { title: string; s
     panel.addEventListener('keydown', onKey);
     return () => { cancelAnimationFrame(openFrame); panel.removeEventListener('keydown', onKey); if (closeTimerRef.current) clearTimeout(closeTimerRef.current); previousFocus?.focus({ preventScroll: true }); };
   }, []);
-  return <div className={`sheet-backdrop ${visible ? 'is-open' : ''} ${closing ? 'is-closing' : ''}`} onClick={(event) => { if (event.target === event.currentTarget) requestClose(); }}><div className="sheet" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={panelRef} tabIndex={-1}><div className="sheet-handle" /><header className="sheet-header"><div><h2 id={titleId}>{title}</h2><p>{subtitle}</p></div><button className="icon-button" aria-label="关闭弹窗" onClick={requestClose}><X size={19} /></button></header>{typeof children === 'function' ? children(requestClose) : children}</div></div>;
+  return <div className={`sheet-backdrop ${visible ? 'is-open' : ''} ${closing ? 'is-closing' : ''}`} onClick={(event) => { if (event.target === event.currentTarget) requestClose(); }}><div className="sheet" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={panelRef} tabIndex={-1}><div className="sheet-handle" /><header className="sheet-header"><h2 id={titleId}>{title}</h2><button className="icon-button" aria-label="关闭弹窗" onClick={requestClose}><X size={19} /></button></header>{typeof children === 'function' ? children(requestClose) : children}</div></div>;
 }

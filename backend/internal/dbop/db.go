@@ -1,4 +1,4 @@
-// Package dbop 是数据访问层：基于 GORM，不手写 SQL 语句。
+// Package dbop 是数据访问层：日常读写基于 GORM，旧表结构迁移使用 SQL。
 // 每张表一个文件，模型对象与它的增删改查放在一起；
 // 跨多张表的查询逻辑放公共文件（db.go / 需要时另建 query.go）。
 package dbop
@@ -44,6 +44,12 @@ func Open(dsn string) (*DB, error) {
 	// SQLite 单写者：限制单连接，避免 SQLITE_BUSY。
 	sqlDB.SetMaxOpenConns(1)
 
+	if err := migrateLegacyUsers(gdb); err != nil {
+		return nil, err
+	}
+	if err := migrateLegacyPasswords(gdb); err != nil {
+		return nil, err
+	}
 	if err := gdb.AutoMigrate(
 		&User{},
 		&Binding{},
@@ -51,6 +57,9 @@ func Open(dsn string) (*DB, error) {
 		&Message{},
 		&File{},
 	); err != nil {
+		return nil, err
+	}
+	if err := enforceUniqueBindings(gdb); err != nil {
 		return nil, err
 	}
 	return &DB{gdb: gdb}, nil

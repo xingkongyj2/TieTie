@@ -11,14 +11,14 @@ backend/
     ├── config/               # 环境变量配置
     ├── api/                  # HTTP 汇聚层：router.go 集中注册全部路由
     │   ├── router.go         #   路由（公开区/鉴权区）+ 静态文件(SPA)
-    │   ├── middleware.go     #   同源防护 / JWT 守卫 / 访问日志 / panic 恢复
+    │   ├── middleware.go     #   开放 CORS / JWT 守卫 / 访问日志 / panic 恢复
     │   ├── response.go       #   统一 {"error":{code,message}} 响应
-    │   ├── auth_handler.go   #   注册 / 登录（bcrypt + JWT 签发）
+    │   ├── auth_handler.go   #   注册 / 登录（明文密码 + JWT 签发）
     │   ├── account_handler.go#   me / 邀请码绑定（含并发绑定去重与会话越权校验）
     │   ├── session_handler.go#   消息读写 + 数据库落库
     │   ├── chat_handler.go   #   SSE 实时流转发
     │   └── upload_handler.go #   消息体与附件校验
-    ├── auth/                 # 鉴权模块：JWT 签发/解析、bcrypt 密码哈希、上下文用户
+    ├── auth/                 # 鉴权模块：JWT 签发/解析、旧密码哈希校验、上下文用户
     ├── qoder/                # Qoder 云端客户端（上游的一切都在这个包）
     │   ├── client.go         #   HTTP 出口：token、超时、分页、错误映射
     │   ├── session.go        #   会话接口（含创建/删除会话）
@@ -52,8 +52,8 @@ go mod tidy                   # 首次
 go run ./cmd/server           # 或 make dev
 ```
 
-默认监听 `127.0.0.1:4173`，与 Node 版相同的环境变量（`QODER_ACCESS_TOKEN` /
-`QODER_ALLOWED_ORIGIN` / `QODER_DEFAULT_SESSION_ID` / `HOST` / `PORT`），
+默认监听 `127.0.0.1:4173`，环境变量包括 `QODER_ACCESS_TOKEN` /
+`QODER_DEFAULT_SESSION_ID` / `HOST` / `PORT`，
 另加：
 
 | 变量 | 说明 |
@@ -68,10 +68,11 @@ go run ./cmd/server           # 或 make dev
 
 ## 账号与绑定
 
-- `POST /api/auth/register {username, password}`：注册即登录，返回 `{token, user, binding}`；密码 bcrypt 哈希，邀请码 8 位（无 0/O/1/I/L）自动生成防碰撞。
+- `POST /api/auth/register {username, password}`：注册即登录，返回 `{token, user, binding}`；密码明文存储，邀请码 8 位（无 0/O/1/I/L）自动生成防碰撞。
 - `POST /api/auth/login {username, password}`：登录，返回同上。
 - `GET /api/account/me`：JWT 换取当前账号与绑定状态。
-- `POST /api/account/bind {code}`：两人 ID 按字典序组成 `bindings` 复合主键；已有绑定直接返回历史会话，否则云端新建会话后落库。并发绑定以先写入者为准，后到者删除自己多建的会话。
+- `POST /api/account/bind {code}`：先校验双方没有和其他人绑定，同一对已绑定则返回原会话。数据库触发器防止并发请求让一个人绑定多个对象；冲突返回 409，多建的云端会话会清理。
+- 旧数据库启动时自动迁移用户 ID 与绑定关系；重复的历史绑定保留最早记录，其他记录归档到 `archived_bindings`。`users` 表不含 `legacy_password_hash` 列；旧账号哈希暂存 `legacy_passwords` 表，首次成功登录后转存明文密码并删除哈希。旧 JWT 需重新登录。
 - 消息/SSE 接口校验会话属于当前用户的绑定，越权返回 403 `session_forbidden`。
 
 ## 测试与构建

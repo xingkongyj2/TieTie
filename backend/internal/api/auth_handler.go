@@ -74,9 +74,26 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	if user == nil || !auth.VerifyPassword(user.PasswordHash, body.Password) {
+	valid := user != nil && user.Password != "" && user.Password == body.Password
+	legacyLogin := false
+	if user != nil && user.Password == "" {
+		hash, err := s.DB.GetLegacyPasswordHash(r.Context(), user.ID)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		legacyLogin = hash != "" && auth.VerifyPassword(hash, body.Password)
+		valid = legacyLogin
+	}
+	if !valid {
 		writeError(w, invalid)
 		return
+	}
+	if legacyLogin {
+		if err := s.DB.SetPassword(r.Context(), user.ID, body.Password); err != nil {
+			writeError(w, err)
+			return
+		}
 	}
 	s.respondAuthed(w, r, user, true)
 }
@@ -100,12 +117,8 @@ func (s *Server) respondAuthed(w http.ResponseWriter, r *http.Request, user *dbo
 	writeJSON(w, http.StatusOK, result)
 }
 
-// createUser 创建用户：bcrypt 哈希密码、生成防碰撞邀请码。
+// createUser 创建用户：明文保存密码、生成防碰撞邀请码。
 func (s *Server) createUser(ctx context.Context, username, password string) (*dbop.User, *qoder.ApiError) {
-	hash, err := auth.HashPassword(password)
-	if err != nil {
-		return nil, qoder.NewApiError(500, "internal_error", "会话服务发生错误，请稍后重试。")
-	}
 	internal := qoder.NewApiError(500, "internal_error", "会话服务发生错误，请稍后重试。")
 	for attempt := 0; attempt < 10; attempt++ {
 		code, err := generateCode()
@@ -119,11 +132,7 @@ func (s *Server) createUser(ctx context.Context, username, password string) (*db
 		if taken {
 			continue
 		}
-		id, err := randomID("usr_", 12)
-		if err != nil {
-			return nil, internal
-		}
-		user := &dbop.User{ID: id, Username: username, PasswordHash: hash, Code: code}
+		user := &dbop.User{Username: username, Password: password, Code: code}
 		err = s.DB.CreateUser(ctx, user)
 		if err == nil {
 			return user, nil

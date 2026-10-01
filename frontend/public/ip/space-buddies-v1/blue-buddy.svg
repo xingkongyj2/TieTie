@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="24 49 110 106" fill="none" role="img" aria-labelledby="blue-buddy-title">
+  <title id="blue-buddy-title">贴贴深蓝伙伴</title>
+  <defs>
+    <linearGradient id="blue-buddy-gradient" x1="38" y1="59" x2="113" y2="145" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#78CCFF" />
+      <stop offset="1" stop-color="#3779F5" />
+    </linearGradient>
+  </defs>
+  <path d="M30 91C28 68 45 51 67 55L105 62C124 65 132 80 127 98L118 130C113 147 100 153 82 148L48 139C30 134 27 115 30 91Z" fill="url(#blue-buddy-gradient)" />
+  <rect x="58" y="85" width="7" height="14" rx="3.5" fill="white" transform="rotate(10 58 85)" />
+  <rect x="79" y="89" width="7" height="14" rx="3.5" fill="white" transform="rotate(10 79 89)" />
+  <path d="M61 113C66 117 73 118 79 115" stroke="white" stroke-width="3" stroke-linecap="round" />
+</svg>

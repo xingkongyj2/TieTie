@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { ApiError } from '../api/client'
 import { qoderApi, type CloudHistory, type CloudSession, type CloudStreamEvent } from '../api/qoder'
 import type { Message } from '../types'
 
@@ -55,7 +56,7 @@ function errorMessage(error: unknown): string {
  * 云端聊天状态机。会话由绑定关系固定（pinnedId），不再列出/切换账号下的全部会话；
  * 未绑定（pinnedId 为 null）时保持空闲，由界面展示绑定引导页。
  */
-export function useCloudChat(pinnedId: string | null) {
+export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () => Promise<void>) {
   const [state, setState] = useState<CloudState>(initialState)
   const current = useRef(state)
   const mounted = useRef(false)
@@ -135,6 +136,9 @@ export function useCloudChat(pinnedId: string | null) {
       if (!isCurrent() || current.current.selectedId !== id) return
       applyHistory(id, history)
     } catch (error) {
+      if (error instanceof ApiError && error.code === 'session_forbidden') {
+        void onSessionForbidden?.()
+      }
       if (isCurrent()) update({ error: errorMessage(error), loading: false, refreshing: false })
     } finally {
       if (isCurrent()) {
@@ -142,7 +146,7 @@ export function useCloudChat(pinnedId: string | null) {
         schedule()
       }
     }
-  }, [pinnedId, applyHistory, cancelRead, schedule, update])
+  }, [pinnedId, onSessionForbidden, applyHistory, cancelRead, schedule, update])
   readRef.current = readCloud
 
   const reload = useCallback(() => readCloud({ full: true }), [readCloud])

@@ -3,11 +3,11 @@ import { setToken } from '../lib/token'
 
 export interface Binding {
   sessionId: string
-  partnerId: string
+  partnerId: number
 }
 
 export interface User {
-  userId: string
+  userId: number
   username: string
   code: string
 }

@@ -6,6 +6,7 @@ export interface Member {
   name: string
   role: string
   avatar: string
+  gender?: 'male' | 'female' | 'unspecified'
   birthday: string
   hobbies: string[]
   bio: string
@@ -23,8 +24,8 @@ export interface AISettings {
 export interface Reminder {
   id: string
   title: string
-  /** Local datetime YYYY-MM-DDTHH:mm, or HH:mm for the original demo fixture. */
-  time: string
+  /** Older scheduled entries may have a local datetime or HH:mm. */
+  time?: string
   assignee: MemberId | 'both'
   completed: boolean
 }

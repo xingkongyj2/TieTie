@@ -1,4 +1,4 @@
-import { Heart, LogIn, UserPlus } from 'lucide-react';
+import { LogIn, UserPlus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 
 interface Props {
@@ -54,7 +54,6 @@ export function LoginPage({ onLogin, onRegister, notify }: Props) {
   return <div className="app-shell login-page">
     <div className="brand-mark"><img src="/brand-notes.png" alt="" /></div>
     <h1>贴贴</h1>
-    <p className="login-lead">两个人的小窝，从登录开始。</p>
 
     <div className="login-tabs" role="tablist">
       <button type="button" role="tab" aria-selected={mode === 'login'} className={mode === 'login' ? 'is-active' : ''} onClick={() => switchMode('login')}>登录</button>
@@ -101,7 +100,6 @@ export function LoginPage({ onLogin, onRegister, notify }: Props) {
         {mode === 'register' ? <UserPlus size={15} /> : <LogIn size={15} />}
         {busy ? '请稍候…' : mode === 'register' ? '注册并进入' : '登录'}
       </button>
-      <p className="login-hint"><Heart size={12} />注册后会生成你的专属邀请码，发给TA绑定即可开聊。</p>
     </form>
   </div>;
 }

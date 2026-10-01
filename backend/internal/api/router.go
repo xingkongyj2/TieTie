@@ -28,40 +28,29 @@ type Server struct {
 func NewRouter(s *Server) http.Handler {
 	mux := http.NewServeMux()
 
-	// ---- 公开接口：登录/注册（同源防护，无需 JWT）----
-	mux.Handle("/api/auth/register", s.guard(http.HandlerFunc(s.handleAuthRegister)))
-	mux.Handle("/api/auth/login", s.guard(http.HandlerFunc(s.handleAuthLogin)))
+	// ---- 公开接口：登录/注册（无需 JWT）----
+	mux.Handle("/api/auth/register", http.HandlerFunc(s.handleAuthRegister))
+	mux.Handle("/api/auth/login", http.HandlerFunc(s.handleAuthLogin))
 
 	// ---- 需登录接口：JWT 鉴权 ----
 	authed := func(h func(http.ResponseWriter, *http.Request)) http.Handler {
 		return s.authGuard(http.HandlerFunc(h))
 	}
-	mux.Handle("/api/account/me", s.guard(authed(s.handleMe)))
-	mux.Handle("/api/account/bind", s.guard(authed(s.handleBind)))
-	mux.Handle("/api/qoder/sessions/{id}/messages", s.guard(authed(s.handleMessages)))
-	mux.Handle("/api/qoder/sessions/{id}/stream", s.guard(authed(s.handleStream)))
+	mux.Handle("/api/account/me", authed(s.handleMe))
+	mux.Handle("/api/account/bind", authed(s.handleBind))
+	mux.Handle("/api/qoder/sessions/{id}/messages", authed(s.handleMessages))
+	mux.Handle("/api/qoder/sessions/{id}/stream", authed(s.handleStream))
 
 	// ---- 未知 API 路径统一 JSON 404 ----
 	notFound := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { writeRouteNotFound(w) })
-	mux.Handle("/api/qoder/", s.guard(notFound))
-	mux.Handle("/api/qoder", s.guard(notFound))
-	mux.Handle("/api/", s.guard(notFound))
+	mux.Handle("/api/qoder/", notFound)
+	mux.Handle("/api/qoder", notFound)
+	mux.Handle("/api/", notFound)
 
 	// ---- 前端静态资源（SPA，无需登录）----
 	mux.Handle("/", http.HandlerFunc(s.handleStatic))
 
-	return requestLog(recoverer(mux))
-}
-
-// guard 对所有 /api/qoder 请求执行同源防护（对应 ensureSameOrigin）。
-func (s *Server) guard(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if apiErr := ensureSameOrigin(r, s.Cfg.AllowedOrigin); apiErr != nil {
-			writeError(w, apiErr)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
+	return requestLog(recoverer(openCORS(mux)))
 }
 
 // handleStatic 服务 dist/ 静态文件，SPA 路由回退到 index.html（对应 index.mjs serveStatic）。

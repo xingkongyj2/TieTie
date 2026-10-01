@@ -1,4 +1,5 @@
 import type { RelationshipState } from '../types'
+import { spaceBuddyArtwork } from './ipCharacters'
 
 /** Demo only: no real AI, weather service, payment, or notification is connected. */
 export const LOCAL_MOCK_NOTICE = '本地体验版 · 对话为模拟回复，数据仅保存在当前设备'
@@ -10,7 +11,7 @@ export const initialRelationshipState: RelationshipState = {
       id: 'ai',
       name: '贴贴',
       role: '你们的 AI 小管家',
-      avatar: '/avatars/ai-cat.png',
+      avatar: spaceBuddyArtwork.blue.src,
       birthday: '',
       hobbies: ['记住小事', '好好说话', '偷偷助攻'],
       bio: '你们负责相爱，小事交给我记着 ฅ^•ﻌ•^ฅ',
@@ -20,6 +21,7 @@ export const initialRelationshipState: RelationshipState = {
       name: '阿言',
       role: '我',
       avatar: '/avatars/cream-cat.png',
+      gender: 'unspecified',
       birthday: '1998-11-16',
       hobbies: ['做饭', '拍照', '陪小满散步'],
       bio: '嘴上说随便，其实最想和你一起吃饭 🍳',
@@ -29,6 +31,7 @@ export const initialRelationshipState: RelationshipState = {
       name: '小满',
       role: '另一半',
       avatar: '/avatars/peach-cat.png',
+      gender: 'unspecified',
       birthday: '1999-06-08',
       hobbies: ['奶茶三分糖', '小猫', '周末探店'],
       bio: '今天也要收集一点点开心！( •̀ ω •́ )✧',

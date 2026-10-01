@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 170" fill="none" role="img" aria-labelledby="space-buddies-duo-title">
+  <title id="space-buddies-duo-title">贴贴双人小宇宙</title>
+  <defs>
+    <linearGradient id="space-buddies-duo-blue-gradient" x1="38" y1="59" x2="113" y2="145" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#78CCFF" />
+      <stop offset="1" stop-color="#3779F5" />
+    </linearGradient>
+    <linearGradient id="space-buddies-duo-ice-gradient" x1="104" y1="27" x2="173" y2="126" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ECF8FF" />
+      <stop offset="1" stop-color="#A6D6FF" />
+    </linearGradient>
+  </defs>
+  <ellipse cx="111" cy="144" rx="87" ry="15" stroke="#B7D3F2" stroke-dasharray="3 6" transform="rotate(-16 111 144)" />
+  <g>
+    <path d="M101 31C114 14 142 15 155 33L184 76C199 98 190 119 168 126L134 137C111 144 93 131 91 111L86 66C84 51 91 43 101 31Z" fill="url(#space-buddies-duo-ice-gradient)" />
+    <rect x="124" y="57" width="7" height="15" rx="3.5" fill="#38699C" transform="rotate(-12 124 57)" />
+    <rect x="146" y="53" width="7" height="15" rx="3.5" fill="#38699C" transform="rotate(-12 146 53)" />
+    <path d="M135 79C139 82 144 81 147 77" stroke="#38699C" stroke-width="3" stroke-linecap="round" />
+  </g>
+  <g>
+    <path d="M30 91C28 68 45 51 67 55L105 62C124 65 132 80 127 98L118 130C113 147 100 153 82 148L48 139C30 134 27 115 30 91Z" fill="url(#space-buddies-duo-blue-gradient)" />
+    <rect x="58" y="85" width="7" height="14" rx="3.5" fill="white" transform="rotate(10 58 85)" />
+    <rect x="79" y="89" width="7" height="14" rx="3.5" fill="white" transform="rotate(10 79 89)" />
+    <path d="M61 113C66 117 73 118 79 115" stroke="white" stroke-width="3" stroke-linecap="round" />
+  </g>
+  <path d="M46 14L50 27L63 31L50 35L46 48L42 35L29 31L42 27L46 14Z" fill="#92C9FF" />
+  <path d="M186 37V47M181 42H191" stroke="#87B9F4" stroke-width="2" stroke-linecap="round" />
+  <circle cx="17" cy="118" r="3" fill="#B8DBFF" />
+</svg>

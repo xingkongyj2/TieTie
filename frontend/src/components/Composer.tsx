@@ -74,7 +74,7 @@ export function Composer({ sending, disabled = false, placeholder = '说点什�
   };
   return <footer className="composer-area">
     <div className="quick-actions">
-      <button onClick={() => onTool('reminders')}><Bell size={14} /><span>记件小事</span></button>
+      <button onClick={() => onTool('reminders')}><Bell size={14} /><span>添加提醒</span></button>
       <button onClick={() => onTool('anniversary')}><Heart size={14} /><span>小纪念</span></button>
     </div>
     {files.length > 0 && <div className="composer-attachments" aria-label="待发送附件">{files.map((file, index) => <div className="attachment-chip" key={`${file.name}-${index}`}>
@@ -93,6 +93,6 @@ export function Composer({ sending, disabled = false, placeholder = '说点什�
       <button type="submit" className="send-button" aria-label="发送消息" disabled={(!text.trim() && !files.length) || sending || disabled}>{sending ? <span className="spinner" /> : <ArrowUp size={22} strokeWidth={2.2} />}</button>
     </form>
     {listening && <div className="voice-status" role="status"><span />正在听你说话，点麦克风结束</div>}
-    <p className="composer-caption"><span>✧</span> 小事有人记，喜欢有回应 <span>✧</span></p>
+    <p className="composer-caption"><span>✧</span> 提醒有人记，喜欢有回应 <span>✧</span></p>
   </footer>;
 }

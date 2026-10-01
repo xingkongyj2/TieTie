@@ -1,10 +1,12 @@
-import { Copy, Heart, Link2, Sparkles } from 'lucide-react';
+import { Copy, Heart, Link2 } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
+import { SpaceBuddy } from './SpaceBuddies';
 
 interface Props {
   code: string;
   onBind: (code: string) => Promise<void>;
   notify: (text: string) => void;
+  embedded?: boolean;
 }
 
 /** 复制到剪贴板，带 execCommand 兜底（微信内置浏览器常拒绝 Clipboard API）。 */
@@ -37,7 +39,7 @@ function shareLink(code: string): string {
 }
 
 /** 已登录但未绑定时的全屏引导页：展示专属邀请码、分享入口，并可用对方邀请码完成绑定。 */
-export function BindPage({ code, onBind, notify }: Props) {
+export function BindPage({ code, onBind, notify, embedded = false }: Props) {
   const [invite, setInvite] = useState('');
   const [binding, setBinding] = useState(false);
   const [error, setError] = useState('');
@@ -49,11 +51,11 @@ export function BindPage({ code, onBind, notify }: Props) {
   }, []);
 
   const copyCode = async () => {
-    notify(await copyText(code) ? '邀请码已复制，快发给TA吧' : '复制失败，请长按邀请码手动复制');
+    notify(await copyText(code) ? '邀请码已复制' : '复制失败，请长按邀请码手动复制');
   };
   const copyShare = async () => {
     const text = `来「贴贴」和我绑定我们的小窝 💞 打开链接输入我的邀请码 ${code}：${shareLink(code)}`;
-    notify(await copyText(text) ? '分享链接已复制，去微信粘贴给TA吧' : '复制失败，请手动分享');
+    notify(await copyText(text) ? '分享链接已复制' : '复制失败，请手动分享');
   };
 
   const submit = async (event: FormEvent) => {
@@ -72,10 +74,9 @@ export function BindPage({ code, onBind, notify }: Props) {
     }
   };
 
-  return <div className="app-shell bind-page">
-    <div className="brand-mark"><img src="/brand-notes.png" alt="" /></div>
-    <h1>贴贴 · 邀请绑定</h1>
-    <p className="bind-lead">这是你的专属邀请码，发给那个人，两个人绑定后就有了共享的小窝。</p>
+  return <div className={embedded ? 'bind-page bind-page-embedded' : 'app-shell bind-page'}>
+    <header className="bind-header"><div><h1>我们<span className="page-title-dot" /></h1></div><Heart size={21} aria-hidden="true" /></header>
+    <div className="bind-welcome"><SpaceBuddy variant="blue" className="bind-buddy" /><h2>两个人，刚刚好</h2><p>邀请在意的人，一起收集日常的小美好。</p></div>
 
     <div className="bind-code-card">
       <span className="bind-code-label">我的邀请码</span>
@@ -84,11 +85,10 @@ export function BindPage({ code, onBind, notify }: Props) {
         <button type="button" className="primary-button" onClick={() => void copyCode()}><Copy size={15} />复制邀请码</button>
         <button type="button" className="secondary-button" onClick={() => void copyShare()}><Link2 size={15} />复制分享链接</button>
       </div>
-      <p className="bind-hint"><Sparkles size={13} />把链接通过微信发给TA，TA打开后输入邀请码即可绑定。</p>
     </div>
 
     <form className="bind-form" onSubmit={(event) => void submit(event)}>
-      <label htmlFor="invite-code">输入TA的邀请码</label>
+      <label htmlFor="invite-code">输入对方的邀请码</label>
       <div className="bind-form-row">
         <input
           id="invite-code"
@@ -106,7 +106,6 @@ export function BindPage({ code, onBind, notify }: Props) {
         </button>
       </div>
       {error && <p className="bind-error" role="alert">{error}</p>}
-      {binding && <p className="bind-hint">首次绑定会在云端为你们新建专属会话，可能需要几秒…</p>}
     </form>
   </div>;
 }
