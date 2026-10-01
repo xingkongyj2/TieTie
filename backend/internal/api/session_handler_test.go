@@ -13,6 +13,7 @@ import (
 
 	"tietie/backend/internal/auth"
 	"tietie/backend/internal/config"
+	"tietie/backend/internal/conversation"
 	"tietie/backend/internal/dbop"
 	"tietie/backend/internal/qoder"
 )
@@ -32,12 +33,18 @@ func TestToolResultRelay(t *testing.T) {
 	upstream.HandleFunc("/api/v1/cloud/sessions", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method == http.MethodPost {
-			_ = json.NewEncoder(w).Encode(map[string]any{"id": "sess_tool_1", "title": "tietie-1-2", "status": "idle"})
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": "sess_tool_1", "title": "TieTie-1-2", "status": "idle"})
 			return
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"has_more": false, "data": []map[string]any{}})
 	})
 	upstream.HandleFunc("/api/v1/cloud/sessions/sess_tool_1/events", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{{"id": "evt_ask_1", "type": "agent.custom_tool_use", "name": "AskUserQuestion", "input": map[string]any{"questions": []map[string]any{{"question": "选一个", "options": []map[string]string{{"label": "继续"}}}}}}}, "has_more": false})
+			return
+		}
+
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		mu.Lock()
@@ -45,6 +52,9 @@ func TestToolResultRelay(t *testing.T) {
 		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]any{}})
+	})
+	upstream.HandleFunc("/api/v1/cloud/sessions/sess_tool_1", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"id": "sess_tool_1", "status": "idle"})
 	})
 	server := httptest.NewServer(upstream)
 	defer server.Close()
@@ -77,8 +87,8 @@ func TestToolResultRelay(t *testing.T) {
 		router.ServeHTTP(result, req)
 		return result
 	}
-	if got := call("/api/account/bind", `{"code":"2202"}`); got.Code != http.StatusOK {
-		t.Fatalf("bind: got %d: %s", got.Code, got.Body.String())
+	if _, err := db.CreateBinding(ctx, users[0].ID, users[1].ID, "sess_tool_1"); err != nil {
+		t.Fatal(err)
 	}
 
 	ok := call("/api/qoder/sessions/sess_tool_1/tool-result", `{"toolUseId":"evt_ask_1","text":"就发这条，不用时间"}`)
@@ -92,9 +102,19 @@ func TestToolResultRelay(t *testing.T) {
 		t.Fatalf("期望转发 1 次事件，实际 %+v", postings)
 	}
 	raw, _ := json.Marshal(postings[0])
-	want := `{"events":[{"content":[{"text":"就发这条，不用时间","type":"text"}],"custom_tool_use_id":"evt_ask_1","type":"user.custom_tool_result"}]}`
-	if string(raw) != want {
-		t.Fatalf("转发结构不对:\n got %s\nwant %s", raw, want)
+	var sent struct {
+		Events []qoder.Event `json:"events"`
+	}
+	if err := json.Unmarshal(raw, &sent); err != nil || len(sent.Events) != 1 {
+		t.Fatalf("invalid events: %s", raw)
+	}
+	event := sent.Events[0]
+	if event.Type != "user.custom_tool_result" || event.CustomToolUseID != "evt_ask_1" || len(event.Content) != 1 {
+		t.Fatalf("wrong tool result structure")
+	}
+	input, decoded := conversation.DecodeInput(event.Content[0].Text)
+	if !decoded || input.Text != "就发这条，不用时间" || input.UserID != users[0].ID || len(input.Context.Members) != 2 {
+		t.Fatalf("answer must retain real member identity and original text")
 	}
 
 	for _, bad := range []struct{ name, payload string }{

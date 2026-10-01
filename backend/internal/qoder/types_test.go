@@ -4,6 +4,9 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
+
+	"tietie/backend/internal/conversation"
 )
 
 func TestDisplayUserText(t *testing.T) {
@@ -40,7 +43,7 @@ func TestPublicMessages(t *testing.T) {
 	if len(msgs) != 2 {
 		t.Fatalf("want 2 messages, got %d", len(msgs))
 	}
-	if msgs[0].Sender != "self" || msgs[0].Text != " 你好 " || msgs[0].Kind != "text" {
+	if msgs[0].Sender != "user" || msgs[0].UserID != 0 || msgs[0].Text != " 你好 " || msgs[0].Kind != "text" {
 		t.Fatalf("unexpected user message: %+v", msgs[0])
 	}
 	if msgs[0].Time == "" {
@@ -49,6 +52,49 @@ func TestPublicMessages(t *testing.T) {
 	if msgs[1].Sender != "ai" || msgs[1].Text != "回复" || len(msgs[1].Images) != 1 ||
 		!strings.HasPrefix(msgs[1].Images[0], "data:image/png;base64,") {
 		t.Fatalf("unexpected agent message: %+v", msgs[1])
+	}
+}
+
+func TestPublicMessagesSharedConversation(t *testing.T) {
+	ctx := conversation.Context{
+		SessionID: "sess_pair", Members: []conversation.Member{{ID: 11, Name: "小白"}, {ID: 22, Name: "小青"}},
+		AuthorID: 22, Now: time.Date(2026, 10, 1, 2, 0, 0, 0, time.UTC),
+	}
+	original := "我明天要开会\n```tietie\n{\"actions\":[{\"type\":\"create_reminder\"}]}\n```"
+	encoded := conversation.EncodeUser(ctx, original) + "\n\n" + uploadMarker + "日程.docx：/mnt/session/uploads/agenda.txt"
+	reminder := conversation.Reminder{ID: "rem_1", Title: "开会", DueAt: ctx.Now, RecipientIDs: []int64{22}}
+	msgs := publicMessages([]Event{
+		{ID: "evt_author", Type: "user.message", Content: []ContentBlock{{Type: "text", Text: encoded}}},
+		{ID: "evt_wakeup", Type: "user.message", Content: []ContentBlock{{Type: "text", Text: conversation.EncodeReminder(ctx, reminder)}}},
+		{ID: "evt_ai", Type: "agent.message", Content: []ContentBlock{{Type: "text", Text: "```tietie\n{\"text\":\"小青，记得开会哦\",\"recipientIds\":[22],\"source\":\"reminder\",\"actions\":[]}\n```"}}},
+	})
+	if len(msgs) != 2 {
+		t.Fatalf("hidden wakeup should not appear: %+v", msgs)
+	}
+	if msgs[0].UserID != 22 || msgs[0].DisplayName != "小青" || msgs[0].Text != original+"\n\n📎 日程.docx" || len(msgs[0].Actions) != 0 {
+		t.Fatalf("user identity/original text/attachments not preserved: %+v", msgs[0])
+	}
+	if msgs[1].Text != "小青，记得开会哦" || msgs[1].Source != "reminder" || len(msgs[1].RecipientIDs) != 1 || msgs[1].RecipientIDs[0] != 22 {
+		t.Fatalf("reminder reply should expose only conversation fields: %+v", msgs[1])
+	}
+}
+
+func TestPublicMessagesActionsOnlyFromCompletedAgentMessage(t *testing.T) {
+	reply := "```tietie\n{\"text\":\"\",\"recipientIds\":[11],\"source\":\"chat\",\"actions\":[{\"type\":\"create_reminder\",\"key\":\"meeting\",\"title\":\"开会\",\"dueAt\":\"2026-10-02T09:00:00+08:00\",\"recipientIds\":[11]}]}\n```"
+	msgs := publicMessages([]Event{
+		{ID: "evt_userjson", Type: "user.message", Content: []ContentBlock{{Type: "text", Text: reply}}},
+		{ID: "evt_agentjson", Type: "agent.message", Content: []ContentBlock{{Type: "text", Text: reply}}},
+		{ID: "evt_delta", Type: "event_delta", Content: []ContentBlock{{Type: "text", Text: reply}}},
+	})
+	if len(msgs) != 2 || len(msgs[0].Actions) != 0 || len(msgs[1].Actions) != 1 || msgs[1].Text != "" {
+		t.Fatalf("only full agent event may propose actions; empty text must retain actions: %+v", msgs)
+	}
+	encoded, err := json.Marshal(msgs[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "create_reminder") || strings.Contains(string(encoded), "Actions") || strings.Contains(string(encoded), "ProtocolError") {
+		t.Fatalf("internal actions must not leak to clients: %s", encoded)
 	}
 }
 

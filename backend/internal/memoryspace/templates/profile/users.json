@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 2,
+  "type": "user_profiles",
+  "title": "人物档案",
+  "users": [
+    {
+      "role": "A",
+      "userId": "{{user_a_id}}",
+      "name": "{{user_a_name}}",
+      "nickname": "{{user_a_nickname}}",
+      "schedule": "{{user_a_schedule}}",
+      "diet": "{{user_a_diet}}",
+      "lifePreference": "{{user_a_life_preference}}",
+      "taboos": "{{user_a_taboos}}",
+      "hobbies": "未提供",
+      "profession": "未提供",
+      "communicationPreference": "未提供",
+      "entries": []
+    },
+    {
+      "role": "B",
+      "userId": "{{user_b_id}}",
+      "name": "{{user_b_name}}",
+      "nickname": "{{user_b_nickname}}",
+      "schedule": "{{user_b_schedule}}",
+      "diet": "{{user_b_diet}}",
+      "lifePreference": "{{user_b_life_preference}}",
+      "taboos": "{{user_b_taboos}}",
+      "hobbies": "未提供",
+      "profession": "未提供",
+      "communicationPreference": "未提供",
+      "entries": []
+    }
+  ],
+  "maintenance": [
+    "A/B 按真实 userId 升序固定；自己/对方相对于当前发言者，不可交换档案。",
+    "本人陈述及角色页补充均是已确认的个人信息与偏好；保留 sourceUserId，无需本人再次核实，明确更正优先。",
+    "每位用户的结构化字段与 entries 保存同一主体的事实，未知项不猜测。共享事实放 sharedEntries。",
+    "本模板的分页保存在 profile/users/YYYY-MM/NNNNNN.json；每页使用相同字段与 type，memoryKey 标识原始事实。"
+  ],
+  "sharedEntries": []
+}

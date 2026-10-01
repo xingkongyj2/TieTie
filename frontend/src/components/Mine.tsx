@@ -117,7 +117,7 @@ export function Mine({ state, username, code, hasSession, onSaveMember, onLogout
     {pickerOpen && <CharacterPicker selectedAvatar={self.avatar} onSelect={(avatar) => { void selectAvatar(avatar) }} onClose={() => setPickerOpen(false)} />}
     {exitOpen && <Sheet title="退出当前会话" onClose={() => setExitOpen(false)}>{(close) => <div className="mine-exit-sheet">
       <p>退出后，你和 TA 都会回到绑定引导页，要重新输入对方邀请码才能继续聊天。</p>
-      <p>聊天记录仍保存在云端，重新绑定对方时会找回同一个会话。</p>
+      <p>重新绑定时会创建新的会话和记忆空间。</p>
       <div className="mine-exit-actions">
         <button type="button" className="secondary-button" disabled={exiting} onClick={close}>再想想</button>
         <button type="button" className="primary-button" disabled={exiting} onClick={() => void exitSession(close)}>{exiting ? '正在退出…' : '确认退出'}</button>

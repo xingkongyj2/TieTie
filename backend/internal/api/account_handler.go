@@ -3,9 +3,12 @@ package api
 import (
 	"context"
 	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"strings"
+	"tietie/backend/internal/memoryspace"
+	"time"
 
 	"tietie/backend/internal/auth"
 	"tietie/backend/internal/dbop"
@@ -63,7 +66,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleBind 处理 POST /api/account/bind：
-// 用邀请码找到对方 → 复用同一对的历史会话或校验双方均未绑定 → 云端新建后落库。
+// 用邀请码找到对方 → 校验双方均未绑定 → 新建会话和独立记忆空间后落库。
 func (s *Server) handleBind(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeMethodNotAllowed(w)
@@ -105,7 +108,7 @@ func (s *Server) handleBind(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 已有绑定：直接复用历史会话。
+	// 当前已有绑定：幂等返回，不重复初始化。
 	existing, err := s.DB.GetBindingByPair(r.Context(), self.ID, partner.ID)
 	if err != nil {
 		writeError(w, err)
@@ -137,36 +140,88 @@ func (s *Server) handleBind(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 本地没有这对的绑定记录：先按配对标题在云端找回历史会话（解绑后重绑同一人），找不到才新建。
-	title := dbop.SessionTitle(self.ID, partner.ID)
-	recovered, err := s.Qoder.FindSessionByTitle(r.Context(), title)
+	// Every new binding gets a fresh session and a fresh memory store. An active
+	// binding remains idempotent; unbinding never restores cloud history by title.
+	if !s.useV2() || !s.Cfg.CloudMemoryEnabled {
+		writeError(w, qoder.NewApiError(503, "memory_required", "新建空间需要开启 V2 会话协议和云端记忆。"))
+		return
+	}
+	agentID, envID, err := s.Qoder.ResolveAgentAndEnv(r.Context(), s.Cfg.AgentID, s.Cfg.EnvironmentID)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	var sessionID string
-	var createdSession *qoder.PublicSession
-	if recovered != nil {
-		sessionID = recovered.ID
-	} else {
-		agentID, envID, err := s.Qoder.ResolveAgentAndEnv(r.Context(), s.Cfg.AgentID, s.Cfg.EnvironmentID)
+	nonce := make([]byte, 16)
+	if _, err := rand.Read(nonce); err != nil {
+		writeError(w, err)
+		return
+	}
+	spaceID := "space_" + hex.EncodeToString(nonce)
+	store, err := s.Qoder.CreateMemoryStore(r.Context(), "TieTie-"+spaceID+"-memory", spaceID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	// Seed before mounting, then fill the actual group/session ID before publish.
+	sessionID := ""
+	discarded := func() { s.cleanupInitializedSpace(sessionID, store.ID) }
+	documents, err := memoryspace.Render("待创建会话", spaceID, memoryspace.Member{ID: self.ID, Name: self.Username}, memoryspace.Member{ID: partner.ID, Name: partner.Username})
+	if err != nil {
+		discarded()
+		writeError(w, err)
+		return
+	}
+	var records []dbop.MemoryRecord
+	for _, doc := range documents {
+		entry, err := s.Qoder.UpsertMemory(r.Context(), store.ID, doc.Path, doc.Content)
 		if err != nil {
+			discarded()
 			writeError(w, err)
 			return
 		}
-		createdSession, err = s.Qoder.CreateSession(r.Context(), agentID, envID, title)
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		sessionID = createdSession.ID
+		records = append(records, dbop.MemoryRecord{Path: doc.Path, Kind: "template", Scope: "space", Storage: "database_and_memory", Content: doc.Content, State: "synced", Operation: "upsert", StoreID: store.ID, EntryID: entry.ID, Revision: 1})
 	}
-	discarded := func() {
-		if createdSession != nil {
-			s.cleanupOrphanSession(createdSession.ID)
+	session, err := s.Qoder.CreateSession(r.Context(), agentID, envID, dbop.SessionTitle(self.ID, partner.ID), store.ID)
+	if err != nil {
+		if definitivelyRejected(err) {
+			discarded()
+		} else {
+			logf("创建会话结果待核实，保留其独立记忆仓库 %s: %v", store.ID, err)
+		}
+		writeError(w, err)
+		return
+	}
+	sessionID = session.ID
+	if err := s.Qoder.RenameMemoryStore(r.Context(), store.ID, qoder.MemoryStoreName(sessionID)); err != nil {
+		discarded()
+		writeError(w, err)
+		return
+	}
+	finalized, err := memoryspace.Render(sessionID, spaceID, memoryspace.Member{ID: self.ID, Name: self.Username}, memoryspace.Member{ID: partner.ID, Name: partner.Username})
+	if err != nil {
+		discarded()
+		writeError(w, err)
+		return
+	}
+	for i := range records {
+		records[i].SessionID = sessionID
+		records[i].ID = dbop.MemoryID(sessionID, records[i].Path)
+		if records[i].Path == "agreements/shared.json" {
+			for _, doc := range finalized {
+				if doc.Path == records[i].Path {
+					entry, err := s.Qoder.UpsertMemory(r.Context(), store.ID, doc.Path, doc.Content)
+					if err != nil {
+						discarded()
+						writeError(w, err)
+						return
+					}
+					records[i].Content = doc.Content
+					records[i].EntryID = entry.ID
+				}
+			}
 		}
 	}
-	created, err := s.DB.CreateBinding(r.Context(), self.ID, partner.ID, sessionID)
+	created, err := s.DB.CreateInitializedBinding(r.Context(), self.ID, partner.ID, sessionID, dbop.SpaceMemoryStore{SessionID: sessionID, StoreID: store.ID, NativeMounted: true, SpaceID: spaceID, TemplateVersion: memoryspace.Version}, records)
 	if err != nil {
 		discarded()
 		if errors.Is(err, dbop.ErrAlreadyBound) {
@@ -212,6 +267,23 @@ func (s *Server) handleUnbind(w http.ResponseWriter, r *http.Request) {
 		writeError(w, qoder.NewApiError(401, "user_not_found", "账号不存在，请重新注册。"))
 		return
 	}
+	currentBinding, err := s.DB.GetLatestBindingByUser(r.Context(), self.ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if currentBinding != nil {
+		unlock := s.lockConversation(currentBinding.SessionID)
+		defer unlock()
+		if err := s.DB.CancelSessionReminders(r.Context(), currentBinding.SessionID); err != nil {
+			writeError(w, err)
+			return
+		}
+		if err := s.DB.ClearConversationPending(r.Context(), currentBinding.SessionID); err != nil {
+			writeError(w, err)
+			return
+		}
+	}
 	binding, err := s.DB.Unbind(r.Context(), self.ID)
 	if err != nil {
 		writeError(w, err)
@@ -221,14 +293,6 @@ func (s *Server) handleUnbind(w http.ResponseWriter, r *http.Request) {
 		logf("用户 %d 退出会话 %s", self.ID, binding.SessionID)
 	}
 	writeJSON(w, http.StatusOK, AccountResult{User: userPayload(self)})
-}
-
-func (s *Server) cleanupOrphanSession(sessionID string) {
-	go func() {
-		if err := s.Qoder.DeleteSession(context.WithoutCancel(context.Background()), sessionID); err != nil {
-			logf("清理多余云端会话 %s 失败: %v", sessionID, err)
-		}
-	}()
 }
 
 // bindingPayload 查询用户当前生效的绑定。
@@ -269,4 +333,20 @@ func generateCode() (string, error) {
 		buf[i] = byte('0' + b%10)
 	}
 	return string(buf), nil
+}
+
+// Only unbound resources created by this request are discarded. Both resources
+// are independent of all previous spaces and can be removed on a lost race.
+func (s *Server) cleanupInitializedSpace(session, store string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if session != "" {
+		if err := s.Qoder.DeleteSession(ctx, session); err != nil {
+			logf("清理未绑定会话 %s 失败: %v", session, err)
+			return // Keep its mounted store if deletion did not succeed.
+		}
+	}
+	if err := s.Qoder.DeleteMemoryStore(ctx, store); err != nil {
+		logf("清理未绑定记忆仓库 %s 失败: %v", store, err)
+	}
 }

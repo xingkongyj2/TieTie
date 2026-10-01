@@ -14,14 +14,14 @@ import (
 var ErrAlreadyBound = errors.New("user already bound to another partner")
 
 // sessionTitlePrefix 是配对会话标题的前缀，便于在云端会话列表里认出是贴贴建的会话。
-const sessionTitlePrefix = "tietie-"
+const sessionTitlePrefix = "TieTie-"
 
 // Binding 是一对用户的绑定关系（bindings 表）。
 // 两个用户 ID 按数值顺序组成复合主键，即"一对用户只有一个共享会话"。
 type Binding struct {
 	UserA     int64     `json:"userA"     gorm:"column:user_a;primaryKey"`
 	UserB     int64     `json:"userB"     gorm:"column:user_b;primaryKey"`
-	SessionID string    `json:"sessionId" gorm:"column:session_id;size:160;not null"`
+	SessionID string    `json:"sessionId" gorm:"column:session_id;size:160;not null;index:idx_bindings_session"`
 	CreatedAt time.Time `json:"createdAt" gorm:"column:created_at;autoCreateTime"`
 }
 
@@ -37,7 +37,7 @@ func PairKey(id1, id2 int64) (a, b int64) {
 }
 
 // SessionTitle 是一对绑定共用的云端会话标题：小 ID 在前、大 ID 在后。
-// 绑定记录删除后，重新绑定同一人靠这个标题在云端找回历史会话，本地不必保留映射。
+// 标题仅用于展示；新绑定不靠标题恢复旧会话或旧记忆。
 func SessionTitle(id1, id2 int64) string {
 	a, b := PairKey(id1, id2)
 	return fmt.Sprintf("%s%d-%d", sessionTitlePrefix, a, b)
@@ -129,4 +129,44 @@ func (db *DB) Unbind(ctx context.Context, userID int64) (*Binding, error) {
 		return nil, err
 	}
 	return binding, nil
+}
+
+// CreateInitializedBinding publishes the binding, store mapping and seeded
+// index atomically, so no member can enter a half-initialized space.
+func (db *DB) CreateInitializedBinding(ctx context.Context, id1, id2 int64, session string, store SpaceMemoryStore, records []MemoryRecord) (bool, error) {
+	if !db.enabled() {
+		return false, errNoDB
+	}
+	a, b := PairKey(id1, id2)
+	created := false
+	err := db.gdb.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		binding := Binding{UserA: a, UserB: b, SessionID: session}
+		result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&binding)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return nil
+		}
+		if err := tx.Create(&store).Error; err != nil {
+			return err
+		}
+		for i := range records {
+			records[i].BindingCreatedAt = binding.CreatedAt
+		}
+		if err := tx.Create(&records).Error; err != nil {
+			return err
+		}
+		created = true
+		return nil
+	})
+	if err != nil && strings.Contains(err.Error(), "binding_user_already_bound") {
+		if existing, lookupErr := db.GetBindingByPair(ctx, a, b); lookupErr != nil {
+			return false, lookupErr
+		} else if existing != nil {
+			return false, nil
+		}
+		return false, ErrAlreadyBound
+	}
+	return created, err
 }

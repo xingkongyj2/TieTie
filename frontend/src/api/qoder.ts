@@ -1,8 +1,10 @@
-import { request } from './client'
-import type { Message } from '../types'
+import { isAccountTokenInvalid, request } from './client'
+import type { CloudMember, CloudReminder, Message } from '../types'
 import uploadTypes from './upload-types.json'
+import { clearToken, getToken } from '../lib/token'
 
 export interface CloudSession {
+  replyMode?: 'silent'
   id: string
   title: string
   status: string
@@ -17,6 +19,9 @@ export interface CloudHistory {
   cursor: string | null
   idleEventId: string | null
   turnError: string | null
+  members?: CloudMember[]
+  reminders?: CloudReminder[]
+  remindersError?: string | null
 }
 
 export type CloudStreamEvent =
@@ -26,6 +31,86 @@ export type CloudStreamEvent =
   | { type: 'thinking_end'; id: string }
   | { type: 'status'; id: string; status: string }
   | { type: 'session_error'; id: string; message: string }
+
+interface CloudStream {
+  onopen: (() => void) | null
+  onerror: (() => void) | null
+  onmessage: ((event: { data: string }) => void) | null
+  close: () => void
+}
+
+/** Fetch SSE carries the account token; native EventSource cannot set this header. */
+function authenticatedStream(id: string, after: string | null, privateChannel = false): CloudStream {
+  let closed = false
+  let cursor = after
+  let retry: ReturnType<typeof setTimeout> | null = null
+  let controller: AbortController | null = null
+  const stream: CloudStream = {
+    onopen: null, onerror: null, onmessage: null,
+    close() { closed = true; controller?.abort(); if (retry) clearTimeout(retry) },
+  }
+  const connect = async () => {
+    if (closed) return
+    controller = new AbortController()
+    let reconnect = true
+    try {
+      const headers = new Headers({ Accept: 'text/event-stream' })
+      const token = getToken()
+      if (token) headers.set('Authorization', `Bearer ${token}`)
+      if (cursor) headers.set('Last-Event-ID', cursor)
+      const response = await fetch(`/api/qoder/sessions/${encodeURIComponent(id)}/${privateChannel ? 'private-stream' : 'stream'}`, { headers, signal: controller.signal })
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: { code?: string } } | null
+        if (isAccountTokenInvalid(response.status, payload?.error?.code)) clearToken()
+        reconnect = response.status !== 401 && response.status !== 403
+        throw new Error(`Stream unavailable: ${response.status}`)
+      }
+      if (!response.body || !response.headers.get('Content-Type')?.includes('text/event-stream')) throw new Error('Missing event stream')
+      stream.onopen?.()
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      let data: string[] = []
+      let eventId: string | null = null
+      const consume = (line: string) => {
+        if (!line) {
+          if (eventId !== null) cursor = eventId || null
+          if (data.length) stream.onmessage?.({ data: data.join('\n') })
+          data = []; eventId = null
+          return
+        }
+        if (line.startsWith(':')) return
+        const colon = line.indexOf(':')
+        const field = colon < 0 ? line : line.slice(0, colon)
+        const value = colon < 0 ? '' : line.slice(colon + 1).replace(/^ /, '')
+        if (field === 'data') data.push(value)
+        else if (field === 'id' && !value.includes('\0')) eventId = value
+      }
+      while (!closed) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        let newline = buffer.indexOf('\n')
+        while (newline !== -1) {
+          consume(buffer.slice(0, newline).replace(/\r$/, ''))
+          buffer = buffer.slice(newline + 1)
+          newline = buffer.indexOf('\n')
+        }
+        if (buffer.length > 2_000_000) throw new Error('Oversized event frame')
+      }
+    } catch {
+      // Polling remains active while SSE reconnects or is unavailable.
+    } finally {
+      controller?.abort()
+      if (!closed) {
+        stream.onerror?.()
+        if (!closed && reconnect) retry = setTimeout(() => { void connect() }, 3_000)
+      }
+    }
+  }
+  void connect()
+  return stream
+}
 
 const imageTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 const imageExtensions: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' }
@@ -110,13 +195,23 @@ async function fileBase64(file: File): Promise<string> {
 }
 
 const sessionPath = (id: string) => `/api/qoder/sessions/${encodeURIComponent(id)}/messages`
+const remindersPath = (id: string) => `/api/qoder/sessions/${encodeURIComponent(id)}/reminders`
 
 export const qoderApi = {
+  getReminders(id: string, signal?: AbortSignal): Promise<{ reminders: CloudReminder[] }> {
+    return request(remindersPath(id), { signal })
+  },
+  createReminder(id: string, input: { title: string; dueAt: string; recipientIds: number[] }): Promise<{ reminder: CloudReminder }> {
+    return request(remindersPath(id), { method: 'POST', body: input })
+  },
+  updateReminder(id: string, reminderId: string, status: 'completed' | 'scheduled' | 'cancelled'): Promise<{ reminder: CloudReminder }> {
+    return request(`${remindersPath(id)}/${encodeURIComponent(reminderId)}`, { method: 'PATCH', body: { status } })
+  },
   getMessages(id: string, after?: string | null, signal?: AbortSignal): Promise<CloudHistory> {
     const query = after ? `?${new URLSearchParams({ after })}` : ''
     return request(`${sessionPath(id)}${query}`, { signal })
   },
-  async sendMessage(id: string, text: string, files: File[] = []): Promise<{ messages: Message[] }> {
+  async sendMessage(id: string, text: string, files: File[] = [], visibility: 'shared' | 'private' = 'shared'): Promise<{ messages: Message[]; replyMode?: 'silent' }> {
     // Never tie a submitted turn to the current view's abort signal.
     validateAttachments(files)
     const attachments = await Promise.all(files.map(async (file) => {
@@ -127,14 +222,16 @@ export const qoderApi = {
           ? { kind: 'document', name: file.name, mimeType: file.type || 'application/octet-stream', data: await fileBase64(file) }
         : { kind: 'file', name: file.name, mimeType: supportedTextMime(file.type) ? file.type.toLowerCase().split(';')[0].trim() : 'text/plain', content: await file.text() }
     }))
-    return request(sessionPath(id), { method: 'POST', body: { text, attachments }, timeoutMs: 120_000 })
+    return request(sessionPath(id), { method: 'POST', body: { text, attachments, visibility }, timeoutMs: 120_000 })
   },
   /** 回答云端 Agent 抛出的选择题（AskUserQuestion），让挂起的那一轮继续。 */
-  sendToolResult(id: string, toolUseId: string, text: string): Promise<{ messages: Message[] }> {
+  sendToolResult(id: string, toolUseId: string, text: string): Promise<{ messages: Message[]; replyMode?: 'silent' }> {
     return request(`/api/qoder/sessions/${encodeURIComponent(id)}/tool-result`, { method: 'POST', body: { toolUseId, text } })
   },
-  stream(id: string, after: string | null): EventSource {
-    const query = after ? `?${new URLSearchParams({ after })}` : ''
-    return new EventSource(`/api/qoder/sessions/${encodeURIComponent(id)}/stream${query}`)
+  privateStream(id: string): CloudStream {
+    return authenticatedStream(id, null, true)
+  },
+  stream(id: string, after: string | null): CloudStream {
+    return authenticatedStream(id, after)
   },
 }

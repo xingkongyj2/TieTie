@@ -41,9 +41,17 @@ func parseMessage(r *http.Request) (*qoder.MessageInput, *qoder.ApiError) {
 		return nil, invalidMessage
 	}
 	for key := range body {
-		if key != "text" && key != "attachments" {
+		if key != "text" && key != "attachments" && key != "visibility" {
 			return nil, invalidMessage
 		}
+	}
+	visibility := "shared"
+	if raw, present := body["visibility"]; present {
+		value, valid := raw.(string)
+		if !valid || (value != "shared" && value != "private") {
+			return nil, invalidMessage
+		}
+		visibility = value
 	}
 	text, ok := body["text"].(string)
 	if !ok || utf8.RuneCountInString(text) > dto.MaxTextRunes {
@@ -70,7 +78,7 @@ func parseMessage(r *http.Request) (*qoder.MessageInput, *qoder.ApiError) {
 		}
 		attachments = append(attachments, attachment)
 	}
-	return &qoder.MessageInput{Text: strings.TrimSpace(text), Attachments: attachments}, nil
+	return &qoder.MessageInput{Text: strings.TrimSpace(text), Attachments: attachments, Visibility: visibility}, nil
 }
 
 // parseAttachment 校验单个附件并按类型规范化。

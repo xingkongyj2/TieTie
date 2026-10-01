@@ -3,7 +3,8 @@ import { useState, type FormEvent } from 'react';
 import type { AISettings, Member, MemberId, RelationshipState } from '../types';
 import { Avatar } from './Avatar';
 import { DatePicker } from './DatePicker';
-interface Props { state: RelationshipState; onBack: () => void; onSaveMember: (member: Member) => Promise<void>; onSaveSettings: (settings: AISettings) => Promise<void>; notify: (text: string) => void }
+import { PartnerImpression } from './PartnerImpression';
+interface Props { sessionId?: string; state: RelationshipState; onBack: () => void; onSaveMember: (member: Member) => Promise<void>; onSaveSettings: (settings: AISettings) => Promise<void>; notify: (text: string) => void }
 
 function AIForm({ state, onSave, notify }: { state: RelationshipState; onSave: Props['onSaveSettings']; notify: Props['notify'] }) {
   const [tone, setTone] = useState(state.settings.tone);
@@ -24,26 +25,6 @@ function AIForm({ state, onSave, notify }: { state: RelationshipState; onSave: P
       <div className="tone-heading">说话方式</div><div className="tone-options">{([{ value: 'warm', label: '温柔陪伴', emoji: '☁️' }, { value: 'playful', label: '调皮一点', emoji: '🐾' }, { value: 'concise', label: '简单直接', emoji: '⚡' }] as const).map((option) => <button type="button" className={tone === option.value ? 'selected' : ''} aria-pressed={tone === option.value} key={option.value} onClick={() => setTone(option.value)}><span>{option.emoji}</span>{option.label}{tone === option.value && <Check size={11} />}</button>)}</div>
     </section>
     <div className="form-bottom"><button className="primary-button" disabled={busy} type="submit">{busy ? '正在保存…' : '保存'}</button></div>
-    </fieldset>
-  </form>;
-}
-
-function PartnerNoteForm({ member, onSave, notify }: { member: Member; onSave: Props['onSaveMember']; notify: Props['notify'] }) {
-  const [bio, setBio] = useState(member.bio);
-  const [busy, setBusy] = useState(false);
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    try {
-      await onSave({ ...member, bio });
-      notify('备注已保存');
-    } catch { notify('备注保存失败，请再试一次。'); }
-    finally { setBusy(false); }
-  };
-  return <form className="detail-form" onSubmit={(event) => void submit(event)}>
-    <fieldset className="form-fields" disabled={busy}>
-      <section className="form-card"><label className="field-label" htmlFor="partner-bio">关于对方的小备注</label><textarea id="partner-bio" rows={3} maxLength={200} value={bio} onChange={(event) => setBio(event.target.value)} /><div className="input-counter">{bio.length}/200</div></section>
-      <div className="form-bottom"><button className="primary-button" type="submit" disabled={busy}>{busy ? '正在保存…' : '保存'}</button></div>
     </fieldset>
   </form>;
 }
@@ -93,7 +74,7 @@ export function MemberForm({ member, onSave, notify }: { member: Member; onSave:
   </form>;
 }
 
-export function Details({ state, onBack, onSaveMember, onSaveSettings, notify }: Props) {
+export function Details({ state, sessionId, onBack, onSaveSettings, notify }: Props) {
   const [selected, setSelected] = useState<Extract<MemberId, 'ai' | 'partner'>>('ai');
   const order = ['ai', 'partner'] as const;
   return <section className="details-view" aria-label="角色信息">
@@ -104,7 +85,7 @@ export function Details({ state, onBack, onSaveMember, onSaveSettings, notify }:
         return <button type="button" key={id} className={`member-tile ${id === selected ? 'selected' : ''}`} role="tab" aria-selected={id === selected} aria-controls={`panel-${id}`} id={`tab-${id}`} aria-label={id === 'ai' ? `${member.name}，AI 伙伴` : member.name} onClick={() => setSelected(id)}><Avatar member={member} size="normal" /><strong>{member.name}</strong>{id === 'ai' && <span className="member-type-hint">AI 伙伴</span>}</button>;
       })}</div>
       <div role="tabpanel" id={`panel-${selected}`} aria-labelledby={`tab-${selected}`} key={selected}>
-        {selected === 'ai' ? <AIForm state={state} onSave={onSaveSettings} notify={notify} /> : <PartnerNoteForm member={state.members.find((m) => m.id === selected)!} onSave={onSaveMember} notify={notify} />}
+        {selected === 'ai' ? <AIForm state={state} onSave={onSaveSettings} notify={notify} /> : <PartnerImpression key={sessionId} sessionId={sessionId} member={state.members.find((m) => m.id === selected)!} notify={notify} />}
       </div>
     </div>
   </section>;

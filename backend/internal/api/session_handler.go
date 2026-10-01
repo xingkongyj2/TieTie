@@ -2,13 +2,18 @@ package api
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 	"unicode/utf8"
 
+	"tietie/backend/internal/auth"
+	"tietie/backend/internal/conversation"
 	"tietie/backend/internal/dbop"
 	"tietie/backend/internal/dto"
+	"tietie/backend/internal/logging"
 	"tietie/backend/internal/qoder"
 )
 
@@ -41,14 +46,48 @@ func (s *Server) getMessages(w http.ResponseWriter, r *http.Request, id string) 
 		writeError(w, apiErr)
 		return
 	}
-	result, err := s.Qoder.GetMessages(r.Context(), id, after)
+	unlock := s.lockConversation(id)
+	defer unlock()
+	if apiErr := s.ensureBoundSession(r.Context(), id); apiErr != nil {
+		writeError(w, apiErr)
+		return
+	}
+	// Full event context is required to attribute AI actions to the preceding
+	// authenticated member even when a browser requests an incremental history.
+	result, err := s.Qoder.GetMessages(r.Context(), id, "")
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	space, warning, err := s.processConversation(r.Context(), id, result, auth.UserIDFrom(r.Context()))
 	if err != nil {
 		writeError(w, err)
 		return
 	}
 	s.recordSession(r.Context(), result.Session)
 	s.recordMessages(r.Context(), id, result.Messages)
-	writeJSON(w, http.StatusOK, result)
+	reminders, err := s.DB.ListVisibleReminders(r.Context(), id, auth.UserIDFrom(r.Context()))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if active, err := s.DB.HasActiveControl(r.Context(), id); err != nil {
+		writeError(w, err)
+		return
+	} else if active && result.Session != nil {
+		result.Session.Status = "running"
+	}
+	filterHistoryAfter(result, after)
+	if err := s.appendPrivateHistory(r.Context(), id, auth.UserIDFrom(r.Context()), result); err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, struct {
+		*qoder.MessagesResult
+		Members        []conversation.Member `json:"members"`
+		Reminders      []dbop.Reminder       `json:"reminders"`
+		RemindersError string                `json:"remindersError,omitempty"`
+	}{result, space.Members, reminders, warning})
 }
 
 // postMessage 发送消息（校验逻辑在 upload_handler.go parseMessage）。
@@ -62,11 +101,103 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request, id string) 
 		writeError(w, apiErr)
 		return
 	}
-	result, err := s.Qoder.SendMessage(r.Context(), id, *input)
+	unlock := s.lockConversation(id)
+	defer unlock()
+	if input.Visibility == "private" {
+		shared, _, err := s.conversationContext(r.Context(), id, auth.UserIDFrom(r.Context()))
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		if conversation.PartnerMention(shared, input.Text) != 0 {
+			writeError(w, qoder.NewApiError(400, "partner_message_private", "@对方的消息需要双方可见，请关闭仅自己可见后发送。"))
+			return
+		}
+		channel, err := s.ensurePrivateChannel(r.Context(), id, auth.UserIDFrom(r.Context()))
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		id = channel.SessionID
+		unlockPrivate := s.lockConversation(id)
+		defer unlockPrivate()
+	}
+	space, _, err := s.conversationContext(r.Context(), id, auth.UserIDFrom(r.Context()))
 	if err != nil {
 		writeError(w, err)
 		return
 	}
+	if active, err := s.DB.HasActiveControl(r.Context(), id); err != nil {
+		writeError(w, err)
+		return
+	} else if active {
+		writeError(w, qoder.NewApiError(409, "system_processing", "系统正在保存上一条操作，请稍后发送。"))
+		return
+	}
+	originalText := input.Text
+	if s.useV2() && space.Visibility != "private" {
+		space.RecipientID = conversation.PartnerMention(space, input.Text)
+		if space.RecipientID != 0 {
+			space.ReplyMode = conversation.SilentReply
+		}
+	}
+	var protocolState *dbop.ConversationProtocol
+	if s.useV2() {
+		frame := conversation.NewEnvelopeV2(space, "user_message", conversation.RequestID(space))
+		frame.Text = input.Text
+		input.Text, protocolState, err = s.prepareProtocolInput(r.Context(), frame)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+	} else {
+		input.Text = conversation.EncodeUser(space, input.Text)
+	}
+	previous, err := s.DB.GetConversationJob(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	// Persist before dispatch, including the uncertain outcome of a connection loss.
+	if err := s.DB.MarkConversationPending(r.Context(), id, space.Now); err != nil {
+		writeError(w, err)
+		return
+	}
+	result, err := s.Qoder.SendMessage(r.Context(), id, *input)
+	if err != nil {
+		s.resolveRejectedInput(r.Context(), id, space.Now, previous, err)
+		writeError(w, err)
+		return
+	}
+	logging.System().Info("成员消息已被 AI 接受，后台开始跟踪回复", "event", "conversation.accepted", "session_id", id, "user_id", space.AuthorID)
+	s.acceptProtocolInput(r.Context(), protocolState)
+	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
+	defer cancel()
+	var direct *dbop.Reminder
+	var saveErr error
+	if !s.useV2() {
+		direct, saveErr = s.saveDirectReminder(saveCtx, space, originalText)
+	}
+	if saveErr != nil {
+		logging.Scheduler().Error("明确的提醒请求落库失败", "event", "reminder.save_failed", "session_id", id, "error", saveErr)
+	}
+	for index := range result.Messages {
+		mapMessageViewer(&result.Messages[index], space, space.AuthorID)
+		if result.Messages[index].Sender != "ai" {
+			if direct != nil {
+				result.Messages[index].ReminderIDs = []string{direct.ID}
+			}
+			if saveErr != nil {
+				result.Messages[index].ReminderError = "提醒未保存成功，请重试。"
+			}
+		}
+	}
+	if err := s.applyChannelVisibility(r.Context(), id, result.Messages); err != nil {
+		writeError(w, err)
+		return
+	}
+	result.Messages = acceptedMemberMessages(result.Messages)
+	result.ReplyMode = space.ReplyMode
 	s.recordMessages(r.Context(), id, result.Messages)
 	writeJSON(w, http.StatusOK, result)
 }
@@ -105,12 +236,111 @@ func (s *Server) handleToolResult(w http.ResponseWriter, r *http.Request) {
 		writeError(w, qoder.NewApiError(400, "invalid_answer", "答案不能为空，且不超过 2000 字。"))
 		return
 	}
-	result, err := s.Qoder.SendCustomToolResult(r.Context(), id, toolUseID, text)
+	unlock := s.lockConversation(id)
+	defer unlock()
+	channelID, routeErr := s.answerChannel(r.Context(), id, auth.UserIDFrom(r.Context()), toolUseID)
+	if routeErr != nil {
+		writeError(w, routeErr)
+		return
+	}
+	if channelID != id {
+		id = channelID
+		unlockPrivate := s.lockConversation(id)
+		defer unlockPrivate()
+	}
+	space, _, err := s.conversationContext(r.Context(), id, auth.UserIDFrom(r.Context()))
 	if err != nil {
 		writeError(w, err)
 		return
 	}
+	previous, err := s.DB.GetConversationJob(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	answer := s.encodeMember(space, text)
+	var protocolState *dbop.ConversationProtocol
+	if s.useV2() {
+		frame := conversation.NewEnvelopeV2(space, "user_message", conversation.RequestID(space))
+		frame.Text = text
+		answer, protocolState, err = s.prepareProtocolInput(r.Context(), frame)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+	}
+	if err := s.DB.MarkConversationPending(r.Context(), id, space.Now); err != nil {
+		writeError(w, err)
+		return
+	}
+	result, err := s.Qoder.SendCustomToolResult(r.Context(), id, toolUseID, answer)
+	if err != nil {
+		s.resolveRejectedInput(r.Context(), id, space.Now, previous, err)
+		writeError(w, err)
+		return
+	}
+	s.acceptProtocolInput(r.Context(), protocolState)
+	for index := range result.Messages {
+		mapMessageViewer(&result.Messages[index], space, space.AuthorID)
+	}
+	if err := s.applyChannelVisibility(r.Context(), id, result.Messages); err != nil {
+		writeError(w, err)
+		return
+	}
+	result.Messages = acceptedMemberMessages(result.Messages)
 	writeJSON(w, http.StatusOK, result)
+}
+
+// AI replies are published by history/SSE only after their actions are validated.
+func acceptedMemberMessages(messages []qoder.PublicMessage) []qoder.PublicMessage {
+	out := make([]qoder.PublicMessage, 0, len(messages))
+	for _, message := range messages {
+		if (message.Sender == "self" || message.Sender == "partner") && message.UserID > 0 {
+			out = append(out, message)
+		}
+	}
+	return out
+}
+
+func (s *Server) resolveRejectedInput(ctx context.Context, id string, attemptedAt time.Time, previous *dbop.ConversationJob, err error) {
+	var apiErr *qoder.ApiError
+	if !errors.As(err, &apiErr) {
+		return
+	}
+	if apiErr.Status < 400 || (apiErr.Status >= 500 && apiErr.Code != "not_configured") {
+		return
+	}
+	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := s.DB.RejectConversationInput(saveCtx, id, attemptedAt, previous); err != nil {
+		log.Printf("撤销未接受消息的同步任务失败: %v", err)
+	}
+}
+
+// Preserve the public incremental contract after analyzing complete chronology.
+func filterHistoryAfter(result *qoder.MessagesResult, after string) {
+	if after == "" {
+		return
+	}
+	seen, include := false, map[string]bool{}
+	for _, event := range result.Events {
+		if seen {
+			include[event.ID] = true
+		}
+		if event.ID == after {
+			seen = true
+		}
+	}
+	if !seen {
+		return
+	} // Unknown/expired cursor: resynchronize the complete history.
+	filtered := make([]qoder.PublicMessage, 0)
+	for _, message := range result.Messages {
+		if include[message.ID] {
+			filtered = append(filtered, message)
+		}
+	}
+	result.Messages = filtered
 }
 
 // parseAfterCursor 校验查询串：只允许出现一次 after，且必须是合法事件 ID。
@@ -148,8 +378,13 @@ func (s *Server) recordMessages(ctx context.Context, sessionID string, messages 
 		return
 	}
 	for _, msg := range messages {
+		sender := "user"
+		if msg.Sender == "ai" {
+			sender = "ai"
+		}
 		record := &dbop.Message{
-			ID: msg.ID, SessionID: sessionID, Sender: msg.Sender,
+			ID: msg.ID, SessionID: sessionID, Sender: sender,
+			UserID: msg.UserID, DisplayName: msg.DisplayName, Visibility: msg.Visibility, PrivateOwnerID: msg.PrivateOwnerID, RecipientIDs: msg.RecipientIDs, Source: msg.Source,
 			Text: msg.Text, CloudCreatedAt: msg.CreatedAt,
 		}
 		if err := s.DB.SaveMessage(ctx, record); err != nil {

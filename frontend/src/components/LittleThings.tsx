@@ -9,8 +9,13 @@ type CareKey = 'weatherCare' | 'anniversaryReminders' | 'quietHours'
 
 interface Props {
   state: RelationshipState
+  reminderState?: RelationshipState
   onSaveSettings: (settings: AISettings) => Promise<void>
   onToggle: (id: string) => Promise<void>
+  onCancel?: (id: string) => Promise<void>
+  reminderNotice?: string
+  remindersLoading?: boolean
+  onReloadReminders?: () => Promise<void>
   notify: (text: string) => void
 }
 
@@ -19,11 +24,11 @@ function CareRow({ icon, title, description, checked, disabled, onChange }: { ic
   return <div className="setting-row"><span className="setting-icon">{icon}</span><div className="setting-copy"><strong>{title}</strong><p id={descriptionId}>{description}</p></div><button type="button" className={`toggle ${checked ? 'is-on' : ''}`} role="switch" aria-checked={checked} aria-label={title} aria-describedby={descriptionId} disabled={disabled} onClick={onChange}><span /></button></div>
 }
 
-export function LittleThings({ state, onSaveSettings, onToggle, notify }: Props) {
+export function LittleThings({ state, reminderState = state, onSaveSettings, onToggle, onCancel, reminderNotice, remindersLoading, onReloadReminders, notify }: Props) {
   const [busyKey, setBusyKey] = useState<CareKey | null>(null)
   const [activeTab, setActiveTab] = useState<'care' | 'reminders' | 'anniversary'>('reminders')
   const [activeFilter, setActiveFilter] = useState<'both' | 'self' | 'partner' | null>(null)
-  const pendingReminders = state.reminders.filter((reminder) => !reminder.completed)
+  const pendingReminders = reminderState.reminders.filter((reminder) => !reminder.completed && reminder.status !== 'cancelled')
   const pendingCount = pendingReminders.length
   const reminderStats = [
     { assignee: 'both', audience: '我们', className: 'things-stat-all' },
@@ -93,7 +98,8 @@ export function LittleThings({ state, onSaveSettings, onToggle, notify }: Props)
           })}
         </div>
         <div className="things-section-heading"><h2><span className="reminder-title-lettering">待完成</span></h2></div>
-        <ReminderBoard state={state} pendingAssignee={activeFilter} onToggle={onToggle} notify={notify} />
+        {reminderNotice && <div className="cloud-error" role="alert"><span>{reminderNotice}</span>{onReloadReminders && <button disabled={remindersLoading} onClick={() => void onReloadReminders()}>刷新</button>}</div>}
+        {remindersLoading && !reminderState.reminders.length ? <p className="empty-note" role="status">正在同步共享提醒…</p> : <ReminderBoard state={reminderState} pendingAssignee={activeFilter} onToggle={onToggle} onCancel={onCancel} notify={notify} />}
       </section>
       <section role="tabpanel" id="things-anniversary-panel" aria-labelledby="things-anniversary-tab" className="things-tab-panel" hidden={activeTab !== 'anniversary'}>
         <Anniversary state={state} />

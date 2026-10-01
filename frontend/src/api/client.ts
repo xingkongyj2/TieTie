@@ -13,6 +13,11 @@ export class ApiError extends Error {
   }
 }
 
+// Qoder's server credential failure is independent of the member's login JWT.
+export function isAccountTokenInvalid(status: number, code?: string): boolean {
+  return status === 401 && code !== 'authentication_failed'
+}
+
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { body, timeoutMs = 30_000, signal, ...fetchOptions } = options
   const controller = new AbortController()
@@ -39,8 +44,6 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
       signal: controller.signal,
     })
     if (!response.ok) {
-      // 令牌失效：清掉本地 JWT，界面随账号状态回到登录页。
-      if (response.status === 401 && getToken()) clearToken()
       const payload = await response.json().catch(() => null) as { error?: { message?: unknown; code?: unknown } } | null
       const fallback = response.status === 401 || response.status === 403
         ? '云端认证失败，请检查服务端令牌和访问权限。'
@@ -49,6 +52,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
           : `云端请求失败，请稍后重试（${response.status}）。`
       const message = typeof payload?.error?.message === 'string' ? payload.error.message : fallback
       const code = typeof payload?.error?.code === 'string' ? payload.error.code : undefined
+      if (isAccountTokenInvalid(response.status, code) && getToken()) clearToken()
       throw new ApiError(message, response.status, code)
     }
     if (response.status === 204) return undefined as T

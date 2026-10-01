@@ -8,6 +8,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"tietie/backend/internal/auth"
 	"tietie/backend/internal/config"
@@ -17,10 +18,12 @@ import (
 
 // Server 聚合全部 handler 依赖。
 type Server struct {
-	Cfg   *config.Config
-	Qoder *qoder.Client
-	Auth  *auth.Service
-	DB    *dbop.DB // 可为 nil：未配置数据库时账号类接口返回 503
+	Cfg          *config.Config
+	Qoder        *qoder.Client
+	Auth         *auth.Service
+	DB           *dbop.DB // 可为 nil：未配置数据库时账号类接口返回 503
+	locksMu      sync.Mutex
+	sessionLocks map[string]*conversationLock
 }
 
 // NewRouter 是全后端唯一的路由注册点。
@@ -40,8 +43,13 @@ func NewRouter(s *Server) http.Handler {
 	mux.Handle("/api/account/bind", authed(s.handleBind))
 	mux.Handle("/api/account/unbind", authed(s.handleUnbind))
 	mux.Handle("/api/qoder/sessions/{id}/messages", authed(s.handleMessages))
+	mux.Handle("GET /api/qoder/sessions/{id}/memories", authed(s.handleMemoryIndex))
+	mux.Handle("/api/qoder/sessions/{id}/partner-impression", authed(s.handlePartnerImpression))
 	mux.Handle("/api/qoder/sessions/{id}/tool-result", authed(s.handleToolResult))
 	mux.Handle("/api/qoder/sessions/{id}/stream", authed(s.handleStream))
+	mux.Handle("/api/qoder/sessions/{id}/private-stream", authed(s.handleStream))
+	mux.Handle("/api/qoder/sessions/{id}/reminders", authed(s.handleReminders))
+	mux.Handle("/api/qoder/sessions/{id}/reminders/{reminderId}", authed(s.handleReminderUpdate))
 
 	// ---- 未知 API 路径统一 JSON 404 ----
 	notFound := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { writeRouteNotFound(w) })

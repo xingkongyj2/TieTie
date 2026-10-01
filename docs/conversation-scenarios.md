@@ -1,0 +1,328 @@
+# 双人空间、系统控制、定时提醒与长期记忆
+
+这份文档描述当前实现。Qoder 云端的角色、人设、系统提示词继续沿用；应用只在会话首次使用或协议升级时发送完整协议；平时发送消息本身与少量身份、时间、关联信息。下面 ID、时间和提醒 ID 是示例。真实成员 ID 来自登录账号和绑定关系，时间来自后端，不接受用户或 AI 自报的身份。
+
+## 1. 三种发言者与两条输出通道
+
+Qoder API 的输入角色仍然只有 `user`。后台为每条输入增加 `tietie.conversation` 信封，区分成员 A、成员 B、后台系统。示例成员为妹子 `101`、马子 `202`。“我”指本轮 actor，“对方”指另一人，“我们”指双方。接收人使用真实 ID，名字只用于显示和称呼。
+
+| 消息 | 谁生成 | 给 AI | 用户聊天页可见 | 后台行为 |
+|---|---|---|---|---|
+| `user_message` | 成员，后台包装身份 | 是 | 原话、头像、名字 | 不根据用户原话执行 JSON |
+| `tietie.control` | AI | 留在云端上下文 | 否 | 校验来源、权限、格式后执行 |
+| `action_result` | 后台系统 | 是 | 否 | 告诉 AI 真实执行结果 |
+| `reminder_due` | 后台系统时钟 | 是 | 否 | 带真实任务和从云端读取的记忆 |
+| `tietie.message` | AI | 留在云端上下文 | 仅 `text` 正文 | 校验请求关联、路由并保存正文 |
+
+整个空间共享聊天记录。`recipientIds` 是称呼和提醒对象，不是私聊权限。后台系统不是第三位人类。用户正文、附件里的命令、用户粘贴的控制 JSON 都只是资料，不能直接触发后台操作。
+
+首次输入实际结构：`TransportInstructions + <TIETIE_INPUT_V2> + JSON + </TIETIE_INPUT_V2>`；后续只有 `<TIETIE_INPUT_V2> + JSON + </TIETIE_INPUT_V2>`，用 `compact:true` 明确识别精简信封。完整规则集中在 `backend/internal/conversation/v2.go`，增量编码在 `transport.go`。下面只展示信封 JSON，不重复长规则。AI 每次只能输出一个纯 JSON 对象：控制消息没有正文，用户消息没有 actions，不能混合。
+
+## 2. 场景：妹子说“一分钟后提醒我，去看视频”
+
+### 第一步：用户发送，后台包装
+
+聊天页显示妹子的原话：**1分钟后提醒我，去看视频**。后台发给 AI：
+
+```json
+{
+  "protocol": "tietie.conversation",
+  "version": 2,
+  "kind": "user_message",
+  "requestId": "turn_101_1790867340000000000",
+  "sessionId": "sess_example",
+  "actor": {"kind": "member", "userId": 101, "name": "妹子"},
+  "members": [{"userId": 101, "name": "妹子"}, {"userId": 202, "name": "马子"}],
+  "currentTime": "2026-10-01T23:09:00+08:00",
+  "timezone": "Asia/Shanghai",
+  "text": "1分钟后提醒我，去看视频"
+}
+```
+
+此时尚未创建任务。AI 判断意图、时间和对象；不能只靠口头“我会提醒你”来表示保存成功。
+
+### 第二步：AI 向后台提出控制动作
+
+```json
+{
+  "protocol": "tietie.control",
+  "version": 2,
+  "requestId": "turn_101_1790867340000000000",
+  "actions": [{
+    "type": "create_reminder", "key": "video", "title": "去看视频",
+    "dueAt": "2026-10-01T23:10:00+08:00",
+    "recipientIds": [101], "storage": "database_and_memory"
+  }]
+}
+```
+
+控制 JSON 对用户隐藏。后台检查 requestId 属于真实成员这轮消息，成员仍在同一绑定周期，时间晚于原始发言时间，接收人属于空间，动作格式合法。
+
+### 第三步：后台保存数据库和云端记忆
+
+后台在事务中写入一次性提醒、动作幂等回执、本地提醒事实，以及云端记忆待同步记录。提醒 `status=scheduled`、`taskStatus=pending`、`runAt=dueAt`。相同请求重放不会再创建一条任务。
+
+后台将事实写入当前空间的 Qoder Memory Store，路径为 `tasks/todo-board/2026-10/000001.json`，例如：
+
+```json
+{
+  "schemaVersion": 2, "type": "todo_board", "title": "待办提醒板",
+  "pagination": {"month": "2026-10", "page": 1, "pageSize": 16},
+  "reminders": [{
+    "id": "rem_example", "reminderId": "rem_example", "title": "去看视频",
+    "dueAt": "2026-10-01T23:10:00+08:00", "recipientIds": [101],
+    "createdBy": 101, "status": "pending", "deliveryStatus": "scheduled", "taskStatus": "pending"
+  }]
+}
+```
+
+数据库事务和外部云端写入不能是一个原子事务。实现使用持久化 outbox：本地成功但云端失败时保留内容和重试记录，不能伪装成两边都成功。
+
+### 第四步：后台给 AI 隐藏回执
+
+```json
+{
+  "protocol": "tietie.conversation", "version": 2, "kind": "action_result",
+  "requestId": "turn_101_1790867340000000000", "sessionId": "sess_example",
+  "actor": {"kind": "system", "name": "贴贴后台"},
+  "members": [{"userId": 101, "name": "妹子"}, {"userId": 202, "name": "马子"}],
+  "currentTime": "2026-10-01T23:09:03+08:00", "timezone": "Asia/Shanghai",
+  "results": [{
+    "key": "video", "type": "create_reminder", "status": "succeeded",
+    "reminderId": "rem_example", "memoryKey": "memory_example",
+    "databaseStatus": "saved", "memoryStatus": "synced"
+  }]
+}
+```
+
+AI 收到回执后只能向用户回复，不能再次递归创建任务。
+
+### 第五步：AI 确认，用户只看正文
+
+```json
+{
+  "protocol": "tietie.message", "version": 2,
+  "requestId": "turn_101_1790867340000000000",
+  "text": "@妹子 好嘞，1分钟后提醒你去看视频，已经记下啦～",
+  "recipientIds": [101], "source": "chat"
+}
+```
+
+聊天页只展示 **@妹子 好嘞，1分钟后提醒你去看视频，已经记下啦～**。消息下面不加任务卡片、不加“已保存”小字，正文上面没有另一个接收人栏。任务出现在“提醒”页。AI 风格由云端角色决定，示例正文不是固定模板。
+
+### 第六步：一分钟到，后台唤醒 AI
+
+调度器按 `status + runAt + id` 索引领取到期任务，不扫描用户。领取后任务为 `dispatching/running`。空间正在聊天、等待工具回答或处理控制回执时，保留原 dueAt，后移 runAt 重试。
+
+后台读取这个任务的云端记忆正文，向 AI 发出隐藏系统消息：
+
+```json
+{
+  "protocol": "tietie.conversation", "version": 2, "kind": "reminder_due",
+  "requestId": "due_rem_example", "sessionId": "sess_example",
+  "actor": {"kind": "system", "name": "贴贴后台"},
+  "members": [{"userId": 101, "name": "妹子"}, {"userId": 202, "name": "马子"}],
+  "currentTime": "2026-10-01T23:10:00+08:00", "timezone": "Asia/Shanghai",
+  "reminder": {"id": "rem_example", "title": "去看视频", "dueAt": "2026-10-01T23:10:00+08:00", "recipientIds": [101]},
+  "memoryReads": [{"memoryKey": "memory_example", "path": "tasks/todo-board/2026-10/000001.json", "content": "这里是通过 Qoder API 读取的实际 JSON 正文"}]
+}
+```
+
+AI 的用户输出，例如：
+
+```json
+{
+  "protocol": "tietie.message", "version": 2, "requestId": "due_rem_example",
+  "text": "@妹子 一分钟到啦，去看视频吧～",
+  "recipientIds": [101], "source": "reminder"
+}
+```
+
+接收人以数据库真实任务为准；AI 填错对象时后台修正。正文缺少目标成员 @ 时后台补齐，已写出就不重复添加。聊天页在正文开头同一行显示带醒目主题蓝背景的“到点提醒”类型标签；正文中的 **@妹子** 使用轻淡背景整体标记，不附加任务卡片。类型由后台 source=reminder 决定，普通确认消息不显示该标签。
+
+### 第七步：实际 AI 回复保存后标记完成
+
+仅云端接受唤醒不算完成。AI 实际提醒正文保存成功后，数据库写入 `status=delivered`、`taskStatus=completed`、`deliveredAt` 和 `taskCompletedAt`，同事务更新本地提醒记忆和云端待同步记录。后台把云端记忆更新为已提醒。
+
+这表示定时提醒已经执行，不代表妹子已经看完视频。用户在“提醒”页勾选事项后，才记录事项 `status=completed` 和 `completedBy`。两种完成状态分开保存。
+
+## 3. 场景：提醒对方，或同时提醒两人
+
+| 环节 | 提醒对方 | 提醒双方 |
+|---|---|---|
+| 妹子原话 | “明天9点提醒对方喝水” | “明天9点提醒我们一起出门” |
+| 后台输入 | actor=101；当前上海时间 | actor=101；两位成员 |
+| AI 控制 | create_reminder，recipientIds=[202] | create_reminder，recipientIds=[101,202] |
+| 后台 | 保存任务和记忆，发送真实回执 | 保存一条双接收人任务和记忆，发送真实回执 |
+| AI 确认 | “好，我记下明天9点提醒马子喝水。” | “记下啦，明天9点提醒你们一起出门。” |
+| 到期系统 | reminder_due 携带 [202] 和云端记忆 | reminder_due 携带 [101,202] 和云端记忆 |
+| AI 正文 | “@马子 该喝点水啦～” | “@妹子 @马子 到出门时间啦～” |
+| 后台结束 | 实际回复保存后更新任务与记忆 | 同一条任务完成，不拆成两个重复唤醒 |
+
+马子说“提醒我”则 actor=202、接收人=[202]，不会沿用上一轮妹子的“我”。双方仍能看到空间里的完整聊天。
+
+## 4. 场景：普通聊天、时间不明确、重复规则
+
+普通聊天：“今天好累”。后台发 user_message → AI 输出 tietie.message：“辛苦啦，先歇一会儿吧。” → 保存聊天正文。没有 actions，不保存业务记忆，不创建定时器。
+
+不明确：“晚点提醒我喝水”。AI 输出用户消息：“你想几点提醒？”；这轮无任务。用户回答“10分钟后”时，后台发新的成员信封和时间，AI 根据历史明确指代后才输出 create_reminder，随后走保存→隐藏回执→确认。不能根据 AI 的追问本身建任务。
+
+“每天9点提醒我”：当前只支持一次性提醒，AI 说明并询问是否先设置某天9点，不能悄悄创建只有第一次有效的“每天”任务。重复规则调度还未实现。
+
+## 5. 场景：只记忆，不设定时任务
+
+妹子：“记住我喜欢无糖茶，不用提醒。”
+
+1. 后台：user_message，actor=101。
+2. AI → 系统：纯控制 JSON，action 为 `{"type":"save_memory","key":"tea_preference","content":"喜欢无糖茶","scope":"self","storage":"memory_only"}`。
+3. 后台：持久化幂等回执、事实、更正历史、页面索引及临时同步内容；归入 `profile/users/YYYY-MM/NNNNNN.json` 的 userId=101 的 entries，使用人物档案模板。不建 reminders 记录。
+4. 云端写入成功：清空本地 pendingContent；数据库保留事实及更正历史，云端保存对应模板分页；旧 memory_only 请求兼容为 database_and_memory。
+5. 后台 → AI：action_result，status=succeeded、databaseStatus=not_requested、memoryStatus=synced。
+6. AI → 用户：“记住啦，下次给你推荐无糖茶。”正文正常展示。
+
+`memory_only` 仅为旧控制请求的兼容值；正常的共享聊天历史仍然会保存原始用户消息。网络失败时临时 outbox 内容保留到成功，避免重启丢失待写的事实。回忆正文传给 AI 后，完成的本地控制任务会移除这部分回忆正文。
+
+## 6. 场景：数据库和记忆都保存、回忆、更正、忘记
+
+共同事实：“记住我们家的门牌号是A座1201，系统也保存一份。”
+
+- AI 控制：save_memory，scope=space、storage=database_and_memory、key=home_address。
+- 后台：本地业务正文和云端 `shared/facts/home_address.json` 同时维护；成功回执后 AI 确认。没有到期时间，仍不建定时器。
+
+回忆：“我们家门牌号是什么？”
+
+- 后台输入附带 memoryIndex：memoryKey、路径、归属、状态，不假装索引就是正文。
+- AI 控制：`{"type":"read_memory","key":"recall_home","memoryKeys":["真实索引中的memoryKey"]}`。
+- 后台：校验属于当前空间，调用 Qoder 获取真实正文；在 action_result 的 memories 中回传内容，memoryStatus=read。
+- AI 用户消息：“A座1201呀。”不把 read_memory 控制过程显示给用户。
+
+更正：“改成A座1202。”AI 结合上下文复用稳定 key=home_address，save_memory 更新同一路径；云端更新携带当前 content_sha256，避免竞态覆盖；后台收到新版本才回执成功，AI 再确认更正。
+
+忘记：“忘记我的无糖茶偏好。”AI 用索引中的真实 memoryKey 发 delete_memory；后台只允许删除发言者自己的或共享事实，不允许删除另一成员的个人事实。成功后索引不可再读取、本地业务正文移除、云端当前条目删除。云端历史版本/服务端保留机制不等于物理擦除，AI 不能宣称不可恢复清除。提醒记忆不能用 delete_memory 绕过取消任务。
+
+## 7. 场景：取消提醒、手动管理提醒
+
+“取消刚才看视频的提醒”：后台输入附带真实提醒 ID → AI 发 cancel_reminder → 后台取消任务，事务更新本地事实和待同步记忆 → 云端同步 → 隐藏回执 → AI：“好，已经取消啦。”指代不清先澄清。不能用模型捏造的 ID 取消另一空间任务。
+
+前端“添加提醒”表单直接调用鉴权 reminders API，由用户明确选择标题、时间和接收人。后台保存数据库与云端待同步事实，任务只在提醒页显示；这个路径不需要 AI 再判断意图。到期后仍由系统读取记忆并唤醒 AI。提醒页的取消、完成操作同样更新记忆；解绑取消待执行任务，取消事实仍允许同步到原仓库。
+
+## 8. 场景：失败、重启、重复消息
+
+| 情况 | 后台记录与处理 | 给 AI/用户的结果 |
+|---|---|---|
+| 数据库写失败 | 事务回滚，不创建成功任务 | action_result failed；AI 如实说明没保存 |
+| 数据库成功、云端记忆失败 | 任务有效；outbox pending 保留，按执行时间重试 | partial，databaseStatus=saved、memoryStatus=pending；AI 说明提醒已保存、记忆待同步 |
+| 仅记忆请求写云端失败 | 不创建定时任务；保留待同步内容 | partial，databaseStatus=not_requested；不能称已长期记住 |
+| 到期读取记忆失败 | 记录 warning；依据数据库真实任务继续提醒 | 可提醒，不能宣称云端记忆已读成功 |
+| AI 控制 JSON 错误/混入正文/请求 ID 不符 | 隐藏 JSON，不执行动作，发送失败回执 | AI 回复格式错误、操作未完成 |
+| AI 只有口头承诺 | 无有效动作不建任务 | 后台产生“没有保存”的错误提示，避免假成功 |
+| 空间繁忙 | 保留 dueAt，推迟 runAt 再查 | 不打断正在回答的问题 |
+| 发送系统消息超时，接受情况未知 | uncertain，查历史核实，不盲目重发 | 后续真实回复可确认完成；日志可追踪 |
+| 后端重启 | 数据库恢复待同步/执行队列；发送中断转待核实 | 已保存任务不会靠内存计时丢失 |
+| GET历史/重连/重复 AI 控制 | 请求+动作回执幂等；同一路径记忆协调 | 不重复建任务，不重复发提醒 |
+| 解绑后重新绑定 | 绑定创建时间隔离旧动作 | 旧人的未完成控制不能写入新空间 |
+
+后端必须常驻。AI 的“主动说话”来自后台系统到期发消息；浏览器关闭不停止调度。当前提醒是空间内消息，尚无离线手机通知或微信推送；delivered 只表示 AI 已回复，不能表示用户已阅读。
+
+## 9. 前端展示和 @编辑
+
+聊天页只展示用户原话和 AI 自然语言正文。任务卡片集中在提醒页；没有消息下的“已保存/已提醒”状态小字，没有独立接收人栏；仅到期提醒在正文开头同一行显示主题蓝背景“到点提醒”类型标签，普通聊天和保存确认不显示。必要的失败提示仍显示，避免用户误以为操作成功。
+
+历史和 SSE 都使用相同展示规则：成员发言必须有当前会话的可信 userId，且属于当前两位成员；AI 只展示解析后的正式回复与用户选择题。身份未知的旧事件、其他会话/其他成员事件、系统信封、控制 JSON 和回执均不展示，不再给它们生成“历史成员”头像。前端另按成员、消息类型与来源过滤；完整刷新替换历史，清掉旧解析留下的非聊天消息。原有数据不删除。
+
+输入框为两层：上层仅文字，换行或自动折行时增高，长内容超过188px后滚动；下层固定附件、语音、“仅自己可见”开关及发送按钮。桌面保留 Enter 发送、Shift+Enter 换行；触屏键盘 Enter 换行，点发送按钮发送。输入 `@` 直接补全当前绑定的另一成员，不出现成员选择，也不提供自己或 AI 的候选。
+
+协议解析基于稳定的版本标记和身份字段，兼容历史提示词和记忆模板措辞变化，不再比较整段提示词。仅解析第一个服务端信封；用户原话中的 JSON 和协议示例不作为控制信息解析。无法识别的版本不猜身份；AI 误回传系统信封或未知 tietie 控制协议时保持隐藏。相关回归见 `conversation/v2_test.go` 和 `api/chat_visibility_test.go`，同时验证历史与实时推送。
+
+已知成员的 `@名字` 在用户/AI 正文里显示为带轻淡背景的整体标记，文字字号、颜色和正文一致。输入 `@` 一次插入对方的完整名字并把光标移到后面；退格、Delete、局部选中删除、粘贴覆盖和移动端编辑按整体 token 处理。中文输入法组合输入结束后再处理，避免打断输入。代码块、链接不强行转成 @标记。标记使用当前成员的真实名字；邮箱地址和名字前缀不误判为完整提及。
+
+成员默认在和 AI 对话。消息包含完整的 `@对方名字` 时，后台根据登录用户及当前绑定确认对方身份，给本轮 `user_message` 指定 `replyMode=silent` 和 `recipientId`。这种消息双方可见；输入框显示接收对象与可见范围，禁用“仅自己可见”，后台拒绝矛盾的 private+@对方请求，避免私密消息被误发。
+
+AI 旁听这轮，仅通过 save_memory/read_memory 处理有依据的长期事实；不能把发给对方的要求变成创建或取消提醒的授权。无需记忆或处理完回执后输出 `tietie.silent`。后台同时过滤该轮所有 AI 正文与提问，包括不遵守协议的普通确认，历史、实时同步和数据库聊天记录均只保留成员消息。控制回执继承静默路由，记忆仍按原归属、幂等及持久化同步规则保存。下一轮无 @对方时恢复普通 AI 对话，静默不会粘到后续聊天或系统到期提醒。前端不显示该轮“正在思考/回复”提示。
+
+## 10. 模块、存储与效率
+
+| 文件/表 | 责任 |
+|---|---|
+| conversation/v2.go | 身份信封、动作规范、纯 JSON 严格解析 |
+| api/conversation_handler.go | 关联原始轮次、过滤隐藏消息、保存可见正文 |
+| api/control_worker.go / control_jobs | 后台动作执行、真实回执、失败/发送状态恢复 |
+| dbop/reminder.go / reminders | 时间队列、接收人、任务状态、事项完成状态 |
+| dbop/reminder_memory.go / reminder_memories | 事务内本地提醒事实 |
+| dbop/memory_sync.go / memory_records | 云端索引、双存正文、临时 outbox、版本防旧任务覆盖 |
+| memory_operation_receipts | 记忆动作幂等回执，重试不重新写旧正文 |
+| api/memory_worker.go / qoder/memory.go | 云端仓库关联、真实 CRUD、同步与读取 |
+| space_memory_stores | 当前空间对应的 Memory Store 与挂载方式 |
+| api/conversation_worker.go / scheduler | 定时、回复、控制、记忆四个队列共享并发预算 |
+| frontend/lib/mentions.ts | @整体插入、选择范围扩展、删除及编辑 |
+| logs/system.log / logs/scheduler.log | 系统请求日志 / 定时、控制与记忆生命周期日志 |
+
+提醒队列按 status/runAt/id，控制队列按 status/runAt/id，记忆队列按 state/runAt/id，回复队列按 pending/nextSyncAt 领取有限批次；默认每秒检查、每批64条、共享最多4个并发云端后台请求。没有全用户遍历或每用户一个计时线程。心跳每30秒查询下一提醒的索引队列头。可按空间 ID、reminder_id、request_id、memory_key 串起日志；不打印正文、密码或 token。
+
+现有 SQLite 适合单实例。更多用户先监控任务延迟、云端速率限制和数据库写入；多实例扩展需要数据库租约和跨实例空间锁，不能直接复制当前进程并各自恢复任务。
+
+新建空间先创建独立 Memory Store 并写入七个固定 JSON 模板，再创建 Session 并只读挂载；解绑后再次绑定创建新空间，不按配对标题找回旧空间。已存在的 Session 不改云端角色/系统配置，后台通过 API 读取并用 memoryReads/回执补充正文，兼容未挂载的历史会话。写入由后台集中处理。仓库查询按空间标识匹配，不把其他空间的记忆合并。
+
+Qoder 文档入口：[Memory Stores 列表](https://docs.qoder.cn/cloud-agents/memory-stores-list)、[创建 Session](https://docs.qoder.cn/cloud-agents/sessions-create)。实际创建资源使用 type=memory_store、memory_store_id、access=read_only；记忆更新使用 POST 条目路径及 content_sha256 条件。本次隔离云端验证覆盖仓库/条目写入、更新、读取、删除，以及原云端 Agent 对控制→回执→用户消息→到期消息协议的响应；测试资源结束后清理，不修改正式空间。
+
+验证记录：2026-10-02，隔离空间真实一分钟测试通过。没有浏览器 GET/SSE 参与保存和调度，后台在第60秒领取并唤醒 AI，约第66秒保存实际提醒回复并同步云端完成状态。临时数据库、会话和仓库均隔离，云端测试资源已清理。可用 `QODER_LIVE_TEST=1 go test -tags live ./internal/api -run TestLiveOneMinuteReminderWithoutBrowser -v -count=1 -timeout=4m` 在 backend 目录明确启用验证；默认测试不访问真实云端。
+
+固定 JSON 模板、同模板分页的结构化习惯、过期处理、待办投影和元数据分页见 [记忆系统设计](memory-system.md)。
+
+## 11. 场景：私下安排对方的提醒
+
+输入框底部仅保留一个“仅自己可见”开关，默认关闭（双方可见）；点击开启，再次点击关闭。发送成功后恢复默认；失败保留原话、附件和可见性选择。私密原话和 AI 回复在发送者页面的名字旁标注“仅自己可见”。后续自由输入也应选择相应范围；回答私密 AI 选择题则自动回到原私密会话。
+
+例：马子选择“仅自己可见”，说：“不要让她知道是我安排的，一分钟后提醒妹子喝水。”
+
+| 环节 | 发送/保存内容 | 马子看到 | 妹子看到 |
+|---|---|---|---|
+| 用户发送 | POST messages 带 visibility=private，身份仍由 JWT 决定 | 私密原话 | 无消息 |
+| 后台转交 AI | 给同一云端 Agent 的独立私密 Session 发 user_message；成员列表仍有两个人，visibility=private | 等待回复 | 没有私密会话的输入或思考状态 |
+| AI 判断动作 | tietie.control：create_reminder，title=喝水，recipientIds=[妹子ID]，storage=database_and_memory | 不显示控制 JSON | 无消息 |
+| 后台保存 | 任务存私密会话；delivery_session_id 指向共享空间；记忆存发送者独立 Memory Store | 提醒页可查看自己的计划 | 消息、提醒页和共享记忆均不可见 |
+| 系统回执 | 给私密 Session 发 action_result：数据库已保存、记忆已同步 | 不显示系统回执 | 无消息 |
+| AI 确认 | 私密 tietie.message：“好，到时候提醒她，安排的话只有你能看到。” | AI 确认 | 无消息 |
+| 系统到期 | 时间索引领取任务，只把提醒事项、对象、时间及对应提醒事实发送到共享 Session；不带原话、私密确认或其他私密记忆 | 等待到期提醒 | 等待到期提醒 |
+| AI 实际提醒 | 共享 tietie.message，source=reminder：“@妹子 该喝水啦～” | 正文同行蓝色“到点提醒”标签和消息 | 同样收到提醒 |
+| 后台完成 | 实际回复落库后 taskStatus=completed；提醒事项进入共享提醒页；原私密仓库更新完成状态 | 提醒已执行 | 只看到已公开的提醒事项 |
+
+如果私密消息只要求提醒自己，delivery_session_id 不指向共享空间：到期唤醒、AI 提醒、任务及记忆始终仅发送者可见。如果选择提醒双方，到期提醒在共享空间 @双方。普通私密聊天不建任务；私密长期事实写入独立仓库，不进入共享 AI 上下文。
+
+可见性不会仅靠前端隐藏。每位成员、每次绑定分别持久化独立 private_channels 关联与云端 Session/Memory Store，防止对方通过共享 AI 的历史或挂载记忆复述私密内容。公开空间消息 API 只聚合当前登录者自己的私密分支；私密实时流由后台按登录者选择，私密会话 ID 不能直接作为公开接口的空间 ID 使用。猜测私密任务 ID、选择题 ID 无法越权；解绑和重绑后旧分支失效。控制、同步和定时队列继续按执行时间索引查询，重启恢复，不遍历用户。
+
+这里的可见性限定空间另一成员，服务端和云端 Agent 仍会处理并保存对应内容。到期指定给对方的提醒正文会公开，原话和其他私密记忆继续保密；不追溯更改已发送的共享消息。
+
+验证记录：2026-10-02，真实云端私密一分钟提醒通过：沿用已配置 Agent、独立私密 Session/Memory Store；约第12秒保存并同步任务，第61秒在共享空间唤醒，第66秒保存实际提醒并完成任务、更新私密云端记忆。接收者读取消息历史未包含“惊喜暗号”原话，收到 @自己的提醒；后台执行不依赖浏览器轮询，临时云端资源已清理。复测命令：`QODER_LIVE_TEST=1 go test -tags live ./internal/api -run TestLivePrivateOneMinuteReminderForPartner -v -count=1 -timeout=4m`。常规测试另覆盖私密 SSE、任务 ID 越权、仅提醒自己、私密事实、持久化路由恢复和解绑失效。
+
+
+## 12. 场景：同一空间继续聊天，减少重复输入
+
+固定协议在第一次实际消息上一起初始化，不额外向 AI 发送一轮初始化对话。服务器把规则副本写入当前会话的独立记忆仓库 `rules/assistant-behavior.json` 的 instructions 字段，用于恢复规则；角色、人设和 Qoder 云端系统提示词不替换。云端记忆失败时，首轮仍包含完整协议，固定规则保留同步队列，不阻断聊天。
+
+1. 妹子首次发送“你好”。后台给 AI 完整协议，以及两位成员的 ID、名字、真实时间和本轮原话。AI 按既有人设回复，前端只展示正文。
+2. 云端接受后，数据库 `conversation_protocols` 记录该 Session、绑定版本、协议摘要和已发送的上下文快照。失败发送不推进此状态；重启从数据库恢复，共享与仅自己可见分支各自独立。
+3. 马子接着说“1分钟后提醒我喝水”，后台只发送下面的增量信封。“我”根据本轮 actor 判定，不沿用妹子的身份。未变更的成员、提醒和记忆索引不发送。
+
+```json
+{
+  "compact": true,
+  "protocol": "tietie.conversation",
+  "version": 2,
+  "kind": "user_message",
+  "requestId": "turn_202_1790867400000000000",
+  "sessionId": "sess_example",
+  "actor": {"kind": "member", "userId": 202, "name": "马子"},
+  "currentTime": "2026-10-01T23:10:00+08:00",
+  "text": "1分钟后提醒我喝水"
+}
+```
+
+4. AI 返回隐藏的 `tietie.control`。后台验证、保存任务、同步记忆；随后给 AI 的 `action_result` 只带这次执行结果和发生变化的条目，不再重复整段协议。
+5. AI 确认已经保存，用户看到自然正文。到期时，系统发 `reminder_due`，只带这次任务、真实时间和读取的提醒记忆；AI 用原协议输出正式提醒。
+6. 成员改名时 `members` 发完整替换列表；提醒和记忆索引只发新增或变更条目，以 `id` / `memoryKey` 合并。`removedReminderIds` / `removedMemoryKeys` 移除缓存索引，不等同于删除云端事实；省略表示沿用。固定模板已有已知路径，不列入逐轮索引。
+7. 协议代码升级、状态损坏或绑定版本变化时，下一轮重新提供完整协议及当前上下文。旧版长信封仍能读，短信封的用户原话也保持字面值；系统和控制信息继续不可见。
+
+`logs/system.log` 的 `protocol.outbound` 记录 `kind`、`bootstrap`、`payload_chars`、`payload_bytes`，便于判断某轮是否初始化、发送了多少内容；不打印聊天正文、规则正文或凭证。这些是请求体字符/字节数，不是 Qoder 账单 token 数。精简减少重复上传，云端仍可能将会话历史及读取的记忆计入模型上下文，不能把上传减少比例直接当作账单减少比例。
+
+界面使用两行输入布局，下方顺序为附件、仅自己可见、语音、发送。仅自己可见的说明使用浅蓝白色悬浮气泡，鼠标悬停或键盘聚焦时展示，不占用固定一行。

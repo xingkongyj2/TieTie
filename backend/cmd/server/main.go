@@ -6,9 +6,11 @@ import (
 	"context"
 	"errors"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -17,12 +19,25 @@ import (
 	"tietie/backend/internal/auth"
 	"tietie/backend/internal/config"
 	"tietie/backend/internal/dbop"
+	"tietie/backend/internal/logging"
 	"tietie/backend/internal/qoder"
+	"tietie/backend/internal/scheduler"
 )
 
 func main() {
 	loadDotEnv(".env.local", ".env")
 	cfg := config.Load()
+	var level slog.Level
+	if err := level.UnmarshalText([]byte(cfg.LogLevel)); err != nil {
+		level = slog.LevelInfo
+	}
+	logs, err := logging.Open(logging.Options{Dir: cfg.LogDir, Level: level})
+	if err != nil {
+		log.Fatalf("日志模块启动失败: %v", err)
+	}
+	defer logs.Close()
+	logDir, _ := filepath.Abs(cfg.LogDir)
+	logging.System().Info("后端启动，日志模块已就绪", "event", "server.starting", "pid", os.Getpid(), "system_log", filepath.Join(logDir, "system.log"), "scheduler_log", filepath.Join(logDir, "scheduler.log"), "log_level", level.String())
 
 	// SQLite 数据库：默认 tietie.db（backend/ 运行目录下），启动时自动建表。
 	db, err := dbop.Open(cfg.DBDSN)
@@ -30,7 +45,11 @@ func main() {
 		log.Fatalf("数据库打开失败: %v", err)
 	}
 	defer db.Close()
-	log.Printf("数据库就绪: %s", cfg.DBDSN)
+	dbPath, _ := filepath.Abs(cfg.DBDSN)
+	logging.System().Info("数据库迁移完成，提醒队列和记忆表已就绪", "event", "database.ready", "database", dbPath)
+	options := scheduler.Options{PollInterval: cfg.SchedulerPollInterval, BatchSize: cfg.SchedulerBatchSize, Concurrency: cfg.SchedulerConcurrency}.Normalized()
+	logging.System().Info("Qoder 云端助手连接配置已加载，沿用云端角色和系统提示词", "event", "qoder.configured", "configured", cfg.Token != "", "timeout", cfg.Timeout, "conversation_protocol", cfg.ConversationProtocolVersion, "cloud_memory_enabled", cfg.CloudMemoryEnabled)
+	logging.System().Info("后台服务配置就绪", "event", "scheduler.configured", "poll_interval", options.PollInterval, "batch_size", options.BatchSize, "concurrency", options.Concurrency)
 
 	srv := &api.Server{
 		Cfg:   &cfg,
@@ -52,6 +71,8 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	workerDone := make(chan struct{})
+	go func() { defer close(workerDone); srv.RunConversationWorker(ctx) }()
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -59,11 +80,13 @@ func main() {
 		_ = httpSrv.Shutdown(shutdownCtx)
 	}()
 
-	log.Printf("TieTie backend: http://%s", httpSrv.Addr)
+	logging.System().Info("HTTP 服务启动", "event", "server.listening", "address", "http://"+httpSrv.Addr)
 	if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("服务启动失败: %v", err)
 	}
-	log.Println("服务已停止")
+	stop()
+	<-workerDone
+	logging.System().Info("后台任务已退出，服务已停止", "event", "server.stopped")
 }
 
 // loadDotEnv 按顺序加载 .env 文件，已存在的环境变量优先（部署方可自行注入）。

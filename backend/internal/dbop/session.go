@@ -9,12 +9,18 @@ import (
 
 // Session 是云端会话的本地快照（sessions 表），用于离线查看与审计。
 type Session struct {
-	ID             string    `json:"id"             gorm:"column:id;primaryKey;size:160"`
-	Title          string    `json:"title"          gorm:"column:title;size:255;not null;default:''"`
-	Status         string    `json:"status"         gorm:"column:status;size:32;not null;default:''"`
-	CloudCreatedAt string    `json:"cloudCreatedAt" gorm:"column:cloud_created_at;size:64;not null;default:''"`
-	CloudUpdatedAt string    `json:"cloudUpdatedAt" gorm:"column:cloud_updated_at;size:64;not null;default:''"`
-	SyncedAt       time.Time `json:"syncedAt"       gorm:"column:synced_at;autoCreateTime;autoUpdateTime"`
+	ID                  string    `json:"id"             gorm:"column:id;primaryKey;size:160"`
+	Title               string    `json:"title"          gorm:"column:title;size:255;not null;default:''"`
+	Status              string    `json:"status"         gorm:"column:status;size:32;not null;default:''"`
+	CloudCreatedAt      string    `json:"cloudCreatedAt" gorm:"column:cloud_created_at;size:64;not null;default:''"`
+	CloudUpdatedAt      string    `json:"cloudUpdatedAt" gorm:"column:cloud_updated_at;size:64;not null;default:''"`
+	SyncedAt            time.Time `json:"syncedAt"       gorm:"column:synced_at;autoCreateTime;autoUpdateTime"`
+	ConversationPending bool      `json:"-" gorm:"column:conversation_pending;index:idx_sessions_sync,priority:1"`
+	NextSyncAt          time.Time `json:"-" gorm:"index:idx_sessions_sync,priority:2"`
+	PendingSince        time.Time `json:"-"`
+	ConversationVersion int64     `json:"-"`
+	SyncCursor          string    `json:"-"`
+	SyncOrigin          string    `json:"-"`
 }
 
 // TableName 指定表名。

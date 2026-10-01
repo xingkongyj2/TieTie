@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 2,
+  "type": "habits_and_plans",
+  "title": "习惯与长期行动",
+  "fieldDescriptions": {
+    "ownerId": "主体 userId 或共享空间",
+    "content": "习惯或计划",
+    "schedule": "周期 / 条件",
+    "preferredTime": "偏好时间",
+    "sourceUserId": "来源成员",
+    "confirmation": "确认状态",
+    "updatedAt": "最近更正时间"
+  },
+  "entries": [],
+  "maintenance": [
+    "稳定作息、饮食、生活习惯用 category=habit 保存，同一主题复用 memoryKey。",
+    "本人明确陈述是个人事实；意向不能写成已执行事实。共同计划需双方确认，冲突暂停执行。",
+    "事实及更正历史由数据库索引，按本模板同步云端；每页最多8条并受字节上限限制。",
+    "记忆本身不执行任务。纪念日和贴贴也需 create_reminder 才能触发。当前仅支持一次性提醒，周期可作为计划保存，不得声称已建立每天/每年自动任务。",
+    "更正、停用、忘记时更新/删除；临时情绪、假设、玩笑不生成习惯。",
+    "分页保存在 profile/habits/YYYY-MM/NNNNNN.json，所有页面使用本模板。"
+  ]
+}

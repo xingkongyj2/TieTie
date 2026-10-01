@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"tietie/backend/internal/conversation"
 )
 
 // 上游 ID 与 base64 的格式约束（对应 qoder.mjs 顶部正则）。
@@ -95,6 +97,7 @@ type Event struct {
 
 // PublicSession 是脱敏后的会话信息。
 type PublicSession struct {
+	ReplyMode string `json:"replyMode,omitempty"`
 	ID        string `json:"id"`
 	Title     string `json:"title"`
 	Status    string `json:"status"`
@@ -105,13 +108,27 @@ type PublicSession struct {
 
 // PublicMessage 是脱敏后的聊天消息。
 type PublicMessage struct {
-	ID        string   `json:"id"`
-	Sender    string   `json:"sender"` // self | ai
-	Text      string   `json:"text"`
-	Images    []string `json:"images,omitempty"`
-	Time      string   `json:"time"`
-	CreatedAt string   `json:"createdAt"`
-	Kind      string   `json:"kind"`
+	ReplyMode       string                `json:"replyMode,omitempty"`
+	InputSessionID  string                `json:"-"`
+	Visibility      string                `json:"visibility,omitempty"`
+	PrivateOwnerID  int64                 `json:"-"`
+	ID              string                `json:"id"`
+	Sender          string                `json:"sender"` // self | partner | user (unknown legacy author) | ai
+	Text            string                `json:"text"`
+	Images          []string              `json:"images,omitempty"`
+	Time            string                `json:"time"`
+	CreatedAt       string                `json:"createdAt"`
+	Kind            string                `json:"kind"`
+	UserID          int64                 `json:"userId,omitempty"`
+	DisplayName     string                `json:"displayName,omitempty"`
+	RecipientIDs    []int64               `json:"recipientIds,omitempty"`
+	Source          string                `json:"source,omitempty"`
+	ReminderIDs     []string              `json:"reminderIds,omitempty"`
+	ReminderError   string                `json:"reminderError,omitempty"`
+	Actions         []conversation.Action `json:"-"`
+	ProtocolError   string                `json:"-"`
+	ProtocolVersion int                   `json:"-"`
+	RequestID       string                `json:"-"`
 	// Kind 为 ask 时：Agent 通过自定义工具（AskUserQuestion）抛出的选择题。
 	Ask      []AskQuestion `json:"ask,omitempty"`
 	Answered bool          `json:"answered,omitempty"`
@@ -179,7 +196,8 @@ func publicMessages(events []Event) []PublicMessage {
 			}
 			out = append(out, PublicMessage{
 				ID: ev.ID, Sender: "ai", Text: questions[0].Question, Kind: "ask",
-				Ask: questions, Answered: answered[ev.ID],
+				Source: "chat",
+				Ask:    questions, Answered: answered[ev.ID],
 				Time: formatClock(ev.ProcessedAt), CreatedAt: ev.ProcessedAt,
 			})
 			continue
@@ -200,38 +218,74 @@ func publicMessages(events []Event) []PublicMessage {
 		}
 		hasImages := len(images) > 0
 		var parts []string
+		var decorations []string
 		for _, block := range ev.Content {
 			switch {
 			case block.Type == "text":
-				text := block.Text
-				if ev.Type == "user.message" {
-					text = displayUserText(text)
-				}
-				if text != "" {
-					parts = append(parts, text)
+				if block.Text != "" {
+					parts = append(parts, block.Text)
 				}
 			case block.Type == "image":
 				if !(block.Source != nil && block.Source.Type == "base64" && hasImages) {
-					parts = append(parts, "[图片]")
+					decorations = append(decorations, "[图片]")
 				}
 			default:
-				parts = append(parts, "[暂不支持的消息内容]")
+				decorations = append(decorations, "[暂不支持的消息内容]")
 			}
-		}
-		text := strings.Join(parts, "\n")
-		if strings.TrimSpace(text) == "" && !hasImages {
-			continue
 		}
 		msg := PublicMessage{
 			ID:        ev.ID,
 			Sender:    "ai",
-			Text:      text,
+			Text:      strings.Join(parts, "\n"),
 			Time:      formatClock(ev.ProcessedAt),
 			CreatedAt: ev.ProcessedAt,
 			Kind:      "text",
+			Source:    "chat",
 		}
 		if ev.Type == "user.message" {
-			msg.Sender = "self"
+			// Old unwrapped events do not identify their author. They must not be
+			// presented as the current viewer's own messages in a shared space.
+			msg.Sender = "user"
+			if input, ok := conversation.DecodeInput(msg.Text); ok {
+				if input.Hidden {
+					continue
+				}
+				msg.Text = input.Text
+				if tail := strings.TrimSpace(displayUserText(input.Tail)); tail != "" {
+					if msg.Text != "" {
+						msg.Text += "\n\n"
+					}
+					msg.Text += tail
+				}
+				msg.UserID, msg.DisplayName = input.UserID, input.DisplayName
+				msg.InputSessionID = input.Context.SessionID
+				msg.ReplyMode = input.Context.ReplyMode
+				if input.Context.RecipientID != 0 {
+					msg.RecipientIDs = []int64{input.Context.RecipientID}
+				}
+				if msg.UserID > 0 {
+					msg.Sender = "self" // The API maps this identity relative to its viewer.
+				}
+			} else {
+				msg.Text = displayUserText(msg.Text)
+			}
+		} else {
+			assistant := conversation.ParseAssistant(msg.Text)
+			msg.Text, msg.RecipientIDs, msg.Source = assistant.Text, assistant.RecipientIDs, assistant.Source
+			if assistant.Control {
+				continue
+			}
+			msg.ProtocolVersion, msg.RequestID = assistant.Version, assistant.RequestID
+			msg.Actions, msg.ProtocolError = assistant.Actions, assistant.ProtocolError
+		}
+		if len(decorations) > 0 {
+			if msg.Text != "" {
+				msg.Text += "\n"
+			}
+			msg.Text += strings.Join(decorations, "\n")
+		}
+		if strings.TrimSpace(msg.Text) == "" && !hasImages && len(msg.Actions) == 0 {
+			continue
 		}
 		if hasImages {
 			msg.Images = images

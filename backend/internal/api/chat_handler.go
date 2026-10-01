@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode"
 
+	"tietie/backend/internal/auth"
 	"tietie/backend/internal/qoder"
 )
 
@@ -28,6 +29,28 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	if apiErr := s.ensureBoundSession(r.Context(), id); apiErr != nil {
 		writeError(w, apiErr)
 		return
+	}
+
+	if strings.HasSuffix(r.URL.Path, "/private-stream") {
+		binding, err := s.DB.GetBindingBySessionID(r.Context(), id)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		if binding == nil {
+			writeError(w, qoder.NewApiError(403, "session_forbidden", "你没有访问此会话的权限。"))
+			return
+		}
+		channel, err := s.DB.PrivateChannelForOwner(r.Context(), id, auth.UserIDFrom(r.Context()), binding.CreatedAt)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		if channel == nil {
+			writeError(w, qoder.NewApiError(404, "private_channel_not_found", "还没有仅自己可见的消息。"))
+			return
+		}
+		id = channel.SessionID
 	}
 
 	// 游标校验：查询串只允许一个合法的 after；Last-Event-ID 优先。
@@ -80,11 +103,11 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.WriteString(w, ": connected\n\n")
 	flusher.Flush()
 
-	relayStream(r, w, flusher, body)
+	s.relayConversationStream(r, w, flusher, body, id)
 }
 
 // relayStream 逐行解析上游 SSE，把完整帧交给 qoder.ParseStreamEvent 过滤转换后写给前端。
-func relayStream(r *http.Request, w io.Writer, flusher http.Flusher, body io.Reader) {
+func (s *Server) relayConversationStream(r *http.Request, w io.Writer, flusher http.Flusher, body io.Reader, sessionID string) {
 	sc := bufio.NewScanner(body)
 	sc.Buffer(make([]byte, 0, 64*1024), 300*1024)
 
@@ -98,6 +121,67 @@ func relayStream(r *http.Request, w io.Writer, flusher http.Flusher, body io.Rea
 		item := qoder.ParseStreamEvent([]byte(strings.Join(dataLines, "\n")))
 		if item == nil {
 			return
+		}
+		// AI emits a structured envelope. Buffer until the complete event so raw
+		// action JSON never flashes in chat and only validated results are shown.
+		if item["type"] == "delta" {
+			return
+		}
+		if item["type"] == "message" {
+			if message, ok := item["message"].(qoder.PublicMessage); ok {
+				if message.Sender == "ai" {
+					unlock := s.lockConversation(sessionID)
+					if apiErr := s.ensureConversationViewer(r.Context(), sessionID); apiErr != nil {
+						unlock()
+						return
+					}
+					history, err := s.Qoder.GetMessages(r.Context(), sessionID, "")
+					if err == nil {
+						_, _, err = s.processConversation(r.Context(), sessionID, history, auth.UserIDFrom(r.Context()))
+					}
+					matched := false
+					if err == nil {
+						for _, verified := range history.Messages {
+							if verified.ID == message.ID {
+								item["message"] = verified
+								matched = true
+								break
+							}
+						}
+					} else {
+						// Polling will recover; do not display unverified action results.
+						unlock()
+						return
+					}
+					unlock()
+					if !matched {
+						return
+					}
+				} else {
+					space, _, err := s.conversationContext(r.Context(), sessionID, auth.UserIDFrom(r.Context()))
+					if err != nil {
+						return
+					}
+					mapMessageViewer(&message, space, auth.UserIDFrom(r.Context()))
+					if message.Sender != "self" && message.Sender != "partner" {
+						return
+					}
+					item["message"] = message
+				}
+			}
+		}
+		if channel, err := s.DB.GetPrivateChannel(r.Context(), sessionID); err != nil {
+			return
+		} else if channel != nil {
+			if s.ensureConversationViewer(r.Context(), sessionID) != nil {
+				return
+			}
+			item["private"] = true
+			if m, ok := item["message"].(qoder.PublicMessage); ok {
+				m.Visibility = "private"
+				m.PrivateOwnerID = channel.OwnerID
+				item["message"] = m
+			}
 		}
 		if qoder.ValidEventID(frameID) {
 			fmt.Fprintf(w, "id: %s\n", frameID)

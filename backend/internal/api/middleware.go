@@ -10,6 +10,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"tietie/backend/internal/auth"
+	"tietie/backend/internal/logging"
 	"tietie/backend/internal/qoder"
 )
 
@@ -40,7 +41,17 @@ func requestLog(next http.Handler) http.Handler {
 		start := time.Now()
 		sw := &statusWriter{ResponseWriter: w, status: 200}
 		next.ServeHTTP(sw, r)
-		log.Printf("%s %s %d %s", r.Method, r.URL.Path, sw.status, time.Since(start).Round(time.Millisecond))
+		logger := logging.System()
+		fields := []any{"event", "http.request", "method", r.Method, "path", r.URL.Path, "status", sw.status, "duration", time.Since(start).Round(time.Millisecond)}
+		if sw.status >= 500 {
+			logger.Error("请求失败", fields...)
+		} else if sw.status >= 400 {
+			logger.Warn("请求未成功", fields...)
+		} else if r.Method == http.MethodGet {
+			logger.Debug("读取请求完成", fields...)
+		} else {
+			logger.Info("请求处理完成", fields...)
+		}
 	})
 }
 
@@ -94,8 +105,8 @@ func openCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/") {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Last-Event-ID")
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)
 				return

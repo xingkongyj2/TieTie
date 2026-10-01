@@ -43,8 +43,15 @@ func (c *Client) ListSessions(ctx context.Context, defaultSessionID string) (*Se
 
 // CreateSession 在云端新建一个会话（绑定流程用）。
 // 上游需要 agent 与 environment_id，二者由 ResolveAgentAndEnv 确定；title 为空时沿用云端默认命名。
-func (c *Client) CreateSession(ctx context.Context, agentID, environmentID, title string) (*PublicSession, error) {
+func (c *Client) CreateSession(ctx context.Context, agentID, environmentID, title string, memoryStores ...string) (*PublicSession, error) {
 	body := map[string]any{"agent": agentID, "environment_id": environmentID}
+	if len(memoryStores) > 0 {
+		resources := []map[string]any{}
+		for _, id := range memoryStores {
+			resources = append(resources, map[string]any{"type": "memory_store", "memory_store_id": id, "access": "read_only", "instructions": "本仓库仅属于当前贴贴会话，仅使用7种 JSON 模板及同模板分页，位于 /data/.qoder/awareness/<path>。消息传输协议在 rules/assistant-behavior.json 的 instructions 字段，遗忘时读取；保留云端原有人设。初始模板的未提供不是事实；相关事实按对应模板检索：profile/users、profile/habits、agreements/shared、tasks/todo-board、context/realtime、rules/assistant-behavior，以及 rules/memory-policy.json。目录中的 YYYY-MM/NNNNNN.json 是对应模板的分页，不是新类型。expiresAt 已到期的内容不能作为当前事实。写入、取消和定时调度由后台系统执行，不代替后台创建定时器。"})
+		}
+		body["resources"] = resources
+	}
 	if strings.TrimSpace(title) != "" {
 		body["title"] = title
 	}
@@ -96,6 +103,7 @@ type MessagesResult struct {
 	Cursor      *string         `json:"cursor"`
 	IdleEventID *string         `json:"idleEventId"`
 	TurnError   *string         `json:"turnError"`
+	Events      []Event         `json:"-"`
 }
 
 // GetMessages 增量拉取会话事件并转换为消息列表（对应 qoder.mjs getMessages）。
@@ -120,7 +128,7 @@ func (c *Client) GetMessages(ctx context.Context, id, after string) (*MessagesRe
 		return nil, err
 	}
 
-	result := &MessagesResult{Session: session, Messages: publicMessages(events)}
+	result := &MessagesResult{Session: session, Messages: publicMessages(events), Events: events}
 	if n := len(events); n > 0 {
 		cursor := events[n-1].ID
 		result.Cursor = &cursor

@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 2,
+  "type": "todo_board",
+  "title": "待办提醒板",
+  "fieldDescriptions": {
+    "id": "真实提醒 ID",
+    "title": "事项 / 待办内容",
+    "dueAt": "截止时间，带时区 RFC3339",
+    "status": "pending=待办、completed=已完成、cancelled=取消；事项状态与提醒投递状态独立",
+    "createdBy": "发布人 userId；0=系统，自己/对方按当前查看者解释",
+    "recipientIds": "被提醒人 userId 数组；对应自己/对方/我们",
+    "deliveryStatus": "后台提醒投递状态",
+    "taskStatus": "定时任务状态，任务完成不代表事项完成",
+    "completedBy": "确认事项完成的人 userId"
+  },
+  "reminders": [],
+  "maintenance": [
+    "纪念日、贴贴与普通提醒走同一后台链路。",
+    "数据库是时间、执行状态和完成确认的事实来源；后台事务生成此投影，AI 不直接改写。",
+    "当前待办最多16条，recentReminders保留最近8条；完整提醒历史按 tasks/todo-board/YYYY-MM/NNNNNN.json 分页，每页最多16条，使用相同的待办板模板和字段。完成与取消不删除历史，history 列出最近12个有记录的月份，更早月份仍完整保留。"
+  ],
+  "recentReminders": [],
+  "history": {
+    "directoryPattern": "tasks/todo-board/YYYY-MM/NNNNNN.json",
+    "pageSize": 16,
+    "months": [],
+    "hasEarlierMonths": false
+  }
+}

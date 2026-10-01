@@ -9,9 +9,15 @@ import (
 
 // Message 是聊天消息的本地留痕（messages 表），主键为云端事件 ID，天然去重。
 type Message struct {
+	Visibility     string    `json:"visibility,omitempty"`
+	PrivateOwnerID int64     `json:"-"`
 	ID             string    `json:"id"             gorm:"column:id;primaryKey;size:160"`
 	SessionID      string    `json:"sessionId"      gorm:"column:session_id;size:160;not null;index:idx_messages_session,priority:1"`
 	Sender         string    `json:"sender"         gorm:"column:sender;size:8;not null"`
+	UserID         int64     `json:"userId,omitempty"`
+	DisplayName    string    `json:"displayName,omitempty"`
+	RecipientIDs   []int64   `json:"recipientIds,omitempty" gorm:"serializer:json"`
+	Source         string    `json:"source,omitempty"`
 	Text           string    `json:"text"           gorm:"column:text;not null;default:''"`
 	CloudCreatedAt string    `json:"cloudCreatedAt" gorm:"column:cloud_created_at;size:64;not null;default:''"`
 	SavedAt        time.Time `json:"savedAt"        gorm:"column:saved_at;autoCreateTime;index:idx_messages_session,priority:2"`
@@ -20,13 +26,14 @@ type Message struct {
 // TableName 指定表名。
 func (Message) TableName() string { return "messages" }
 
-// SaveMessage 落库一条消息（主键为云端事件 ID，重复写入自动忽略）。
+// SaveMessage 按云端 ID 去重，并补充可信身份和接收对象等元数据。
 func (db *DB) SaveMessage(ctx context.Context, m *Message) error {
 	if !db.enabled() {
 		return errNoDB
 	}
 	return db.gdb.WithContext(ctx).
-		Clauses(clause.OnConflict{DoNothing: true}).
+		Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "id"}},
+			DoUpdates: clause.AssignmentColumns([]string{"sender", "user_id", "display_name", "recipient_ids", "source", "text", "visibility", "private_owner_id"})}).
 		Create(m).Error
 }
 
@@ -45,4 +52,15 @@ func (db *DB) ListMessages(ctx context.Context, sessionID string, limit int) ([]
 		Limit(limit).
 		Find(&out).Error
 	return out, err
+}
+
+// HasMessage uses the primary key, so repeated history reads do not repeat the
+// same protocol warning in operational logs.
+func (db *DB) HasMessage(ctx context.Context, id string) (bool, error) {
+	if !db.enabled() {
+		return false, errNoDB
+	}
+	var exists bool
+	err := db.gdb.WithContext(ctx).Raw("SELECT EXISTS(SELECT 1 FROM messages WHERE id = ?)", id).Scan(&exists).Error
+	return exists, err
 }

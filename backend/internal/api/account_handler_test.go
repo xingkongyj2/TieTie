@@ -8,14 +8,12 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"tietie/backend/internal/auth"
 	"tietie/backend/internal/config"
 	"tietie/backend/internal/dbop"
-	"tietie/backend/internal/qoder"
 )
 
 func TestBindRejectsEitherAlreadyBoundUser(t *testing.T) {
@@ -120,134 +118,6 @@ func TestUnbindClearsBindingForBothUsers(t *testing.T) {
 		if binding != nil {
 			t.Fatalf("%s 仍有绑定 %+v", user.Username, binding)
 		}
-	}
-}
-
-// TestRebindRestoresSessionByTitle 验证绑定以配对标题为钥匙：
-// 云端已有 tietie-<小ID>-<大ID> 的会话时直接恢复（已归档的不算），没有才新建并带上标题。
-func TestRebindRestoresSessionByTitle(t *testing.T) {
-	db, err := dbop.Open(filepath.Join(t.TempDir(), "rebind.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	ctx := context.Background()
-	var mu sync.Mutex
-	var created []map[string]any
-	createdBodies := func() []map[string]any {
-		mu.Lock()
-		defer mu.Unlock()
-		return append([]map[string]any(nil), created...)
-	}
-	upstream := http.NewServeMux()
-	upstream.HandleFunc("/api/v1/cloud/sessions", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if r.Method == http.MethodPost {
-			var body map[string]any
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				t.Error(err)
-			}
-			mu.Lock()
-			created = append(created, body)
-			mu.Unlock()
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"id": "sess_created_1", "title": body["title"], "status": "idle",
-				"created_at": "2026-10-01T00:00:00Z",
-			})
-			return
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"has_more": false, "data": []map[string]any{
-			{"id": "sess_history", "title": "tietie-1-2", "status": "idle", "created_at": "2026-09-01T00:00:00Z"},
-			{"id": "sess_history_archived", "title": "tietie-1-2", "status": "idle", "archived_at": "2026-09-06T00:00:00Z", "created_at": "2026-09-05T00:00:00Z"},
-			{"id": "sess_unrelated", "title": "其他会话", "status": "idle", "created_at": "2026-09-02T00:00:00Z"},
-		}})
-	})
-	server := httptest.NewServer(upstream)
-	defer server.Close()
-
-	authService := auth.NewService("test-secret", time.Hour)
-	router := NewRouter(&Server{
-		Cfg:   &config.Config{AgentID: "agent_1", EnvironmentID: "env_1"},
-		Auth:  authService,
-		DB:    db,
-		Qoder: qoder.NewClient(config.Config{Upstream: server.URL + "/api/v1/cloud", Token: "test-token", Timeout: 5 * time.Second}),
-	})
-	users := []*dbop.User{
-		{Username: "one", Password: "secret", Code: "1021"},
-		{Username: "two", Password: "secret", Code: "1022"},
-		{Username: "three", Password: "secret", Code: "1023"},
-		{Username: "four", Password: "secret", Code: "1024"},
-	}
-	for _, user := range users {
-		if err := db.CreateUser(ctx, user); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	bind := func(self *dbop.User, code string) AccountResult {
-		token, err := authService.IssueToken(self.ID, self.Username)
-		if err != nil {
-			t.Fatal(err)
-		}
-		req := httptest.NewRequest(http.MethodPost, "/api/account/bind", bytes.NewBufferString(`{"code":"`+code+`"}`))
-		req.Header.Set("Authorization", "Bearer "+token)
-		req.Header.Set("Content-Type", "application/json")
-		result := httptest.NewRecorder()
-		router.ServeHTTP(result, req)
-		if result.Code != http.StatusOK {
-			t.Fatalf("bind %s: got %d: %s", self.Username, result.Code, result.Body.String())
-		}
-		var body AccountResult
-		if err := json.Unmarshal(result.Body.Bytes(), &body); err != nil {
-			t.Fatal(err)
-		}
-		return body
-	}
-	unbind := func(self *dbop.User) {
-		token, err := authService.IssueToken(self.ID, self.Username)
-		if err != nil {
-			t.Fatal(err)
-		}
-		req := httptest.NewRequest(http.MethodPost, "/api/account/unbind", nil)
-		req.Header.Set("Authorization", "Bearer "+token)
-		result := httptest.NewRecorder()
-		router.ServeHTTP(result, req)
-		if result.Code != http.StatusOK {
-			t.Fatalf("unbind %s: got %d: %s", self.Username, result.Code, result.Body.String())
-		}
-	}
-
-	// 云端已有这对的标题会话（含一个更晚创建的已归档会话）→ 恢复历史，不新建。
-	rebound := bind(users[0], users[1].Code)
-	if rebound.Binding == nil || rebound.Binding.SessionID != "sess_history" {
-		t.Fatalf("期望恢复历史会话，实际 %+v", rebound.Binding)
-	}
-	if got := createdBodies(); len(got) != 0 {
-		t.Fatalf("恢复历史时不应新建会话，实际新建了 %+v", got)
-	}
-
-	// 解绑后重新绑定同一人：依旧恢复同一个历史会话。
-	unbind(users[1])
-	again := bind(users[0], users[1].Code)
-	if again.Binding == nil || again.Binding.SessionID != "sess_history" {
-		t.Fatalf("重新绑定应恢复历史会话，实际 %+v", again.Binding)
-	}
-	unbind(users[0])
-	if _, err := db.Unbind(ctx, users[1].ID); err != nil {
-		t.Fatal(err)
-	}
-
-	// 云端没有这对的标题会话 → 新建并带上小 ID 在前的标题。
-	fresh := bind(users[2], users[3].Code)
-	if fresh.Binding == nil || fresh.Binding.SessionID != "sess_created_1" {
-		t.Fatalf("期望新建会话，实际 %+v", fresh.Binding)
-	}
-	recent := createdBodies()
-	if len(recent) != 1 {
-		t.Fatalf("期望新建 1 个会话，实际 %+v", recent)
-	}
-	if got := recent[0]["title"]; got != "tietie-3-4" {
-		t.Fatalf("新建会话标题应为 tietie-3-4，实际 %v", got)
 	}
 }
 

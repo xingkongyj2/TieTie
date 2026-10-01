@@ -28,13 +28,16 @@ type Attachment struct {
 
 // MessageInput 是一次发消息请求的规范化结果。
 type MessageInput struct {
+	Visibility  string
 	Text        string
 	Attachments []Attachment
 }
 
 // SendResult 对应 POST /api/qoder/sessions/:id/messages 的响应体。
 type SendResult struct {
-	Messages []PublicMessage `json:"messages"`
+	ReplyMode string          `json:"replyMode,omitempty"`
+	Messages  []PublicMessage `json:"messages"`
+	Events    []Event         `json:"-"`
 }
 
 // SendMessage 发送一条用户消息：document 先抽文本，file 上传并挂载，image 内联 base64。
@@ -145,7 +148,7 @@ func (c *Client) postEvents(ctx context.Context, sessionID string, body map[stri
 	if env.Data == nil {
 		return nil, invalidResponse()
 	}
-	return &SendResult{Messages: publicMessages(*env.Data)}, nil
+	return &SendResult{Messages: publicMessages(*env.Data), Events: *env.Data}, nil
 }
 
 // OpenEventStream 打开上游 SSE 事件流；调用方负责 Close 返回的 ReadCloser。
@@ -246,11 +249,11 @@ func ParseStreamEvent(data []byte) map[string]any {
 	switch {
 	case p.Type == "user.message" || p.Type == "agent.message":
 		ev := Event{ID: p.ID, Type: p.Type, Content: p.Content, ProcessedAt: p.ProcessedAt, Error: p.Error}
-		var msg any
-		if msgs := publicMessages([]Event{ev}); len(msgs) > 0 {
-			msg = msgs[0]
+		msgs := publicMessages([]Event{ev})
+		if len(msgs) == 0 {
+			return nil // Hidden server wakeups have no public message or placeholder.
 		}
-		return map[string]any{"type": "message", "id": p.ID, "message": msg}
+		return map[string]any{"type": "message", "id": p.ID, "message": msgs[0]}
 	case p.Type == "agent.thinking":
 		return map[string]any{"type": "thinking_end", "id": p.ID}
 	case strings.HasPrefix(p.Type, "session.status_"):
