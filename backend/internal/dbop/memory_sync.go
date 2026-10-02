@@ -159,7 +159,7 @@ func (db *DB) ClaimMemorySync(ctx context.Context, now time.Time, limit int) ([]
 	err := db.gdb.WithContext(ctx).Raw(`UPDATE memory_records SET state='syncing',run_at=? WHERE id IN (
  SELECT m.id FROM memory_records m INDEXED BY idx_memory_sync WHERE m.state='pending' AND m.run_at<=?
  AND (m.allow_unbound=1 OR (EXISTS(SELECT 1 FROM bindings b WHERE b.session_id=m.session_id AND b.created_at=m.binding_created_at) OR EXISTS(SELECT 1 FROM private_channels p JOIN bindings b ON b.session_id=p.space_id AND b.created_at=p.binding_created_at WHERE p.session_id=m.session_id AND b.created_at=m.binding_created_at)))
- AND (m.archive_retirement=0 OR NOT EXISTS(SELECT 1 FROM memory_records n WHERE n.session_id=m.session_id AND n.path >= 'tasks/todo-board/' AND n.path < 'tasks/todo-board0' AND n.operation='upsert' AND n.state!='synced'))
+ AND (m.archive_retirement=0 OR NOT EXISTS(SELECT 1 FROM memory_records n WHERE n.session_id=m.session_id AND (n.kind='template' OR (n.path >= 'tasks/todo-board/' AND n.path < 'tasks/todo-board0')) AND n.operation='upsert' AND n.state!='synced'))
  ORDER BY m.run_at,m.id LIMIT ?) RETURNING *`, claimAt.Add(2*time.Minute), claimAt, limit).Scan(&rows).Error
 	return rows, err
 }

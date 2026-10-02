@@ -165,7 +165,7 @@ func retireLegacyReminderDocuments(gdb *gorm.DB) error {
 
 func (db *DB) ReminderHistoryReady(ctx context.Context, session string) (bool, error) {
 	var row MemoryRecord
-	err := db.gdb.WithContext(ctx).Select("id").Where("session_id=? AND path >= 'tasks/todo-board/' AND path < 'tasks/todo-board0' AND operation='upsert' AND state!='synced'", session).Take(&row).Error
+	err := db.gdb.WithContext(ctx).Select("id").Where("session_id=? AND (kind='template' OR (path >= 'tasks/todo-board/' AND path < 'tasks/todo-board0')) AND operation='upsert' AND state!='synced'", session).Take(&row).Error
 	if err == gorm.ErrRecordNotFound {
 		return true, nil
 	}

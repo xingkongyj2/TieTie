@@ -12,7 +12,7 @@ import (
 // worker before its old document is removed; failures leave the old entry intact.
 func migrateTemplateSchemas(tx *gorm.DB) error {
 	var stores []SpaceMemoryStore
-	if err := tx.Where("template_version<?", memoryspace.Version).Find(&stores).Error; err != nil {
+	if err := tx.Where("template_version IS NULL OR template_version<?", memoryspace.Version).Find(&stores).Error; err != nil {
 		return err
 	}
 	for _, store := range stores {
