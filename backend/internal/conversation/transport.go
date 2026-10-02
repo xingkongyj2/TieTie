@@ -28,15 +28,19 @@ func ContractHash(visibility string) string {
 }
 
 type TransportState struct {
-	Members     []Member      `json:"members,omitempty"`
-	Reminders   []Reminder    `json:"reminders,omitempty"`
-	MemoryIndex []MemoryIndex `json:"memoryIndex,omitempty"`
+	AnniversaryBoard *AnniversaryBoard          `json:"anniversaryBoard,omitempty"`
+	AssistantStyle   *memoryspace.SpeakingStyle `json:"assistantStyle,omitempty"`
+	Members          []Member                   `json:"members,omitempty"`
+	Reminders        []Reminder                 `json:"reminders,omitempty"`
+	MemoryIndex      []MemoryIndex              `json:"memoryIndex,omitempty"`
 }
 
 // State is advanced only after Qoder accepts the frame. Sorting avoids spurious
 // deltas caused by database ordering, not actual changes in business data.
 func CompactFrame(e EnvelopeV2, previous *TransportState) (string, TransportState) {
 	next := TransportState{Members: append([]Member(nil), e.Members...), Reminders: append([]Reminder(nil), e.Reminders...), MemoryIndex: append([]MemoryIndex(nil), e.MemoryIndex...)}
+	next.AssistantStyle = e.AssistantStyle
+	next.AnniversaryBoard = e.AnniversaryBoard
 	// Template paths are already part of the fixed contract/resource instructions.
 	// They are not human facts and need no per-turn index entries.
 	next.MemoryIndex = nil
@@ -60,6 +64,12 @@ func CompactFrame(e EnvelopeV2, previous *TransportState) (string, TransportStat
 		e.Reminders = next.Reminders
 		e.MemoryIndex = next.MemoryIndex
 	} else {
+		if reflect.DeepEqual(next.AnniversaryBoard, previous.AnniversaryBoard) {
+			e.AnniversaryBoard = nil
+		}
+		if reflect.DeepEqual(next.AssistantStyle, previous.AssistantStyle) {
+			e.AssistantStyle = nil
+		}
 		e.Timezone = ""
 		if reflect.DeepEqual(next.Members, previous.Members) {
 			e.Members = nil

@@ -1,13 +1,17 @@
 import { Cake, CloudSun, Moon } from 'lucide-react'
 import { useId, useState, type ReactNode } from 'react'
 import type { AISettings, RelationshipState } from '../types'
-import { Anniversary, ReminderBoard } from './Tools'
+import { ReminderBoard } from './Tools'
+import { Anniversaries } from './Anniversaries'
+import type { AnniversaryState } from '../hooks/useAnniversaries'
 import { SpaceBuddy } from './SpaceBuddies'
+import { reminderPhase } from '../lib/reminders'
 import './LittleThings.css'
 
 type CareKey = 'weatherCare' | 'anniversaryReminders' | 'quietHours'
 
 interface Props {
+  anniversaries: AnniversaryState
   state: RelationshipState
   reminderState?: RelationshipState
   onSaveSettings: (settings: AISettings) => Promise<void>
@@ -24,16 +28,16 @@ function CareRow({ icon, title, description, checked, disabled, onChange }: { ic
   return <div className="setting-row"><span className="setting-icon">{icon}</span><div className="setting-copy"><strong>{title}</strong><p id={descriptionId}>{description}</p></div><button type="button" className={`toggle ${checked ? 'is-on' : ''}`} role="switch" aria-checked={checked} aria-label={title} aria-describedby={descriptionId} disabled={disabled} onClick={onChange}><span /></button></div>
 }
 
-export function LittleThings({ state, reminderState = state, onSaveSettings, onToggle, onCancel, reminderNotice, remindersLoading, onReloadReminders, notify }: Props) {
+export function LittleThings({ state, anniversaries, reminderState = state, onSaveSettings, onToggle, onCancel, reminderNotice, remindersLoading, onReloadReminders, notify }: Props) {
   const [busyKey, setBusyKey] = useState<CareKey | null>(null)
   const [activeTab, setActiveTab] = useState<'care' | 'reminders' | 'anniversary'>('reminders')
   const [activeFilter, setActiveFilter] = useState<'both' | 'self' | 'partner' | null>(null)
-  const pendingReminders = reminderState.reminders.filter((reminder) => !reminder.completed && reminder.status !== 'cancelled')
+  const pendingReminders = reminderState.reminders.filter((reminder) => reminderPhase(reminder) === 'pending')
   const pendingCount = pendingReminders.length
   const reminderStats = [
     { assignee: 'both', audience: '我们', className: 'things-stat-all' },
     { assignee: 'self', audience: '我', className: 'things-stat-self' },
-    { assignee: 'partner', audience: '他', className: 'things-stat-partner' },
+    { assignee: 'partner', audience: 'TA', className: 'things-stat-partner' },
   ] as const
   const tabs = [{ id: 'reminders', label: '提醒' }, { id: 'anniversary', label: '纪念日' }, { id: 'care', label: '贴贴' }] as const
   const change = async (key: CareKey) => {
@@ -102,7 +106,7 @@ export function LittleThings({ state, reminderState = state, onSaveSettings, onT
         {remindersLoading && !reminderState.reminders.length ? <p className="empty-note" role="status">正在同步共享提醒…</p> : <ReminderBoard state={reminderState} pendingAssignee={activeFilter} onToggle={onToggle} onCancel={onCancel} notify={notify} />}
       </section>
       <section role="tabpanel" id="things-anniversary-panel" aria-labelledby="things-anniversary-tab" className="things-tab-panel" hidden={activeTab !== 'anniversary'}>
-        <Anniversary state={state} />
+        <Anniversaries state={anniversaries} notify={notify} />
       </section>
       <section role="tabpanel" id="things-care-panel" aria-labelledby="things-care-tab" className="things-tab-panel" hidden={activeTab !== 'care'}>
         <div className="form-card settings-card" aria-label="提醒偏好">

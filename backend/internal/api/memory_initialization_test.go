@@ -152,10 +152,44 @@ func TestNewBindingsInitializeIsolatedJSONMemorySpaces(t *testing.T) {
 	if out := call("POST", "/api/account/unbind", users[0], ""); out.Code != 200 {
 		t.Fatal(out.Body.String())
 	}
+	if out := call("PUT", "/api/account/profile", users[0], `{"gender":"female","birthday":"1998-11-16","hobbies":["画画","骑车"],"bio":"喜欢慢慢逛博物馆","avatar":"/avatars/cream-cat.png"}`); out.Code != 200 {
+		t.Fatal(out.Body.String())
+	}
+	if out := call("PUT", "/api/account/profile", users[1], `{"gender":"male","birthday":"1999-06-08","hobbies":["烹饪"],"bio":"","avatar":"/avatars/peach-cat.png"}`); out.Code != 200 {
+		t.Fatal(out.Body.String())
+	}
 	second := bind()
 	secondStore, _ := db.GetSpaceMemoryStore(ctx, second)
 	if second == first || secondStore.StoreID == mapping.StoreID || secondStore.SpaceID == mapping.SpaceID {
 		t.Fatal("rebind reused memory space")
+	}
+	mu.Lock()
+	for _, entry := range stores[secondStore.StoreID].entries {
+		if entry.Path != "profile/users.json" {
+			continue
+		}
+		var doc struct {
+			Users []struct {
+				UserID   int64 `json:"userId"`
+				Birthday string
+				Hobbies  []string
+				Bio      string
+			}
+		}
+		if err := json.Unmarshal([]byte(entry.Content), &doc); err != nil {
+			t.Fatal(err)
+		}
+		if len(doc.Users) != 2 || doc.Users[0].UserID != users[0].ID || doc.Users[0].Birthday != "1998-11-16" || len(doc.Users[0].Hobbies) != 2 || doc.Users[0].Bio != "喜欢慢慢逛博物馆" || doc.Users[1].Birthday != "1999-06-08" || len(doc.Users[1].Hobbies) != 1 || doc.Users[1].Hobbies[0] != "烹饪" {
+			t.Fatal("initialization omitted or mixed account profiles", doc)
+		}
+	}
+	mu.Unlock()
+	for _, user := range users {
+		key := dbop.MemoryID(second, memoryspace.FactPath("profile", "self", user.ID, "account_profile"))
+		fact, err := db.GetMemoryRecord(ctx, key, second)
+		if err != nil || fact == nil || fact.SourceUserID != user.ID || fact.OwnerID != user.ID || !strings.Contains(fact.Content, `"sourceType":"self_profile"`) {
+			t.Fatal("profile missing from initialized memory index", fact, err)
+		}
 	}
 	if out := call("GET", "/api/qoder/sessions/"+first+"/memories", users[0], ""); out.Code != 403 {
 		t.Fatal("old space still accessible")

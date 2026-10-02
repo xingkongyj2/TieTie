@@ -19,6 +19,7 @@ type Message struct {
 	RecipientIDs   []int64   `json:"recipientIds,omitempty" gorm:"serializer:json"`
 	Source         string    `json:"source,omitempty"`
 	Text           string    `json:"text"           gorm:"column:text;not null;default:''"`
+	Files          []string  `json:"files,omitempty" gorm:"serializer:json"`
 	CloudCreatedAt string    `json:"cloudCreatedAt" gorm:"column:cloud_created_at;size:64;not null;default:''"`
 	SavedAt        time.Time `json:"savedAt"        gorm:"column:saved_at;autoCreateTime;index:idx_messages_session,priority:2"`
 }
@@ -33,7 +34,7 @@ func (db *DB) SaveMessage(ctx context.Context, m *Message) error {
 	}
 	return db.gdb.WithContext(ctx).
 		Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "id"}},
-			DoUpdates: clause.AssignmentColumns([]string{"sender", "user_id", "display_name", "recipient_ids", "source", "text", "visibility", "private_owner_id"})}).
+			DoUpdates: clause.AssignmentColumns([]string{"sender", "user_id", "display_name", "recipient_ids", "source", "text", "files", "visibility", "private_owner_id"})}).
 		Create(m).Error
 }
 

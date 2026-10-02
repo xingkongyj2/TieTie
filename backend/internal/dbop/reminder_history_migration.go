@@ -17,7 +17,13 @@ func migrateReminderHistory(gdb *gorm.DB) error {
 	for {
 		var rows []Reminder
 		query := gdb.Where("id>?", cursor).Where(`NOT EXISTS(SELECT 1 FROM reminder_history_locations l WHERE l.reminder_id=reminders.id AND l.session_id=CASE WHEN reminders.memory_session_id!='' THEN reminders.memory_session_id ELSE reminders.session_id END)
- OR NOT EXISTS(SELECT 1 FROM reminder_history_locations l WHERE l.reminder_id=reminders.id AND l.session_id=reminders.session_id)`)
+ OR NOT EXISTS(SELECT 1 FROM reminder_history_locations l WHERE l.reminder_id=reminders.id AND l.session_id=reminders.session_id)
+ OR EXISTS(SELECT 1 FROM reminder_history_locations l WHERE l.reminder_id=reminders.id
+ AND l.session_id IN (reminders.session_id,CASE WHEN reminders.memory_session_id!='' THEN reminders.memory_session_id ELSE reminders.session_id END)
+ AND l.board_status != CASE
+ WHEN reminders.status='cancelled' THEN 'cancelled'
+ WHEN reminders.status IN ('delivered','completed') OR reminders.task_status='completed' OR reminders.task_completed_at IS NOT NULL OR reminders.delivered_at IS NOT NULL THEN 'completed'
+ ELSE 'pending' END)`)
 		if err := query.Order("id ASC").Limit(200).Find(&rows).Error; err != nil {
 			return err
 		}

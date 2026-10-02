@@ -98,6 +98,8 @@ func TestLiveExistingStoresUseTemplateSchemas(t *testing.T) {
 					CreatedBy       int64      `json:"createdBy"`
 					Recipients      []int64    `json:"recipientIds"`
 					Delivery        string     `json:"deliveryStatus"`
+					Status          string     `json:"status"`
+					Activity        string     `json:"activityStatus"`
 					TaskStatus      string     `json:"taskStatus"`
 					CreatedAt       time.Time  `json:"createdAt"`
 					UpdatedAt       time.Time  `json:"updatedAt"`
@@ -111,6 +113,20 @@ func TestLiveExistingStoresUseTemplateSchemas(t *testing.T) {
 				original, ok := byID[fact.ID]
 				if !ok || seen[fact.ID] {
 					t.Fatal("unknown or duplicate archived reminder")
+				}
+				wantStatus, wantActivity := "pending", "pending"
+				if original.Status == dbop.ReminderCancelled {
+					wantStatus, wantActivity = "cancelled", "cancelled"
+				} else {
+					if original.Status == dbop.ReminderCompleted || original.Status == dbop.ReminderDelivered || original.TaskStatus == "completed" || original.DeliveredAt != nil || original.TaskCompletedAt != nil {
+						wantStatus = "completed"
+					}
+					if original.Status == dbop.ReminderCompleted || original.CompletedBy != nil {
+						wantActivity = "completed"
+					}
+				}
+				if fact.Status != wantStatus || fact.Activity != wantActivity {
+					t.Fatal("cloud reminder still pending after completion or incorrectly implies real-world activity completion")
 				}
 				if fact.Title != original.Title || !fact.Due.Equal(original.DueAt) || fact.CreatedBy != original.CreatedBy || !reflect.DeepEqual(fact.Recipients, original.RecipientIDs) || fact.Delivery != original.Status || fact.TaskStatus != original.TaskStatus || !fact.CreatedAt.Equal(original.CreatedAt) || !fact.UpdatedAt.Equal(original.UpdatedAt) || !sameTime(fact.DeliveredAt, original.DeliveredAt) || !sameTime(fact.TaskCompletedAt, original.TaskCompletedAt) || !reflect.DeepEqual(fact.CompletedBy, original.CompletedBy) {
 					t.Fatal("template conversion changed reminder fields")

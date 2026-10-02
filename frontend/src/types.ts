@@ -91,6 +91,8 @@ export interface Message {
   /** Legacy display flag; shared conversation protocol renders final events only. */
   streaming?: boolean
   images?: string[]
+  /** Original attachment names; paths and extraction instructions stay internal. */
+  files?: string[]
   /** kind === 'ask'：题目内容；answered 表示云端已收到本条工具应答。 */
   ask?: AskQuestion[]
   answered?: boolean

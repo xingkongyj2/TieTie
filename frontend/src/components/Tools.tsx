@@ -1,27 +1,26 @@
-import { CalendarHeart, Check, ChevronDown, Heart, Plus } from 'lucide-react';
+import { ChevronDown, Plus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import type { RelationshipState, Reminder } from '../types';
-import { daysTogether } from '../lib/format';
-import { Avatar } from './Avatar';
+import { Anniversaries } from './Anniversaries';
+import type { AnniversaryState } from '../hooks/useAnniversaries';
 import { ReminderCard } from './ReminderCard';
 import { Sheet } from './Sheet';
+import { compareReminderTime, reminderPhase } from '../lib/reminders';
 
 export type ToolName = 'reminders' | 'anniversary';
-interface Props { tool: ToolName; state: RelationshipState; onClose: () => void; onAdd: (input: Omit<Reminder, 'id' | 'completed'>) => Promise<void>; notify: (text: string) => void }
+interface Props { tool: ToolName; state: RelationshipState; anniversaries: AnniversaryState; onClose: () => void; onAdd: (input: Omit<Reminder, 'id' | 'completed'>) => Promise<void>; notify: (text: string) => void }
 interface ReminderBoardProps { state: RelationshipState; onToggle: (id: string) => Promise<void>; onCancel?: (id: string) => Promise<void>; notify: (text: string) => void; pendingAssignee?: 'both' | 'self' | 'partner' | null }
 
 export function ReminderBoard({ state, onToggle, onCancel, notify, pendingAssignee = null }: ReminderBoardProps) {
-  const pending = state.reminders.filter((reminder) => !reminder.completed && reminder.status !== 'cancelled' && (pendingAssignee === null || reminder.assignee === pendingAssignee));
-  const completed = state.reminders.filter((reminder) => reminder.completed);
-  const cancelled = state.reminders.filter((reminder) => reminder.status === 'cancelled');
+  const pending = state.reminders.filter((reminder) => reminderPhase(reminder) === 'pending' && (pendingAssignee === null || reminder.assignee === pendingAssignee)).sort(compareReminderTime);
+  const completed = state.reminders.filter((reminder) => reminderPhase(reminder) !== 'pending').sort(compareReminderTime);
   const emptyNote = pendingAssignee === null
     ? completed.length ? '待完成的提醒都处理好啦。' : '还没有提醒，先添加一条吧。'
-    : `暂时没有提醒${{ both: '我们', self: '我', partner: '他' }[pendingAssignee]}的待完成事项。`;
+    : `暂时没有提醒${{ both: '我们', self: '我', partner: 'TA' }[pendingAssignee]}的待完成事项。`;
   return <div className="reminder-board">
     <section id="things-pending-list" aria-label="待完成" aria-live="polite">
       <div className="reminders-list">{pending.length ? pending.map((reminder) => <ReminderCard reminder={reminder} key={reminder.id} members={state.members} onToggle={onToggle} onCancel={onCancel} onError={notify} />) : <p className="empty-note">{emptyNote}</p>}</div>
     </section>
-    {cancelled.length > 0 && <details className="reminder-cancelled"><summary>已取消 · {cancelled.length}</summary><div className="reminders-list">{cancelled.map((reminder) => <ReminderCard reminder={reminder} key={reminder.id} members={state.members} onToggle={onToggle} onError={notify} />)}</div></details>}
     <section aria-label="已完成">
       <div className="reminder-completed-divider"><h2><span className="reminder-title-lettering">已完成</span></h2></div>
       <div className="reminders-list">{completed.length ? completed.map((reminder) => <ReminderCard reminder={reminder} key={reminder.id} members={state.members} onToggle={onToggle} onError={notify} />) : <p className="empty-note">还没有已完成的提醒。</p>}</div>
@@ -61,13 +60,8 @@ function ReminderCompose({ state, onAdd, onClose, notify }: Pick<Props, 'state' 
   </form>;
 }
 
-export function Anniversary({ state, onClose }: { state: RelationshipState; onClose?: () => void }) {
-  const humans = state.members.filter((m) => m.id !== 'ai');
-  return <div className="tool-content"><div className="anniversary-postcard"><CalendarHeart size={27} /><div className="anniversary-number">{daysTogether(state.togetherSince)}<span>天</span></div><div className="postcard-avatars"><Avatar member={humans[0]} size="large" /><Heart size={20} /><Avatar member={humans[1]} size="large" /></div><p>{humans.map((m) => m.name).join(' 和 ')}<br /><span>从 {state.togetherSince.replaceAll('-', '.')} 开始</span></p></div>{onClose && <button className="primary-button" onClick={onClose}>关闭<Check size={17} /></button>}</div>;
-}
-
 export function Tools(props: Props) {
   const { tool, onClose } = props;
   const labels = { reminders: '添加提醒', anniversary: '我们的小纪念' };
-  return <Sheet title={labels[tool]} onClose={onClose}>{(close) => tool === 'reminders' ? <ReminderCompose state={props.state} onAdd={props.onAdd} onClose={close} notify={props.notify} /> : <Anniversary state={props.state} onClose={close} />}</Sheet>;
+  return <Sheet title={labels[tool]} onClose={onClose}>{(close) => tool === 'reminders' ? <ReminderCompose state={props.state} onAdd={props.onAdd} onClose={close} notify={props.notify} /> : <Anniversaries state={props.anniversaries} compact notify={props.notify} />}</Sheet>;
 }

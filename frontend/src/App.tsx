@@ -6,6 +6,7 @@ import { BottomNav } from './components/BottomNav';
 import { ChatMessage } from './components/ChatMessage';
 import { Composer } from './components/Composer';
 import { mentionRanges } from './lib/mentions';
+import { canToggleReminder, reminderPhase } from './lib/reminders';
 import { Details } from './components/Details';
 import { ImageViewer } from './components/ImageViewer';
 import { LoginPage } from './components/LoginPage';
@@ -17,6 +18,7 @@ import { useAccount } from './hooks/useAccount';
 import { useRelationship } from './hooks/useRelationship';
 import { useCloudChat } from './hooks/useCloudChat';
 import { useViewportHeight } from './hooks/useViewportHeight';
+import { useAnniversaries } from './hooks/useAnniversaries';
 import type { Reminder } from './types';
 
 function messageDay(createdAt?: string) {
@@ -38,8 +40,10 @@ function messageDayLabel(createdAt?: string) {
 export default function App() {
   useViewportHeight();
   const account = useAccount();
-  const { state, error, reload, saveMember, saveSettings } = useRelationship();
+  const { state, error, reload, saveMember, saveSettings } = useRelationship(account.account?.user.userId, account.account?.binding?.partnerId, account.account?.binding?.sessionId);
   const chat = useCloudChat(account.account?.binding?.sessionId ?? null, account.reload);
+  const anniversaries = useAnniversaries(account.account?.binding?.sessionId);
+  const reloadAnniversaries = useRef(anniversaries.reload); reloadAnniversaries.current = anniversaries.reload;
   const [view, setView] = useState<'we' | 'things' | 'mine' | 'details'>('we');
   const [tool, setTool] = useState<ToolName | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
@@ -56,6 +60,9 @@ export default function App() {
   }, []);
 
   useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(() => {
+    if (account.account?.binding && !chat.loading && !chat.busy) void reloadAnniversaries.current();
+  }, [account.account?.binding?.sessionId, chat.messages.at(-1)?.id, chat.loading, chat.busy, view, tool]);
   useEffect(() => {
     const changedSession = lastChat.current.id !== chat.selectedId;
     if (changedSession) nearBottom.current = true;
@@ -99,12 +106,13 @@ export default function App() {
     recipientIds: reminder.recipientIds, status: reminder.status,
     deliveredAt: reminder.deliveredAt, taskStatus: reminder.taskStatus, taskCompletedAt: reminder.taskCompletedAt,
     assignee: reminder.recipientIds.length > 1 ? 'both' : reminder.recipientIds.includes(selfId) ? 'self' : 'partner',
-    completed: reminder.status === 'completed',
+    completed: reminderPhase(reminder) === 'completed',
   }));
   const sharedState = { ...state, members: sharedMembers, reminders };
   const toggleReminder = async (id: string) => {
-    const reminder = chat.reminders.find((item) => item.id === id);
+    const reminder = reminders.find((item) => item.id === id);
     if (!reminder) throw new Error('这条共享提醒已变更，请刷新后再试。');
+    if (!canToggleReminder(reminder)) throw new Error('这条提醒已结束或正在发送，无法修改完成状态。');
     await chat.changeReminder(id, reminder.status === 'completed' ? 'scheduled' : 'completed');
   };
   const cancelReminder = (id: string) => chat.changeReminder(id, 'cancelled');
@@ -121,6 +129,7 @@ export default function App() {
     const partner = sharedMembers.find((member) => member.id === 'partner');
     return chat.sendMessage(text, files, visibility, !!partner && mentionRanges(text, [partner.name]).length > 0);
   };
+
 
   return <div className={`app-shell ${view !== 'details' ? 'has-bottom-nav' : ''}`} data-view={view}>
     <div className="chat-view" hidden={view !== 'we'}>
@@ -140,11 +149,11 @@ export default function App() {
       <Composer members={sharedMembers} key={chat.selectedId ?? 'no-session'} sending={chat.submitting} disabled={!chat.canSend} placeholder={chat.awaitingAsk ? '先回答上面那道选择题…' : chat.busy ? (chat.silent ? '消息已发给对方，可以先写下一句…' : '伙伴正在回复，可以先写下一句…') : '聊聊日常，或记下一个共同提醒…'} onSend={sendMessage} onTool={setTool} onError={notify} />
       </> : <BindPage code={account.account.user.code} onBind={account.bind} notify={notify} embedded />}
     </div>
-    {view === 'things' && <LittleThings state={state} reminderState={sharedState} onSaveSettings={saveSettings} onToggle={toggleReminder} onCancel={cancelReminder} remindersLoading={chat.loading} reminderNotice={!account.account.binding ? '绑定两人空间后，可以一起安排和查看提醒。' : chat.remindersError || chat.error} onReloadReminders={account.account.binding ? chat.reload : undefined} notify={notify} />}
+    {view === 'things' && <LittleThings state={state} anniversaries={anniversaries} reminderState={sharedState} onSaveSettings={saveSettings} onToggle={toggleReminder} onCancel={cancelReminder} remindersLoading={chat.loading} reminderNotice={!account.account.binding ? '绑定两人空间后，可以一起安排和查看提醒。' : chat.remindersError || chat.error} onReloadReminders={account.account.binding ? chat.reload : undefined} notify={notify} />}
     {view === 'mine' && <Mine state={state} username={account.account.user.username} code={account.account.user.code} hasSession={!!account.account.binding} onSaveMember={saveMember} onLogout={account.logout} onExitSession={account.unbind} notify={notify} />}
     {view === 'details' && <Details state={sharedState} sessionId={account.account.binding?.sessionId} onBack={() => setView('we')} onSaveMember={saveMember} onSaveSettings={saveSettings} notify={notify} />}
     {view !== 'details' && <BottomNav view={view} onChange={setView} />}
-    {tool && <Tools tool={tool} state={tool === 'reminders' ? sharedState : state} onClose={() => setTool(null)} onAdd={addReminder} notify={notify} />}
+    {tool && <Tools tool={tool} state={sharedState} anniversaries={anniversaries} onClose={() => setTool(null)} onAdd={addReminder} notify={notify} />}
     {previewImage && <ImageViewer src={previewImage.src} alt={previewImage.alt} onClose={() => setPreviewImage(null)} />}
     {toast && <div className="toast" role="status"><Sparkles size={16} />{toast}</div>}
   </div>;

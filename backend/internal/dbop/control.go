@@ -19,6 +19,7 @@ type ControlJob struct {
 	SourceEventID    string
 	Actions          string
 	Results          string
+	NotificationOnly bool `gorm:"not null;default:false"`
 	CreatedBy        int64
 	BindingCreatedAt time.Time
 	Status           string    `gorm:"index:idx_controls_ready,priority:1;index:idx_controls_space_status,priority:2"`

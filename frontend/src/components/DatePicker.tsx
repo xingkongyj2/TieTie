@@ -15,7 +15,7 @@ function mask(raw: string) {
   return digits.length > 4 ? `${digits.slice(0, 4)}.${digits.slice(4)}` : digits
 }
 
-/** 自绘日期控件：文本框可直接敲数字，点右侧图标或聚焦时展开月历。值用 YYYY.MM.DD 显示串。 */
+/** 文本框可直接敲数字；右侧图标展开浮动月历，不改变表单高度。 */
 export function DatePicker({ id, value, onChange }: Props) {
   const root = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
@@ -32,24 +32,32 @@ export function DatePicker({ id, value, onChange }: Props) {
     if (!open) return
     setCursor(selected ? new Date(Number(selected[1]), Number(selected[2]) - 1, Number(selected[3])) : new Date())
     const onDown = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) setOpen(false) }
-    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false) }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopPropagation()
+      setOpen(false)
+      root.current?.querySelector<HTMLButtonElement>('.date-picker-toggle')?.focus({ preventScroll: true })
+    }
     document.addEventListener('pointerdown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => { document.removeEventListener('pointerdown', onDown); document.removeEventListener('keydown', onKey) }
+    document.addEventListener('keydown', onKey, true)
+    return () => { document.removeEventListener('pointerdown', onDown); document.removeEventListener('keydown', onKey, true) }
   }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const pick = (day: number) => { onChange(stamp(year, month, day)); setOpen(false) }
   const shift = (delta: number) => setCursor(new Date(year, month + delta, 1))
 
-  return <div className="date-picker" ref={root}>
+  return <div className="date-picker" ref={root} onKeyDown={(event) => {
+    if (event.altKey && event.key === 'ArrowDown') { event.preventDefault(); setOpen(true) }
+  }}>
     <div className="date-picker-field">
       <input className="line-input" id={id} type="text" inputMode="numeric" autoComplete="off" placeholder="YYYY.MM.DD" maxLength={10}
-        value={value} onFocus={() => setOpen(true)} onClick={() => setOpen(true)} onChange={(event) => onChange(mask(event.target.value))} />
-      <button type="button" className="date-picker-toggle" aria-label={open ? '收起日历' : '展开日历'} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        value={value} onChange={(event) => onChange(mask(event.target.value))} />
+      <button type="button" className="date-picker-toggle" aria-label={open ? '收起日历' : '展开日历'} aria-controls={`${id}-calendar`} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <CalendarDays size={16} aria-hidden="true" />
       </button>
     </div>
-    {open && <div className="date-picker-panel" role="group" aria-label={`选择日期，${year} 年 ${month + 1} 月`}>
+    {open && <div id={`${id}-calendar`} className="date-picker-panel" role="group" aria-label={`选择日期，${year} 年 ${month + 1} 月`}>
       <div className="date-picker-head">
         <button type="button" aria-label="上一个月" onClick={() => shift(-1)}><ChevronLeft size={17} aria-hidden="true" /></button>
         <strong>{year} 年 {month + 1} 月</strong>

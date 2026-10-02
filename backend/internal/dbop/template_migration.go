@@ -54,7 +54,7 @@ func migrateTemplateSchemas(tx *gorm.DB) error {
 				if e := g.Where("id=?", MemoryID(store.SessionID, doc.Path)).First(&old).Error; e == nil {
 					var existing, fresh map[string]any
 					if json.Unmarshal([]byte(old.Content), &existing) == nil && json.Unmarshal([]byte(doc.Content), &fresh) == nil {
-						for _, key := range []string{"sharedEntries", "agreements", "entries", "additions", "instructions", "groupChatId", "memorySpaceId", "memberIds", "timezone", "groupDefaultRules"} {
+						for _, key := range []string{"sharedEntries", "agreements", "entries", "additions", "instructions", "speakingStyle", "styleUpdatedBy", "styleUpdatedAt", "groupChatId", "memorySpaceId", "memberIds", "timezone", "groupDefaultRules"} {
 							if value, ok := existing[key]; ok {
 								fresh[key] = value
 							}

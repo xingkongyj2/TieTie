@@ -104,7 +104,7 @@ func TestSendSharedMessagePreservesIdentityAndAttachments(t *testing.T) {
 	if !strings.Contains(input.Tail, "便签.txt：/mnt/session/uploads/note.txt") {
 		t.Fatalf("mount must be appended outside original user JSON: %q", input.Tail)
 	}
-	if len(result.Events) != 1 || len(result.Messages) != 1 || result.Messages[0].UserID != 22 || result.Messages[0].Text != original+"\n\n📎 便签.txt" || len(result.Messages[0].Images) != 1 {
+	if len(result.Events) != 1 || len(result.Messages) != 1 || result.Messages[0].UserID != 22 || result.Messages[0].Text != original || len(result.Messages[0].Files) != 1 || result.Messages[0].Files[0] != "便签.txt" || len(result.Messages[0].Images) != 1 {
 		t.Fatalf("public history must recover original content and identity: %+v", result)
 	}
 	data, err := json.Marshal(result)
@@ -171,5 +171,31 @@ func TestUserLiteralAttachmentMarkersRemainOriginalText(t *testing.T) {
 	messages := publicMessages([]Event{event})
 	if len(messages) != 1 || messages[0].Text != original {
 		t.Fatalf("user text was mistaken for transport attachment metadata: %+v", messages)
+	}
+}
+
+func TestUnicodeDocumentAttachmentsStaySeparateInHistoryAndStream(t *testing.T) {
+	ctx := transportContext()
+	filename := "副本洪山手术麻醉科9月28号-10月11号排班表(1).xlsx"
+	mounts := "\n\n" + uploadMarker + filename + "（已提取为文本）：/mnt/session/uploads/副本洪山手术麻醉科9月28号-10月11号排班表(1).txt\n复核 版本.2.csv：/mnt/session/uploads/复核 版本.2.csv"
+	for _, text := range []string{"帮我记住张梦妍排班", ""} {
+		event := Event{ID: "evt_unicode_document", Type: "user.message", Content: []ContentBlock{{Type: "text", Text: conversation.EncodeUserV2(ctx, text) + mounts}}}
+		messages := publicMessages([]Event{event})
+		if len(messages) != 1 || messages[0].Text != text || len(messages[0].Files) != 2 || messages[0].Files[0] != filename || messages[0].Files[1] != "复核 版本.2.csv" {
+			t.Fatalf("attachment metadata became user text: %+v", messages)
+		}
+		encoded, _ := json.Marshal(event)
+		stream := ParseStreamEvent(encoded)
+		if stream == nil {
+			t.Fatal("attachment-only message was dropped from stream")
+		}
+		message, ok := stream["message"].(PublicMessage)
+		if !ok || message.Text != text || len(message.Files) != 2 {
+			t.Fatalf("stream differs from history: %+v", stream)
+		}
+		public, _ := json.Marshal(messages)
+		if strings.Contains(string(public), "/mnt/session/uploads/") || strings.Contains(string(public), "已提取为文本") || strings.Contains(string(public), "请按需读取") {
+			t.Fatal("transport metadata leaked to public message")
+		}
 	}
 }

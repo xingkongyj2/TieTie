@@ -50,8 +50,9 @@ func IsTemplatePath(path string) bool {
 var templates embed.FS
 
 type Member struct {
-	ID   int64
-	Name string
+	ID      int64
+	Name    string
+	Profile map[string]any
 }
 type Document struct{ Path, Content string }
 
@@ -103,6 +104,15 @@ func Render(session, space string, a, b Member) ([]Document, error) {
 						user["userId"] = a.ID
 					} else {
 						user["userId"] = b.ID
+					}
+					profile := a.Profile
+					if i != 0 {
+						profile = b.Profile
+					}
+					for _, key := range []string{"gender", "birthday", "hobbies", "bio", "avatar", "profileSource", "profileUpdatedAt"} {
+						if value, ok := profile[key]; ok {
+							user[key] = value
+						}
 					}
 				}
 			}

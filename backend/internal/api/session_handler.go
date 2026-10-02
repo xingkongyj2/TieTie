@@ -385,7 +385,7 @@ func (s *Server) recordMessages(ctx context.Context, sessionID string, messages 
 		record := &dbop.Message{
 			ID: msg.ID, SessionID: sessionID, Sender: sender,
 			UserID: msg.UserID, DisplayName: msg.DisplayName, Visibility: msg.Visibility, PrivateOwnerID: msg.PrivateOwnerID, RecipientIDs: msg.RecipientIDs, Source: msg.Source,
-			Text: msg.Text, CloudCreatedAt: msg.CreatedAt,
+			Text: msg.Text, Files: msg.Files, CloudCreatedAt: msg.CreatedAt,
 		}
 		if err := s.DB.SaveMessage(ctx, record); err != nil {
 			log.Printf("消息落库失败 %s: %v", msg.ID, err)

@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Bell, LockKeyhole } from 'lucide-react';
+import { Bell, FileSpreadsheet, FileText, LockKeyhole } from 'lucide-react';
 import type { AskQuestion, Member, Message } from '../types';
 import { Avatar } from './Avatar';
 import { MentionText } from './MentionText';
 import { MarkdownMessage } from './MarkdownMessage';
 import { isVisibleChatMessage } from '../lib/chatMessages';
+import { attachmentDisplayName } from '../lib/attachments';
 
 interface Props { message: Message; members: Member[]; onError: (text: string) => void; onOpenImage: (src: string, alt: string) => void; onAnswer: (toolUseId: string, text: string) => Promise<unknown> }
 
@@ -20,7 +21,16 @@ export function ChatMessage({ message, members, onError, onOpenImage, onAnswer }
     <Avatar member={{ ...member, name }} showAILabel={message.sender === 'ai'} />
     <div className="message-content">
       <div className="message-meta"><span>{name}</span>{message.visibility === 'private' && <span className="message-private-label"><LockKeyhole size={10} aria-hidden="true" />仅自己可见</span>}<time dateTime={message.createdAt}>{message.createdAt && !Number.isNaN(Date.parse(message.createdAt)) ? new Date(message.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }) : message.time}</time></div>
-      {ask.length ? <AskCard message={message} questions={ask} onAnswer={onAnswer} onError={onError} /> : <div className={`message-bubble ${isReminder ? 'has-reminder-type' : ''}`}>{isReminder && <span className="message-type-badge"><Bell size={12} aria-hidden="true" />到点提醒</span>}{message.sender === 'ai' ? <MarkdownMessage text={message.text} memberNames={members.filter((m) => m.id !== 'ai').map((m) => m.name)} onOpenImage={onOpenImage} /> : <MentionText text={message.text} names={members.filter((m) => m.id !== 'ai').map((m) => m.name)} />}{message.images?.length ? <div className="message-images">{message.images.map((src, index) => <button type="button" aria-label={`放大查看图片 ${index + 1}`} onClick={() => onOpenImage(src, `聊天图片 ${index + 1}`)} key={index}><img src={src} alt={`聊天图片 ${index + 1}`} /></button>)}</div> : null}{message.streaming && <span className="stream-caret" aria-label="正在生成" />}</div>}
+      {ask.length ? <AskCard message={message} questions={ask} onAnswer={onAnswer} onError={onError} /> : <div className={`message-bubble ${isReminder ? 'has-reminder-type' : ''}`}>
+        {isReminder && <span className="message-type-badge"><Bell size={12} aria-hidden="true" />到点提醒</span>}
+        {message.sender === 'ai' ? <MarkdownMessage text={message.text} memberNames={members.filter((m) => m.id !== 'ai').map((m) => m.name)} onOpenImage={onOpenImage} /> : message.text && <div className="message-text"><MentionText text={message.text} names={members.filter((m) => m.id !== 'ai').map((m) => m.name)} /></div>}
+        {message.files?.length ? <div className="message-files" role="list" aria-label="消息附件">{message.files.map((file, index) => <span className="message-file" role="listitem" key={`${file}-${index}`}>
+          {/\.(xlsx?|xlsm|xlsb|csv)$/i.test(file) ? <FileSpreadsheet size={15} aria-hidden="true" /> : <FileText size={15} aria-hidden="true" />}
+          <span>{attachmentDisplayName(file)}</span>
+        </span>)}</div> : null}
+        {message.images?.length ? <div className="message-images">{message.images.map((src, index) => <button type="button" aria-label={`放大查看图片 ${index + 1}`} onClick={() => onOpenImage(src, `聊天图片 ${index + 1}`)} key={index}><img src={src} alt={`聊天图片 ${index + 1}`} /></button>)}</div> : null}
+        {message.streaming && <span className="stream-caret" aria-label="正在生成" />}
+      </div>}
       {message.reminderError && <p className="message-reminder-error" role="alert">{message.reminderError}</p>}
     </div>
   </div>;

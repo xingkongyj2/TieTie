@@ -373,3 +373,40 @@ func TestReminderValidatesRecipientsAndSafeRetry(t *testing.T) {
 		}
 	}
 }
+
+func TestDeliveredReminderIsCompleteAndCannotBeCancelledOrRestored(t *testing.T) {
+	db, _ := openReminderTestDB(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	r := makeReminder(t, db, "finished", 0, now.Add(-time.Minute), 1)
+	claim, err := db.ClaimDueReminder(ctx, now)
+	if err != nil || claim == nil || claim.ID != r.ID {
+		t.Fatal("reminder was not claimed", err)
+	}
+	if _, err := db.CancelReminder(ctx, "space", r.ID); !errors.Is(err, ErrReminderState) {
+		t.Fatal("in-flight reminder was cancelled", err)
+	}
+	if err := db.FinishReminderDispatch(ctx, r.ID, []string{"evt_finished"}, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.CancelReminder(ctx, "space", r.ID); !errors.Is(err, ErrReminderState) {
+		t.Fatal("delivered reminder was cancelled", err)
+	}
+	if _, _, err := db.ApplyReminderAction(ctx, "space", "ai-cancel-finished", 0, ReminderAction{Type: "cancel", ReminderID: r.ID, CreatedBy: 1}); !errors.Is(err, ErrReminderState) {
+		t.Fatal("AI bypassed the completed reminder guard", err)
+	}
+	completed, err := db.CompleteReminder(ctx, "space", r.ID, 1)
+	if err != nil || completed.Status != ReminderDelivered || completed.CompletedBy != nil || !completed.hasCompletedDelivery() {
+		t.Fatalf("completion must preserve delivery facts: %+v %v", completed, err)
+	}
+	if _, err := db.RestoreCompletedReminder(ctx, "space", r.ID, 1); !errors.Is(err, ErrReminderState) {
+		t.Fatal("delivered reminder was restored", err)
+	}
+	if again, err := db.ClaimDueReminder(ctx, now.Add(time.Hour)); err != nil || again != nil {
+		t.Fatal("completed reminder was scheduled twice", err)
+	}
+	stored, err := db.GetReminder(ctx, "space", r.ID)
+	if err != nil || stored.Status != ReminderDelivered || stored.TaskStatus != "completed" || stored.DeliveredAt == nil || stored.TaskCompletedAt == nil || len(stored.DispatchEventIDs) != 1 {
+		t.Fatalf("terminal operations changed completion history: %+v %v", stored, err)
+	}
+}

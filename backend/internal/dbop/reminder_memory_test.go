@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 )
@@ -62,7 +63,7 @@ func TestReminderDeliveryCompletesTaskAndMemoryAtomically(t *testing.T) {
 		t.Fatal(err)
 	}
 	memories, _ = reopened.ListReminderMemories(ctx, "space")
-	if memories[0].CompletedBy == nil || *memories[0].CompletedBy != 2 || memories[0].TaskStatus != "completed" {
+	if memories[0].CompletedBy != nil || memories[0].Status != ReminderDelivered || memories[0].TaskStatus != "completed" {
 		t.Fatal(memories)
 	}
 	if _, err := reopened.NextScheduledReminder(ctx); err != nil {
@@ -125,7 +126,7 @@ func TestTodoBoardHistoryPagesHaveConsistentNumbersAndBoundedSize(t *testing.T) 
 	}
 }
 
-func TestJSONTodoBoardUsesActivityStatusAndRollsBackWithReminder(t *testing.T) {
+func TestJSONTodoBoardCompletesReminderOnlyAndRollsBackWithDelivery(t *testing.T) {
 	db, _ := openReminderTestDB(t)
 	ctx := context.Background()
 	binding, _ := db.GetBindingByPair(ctx, 1, 2)
@@ -152,23 +153,27 @@ func TestJSONTodoBoardUsesActivityStatusAndRollsBackWithReminder(t *testing.T) {
 	if _, err := db.ClaimDueReminder(ctx, now); err != nil {
 		t.Fatal(err)
 	}
-	if err := db.FinishReminderDispatch(ctx, r.ID, []string{"evt_due"}, now); err != nil {
-		t.Fatal(err)
-	}
-	check("pending") // Notification delivery does not complete the activity.
 	if err := db.gdb.Exec(`CREATE TRIGGER reject_board BEFORE UPDATE ON memory_records WHEN NEW.path='tasks/todo-board.json' BEGIN SELECT RAISE(ABORT,'board blocked'); END`).Error; err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.CompleteReminder(ctx, "space", r.ID, 2); err == nil {
+	if err := db.FinishReminderDispatch(ctx, r.ID, []string{"evt_due"}, now); err == nil {
 		t.Fatal("projection failure did not roll back")
 	}
 	current, _ := db.GetReminder(ctx, "space", r.ID)
-	if current.CompletedBy != nil {
-		t.Fatal("completion committed without board")
+	if current.CompletedBy != nil || current.Status != ReminderDispatching || current.hasCompletedDelivery() {
+		t.Fatal("delivery committed without board")
 	}
 	db.gdb.Exec(`DROP TRIGGER reject_board`)
-	if _, err := db.CompleteReminder(ctx, "space", r.ID, 2); err != nil {
+	if err := db.FinishReminderDispatch(ctx, r.ID, []string{"evt_due"}, now); err != nil {
 		t.Fatal(err)
 	}
 	check("completed")
+	page, err := db.GetReminderMemory(ctx, *r)
+	if err != nil || page == nil {
+		t.Fatal(err)
+	}
+	fact, err := ExtractReminderMemory(page.Content, r.ID)
+	if err != nil || !strings.Contains(fact, `"status":"completed"`) || !strings.Contains(fact, `"activityStatus":"pending"`) {
+		t.Fatal("reminder completion incorrectly proves activity completion", fact, err)
+	}
 }

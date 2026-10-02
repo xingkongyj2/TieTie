@@ -56,6 +56,10 @@ func Open(dsn string) (*DB, error) {
 	needsMemoryBackfill := !gdb.Migrator().HasTable(&ReminderMemory{})
 	if err := gdb.AutoMigrate(
 		&User{},
+		&UserProfile{},
+		&Anniversary{},
+		&AnniversaryActionReceipt{},
+		&AnniversaryDeletionReceipt{},
 		&Binding{},
 		&Session{},
 		&ConversationProtocol{},
@@ -76,6 +80,9 @@ func Open(dsn string) (*DB, error) {
 		&ControlJob{},
 		&MemoryOperationReceipt{},
 	); err != nil {
+		return nil, err
+	}
+	if err := gdb.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_anniversary_one_pin ON anniversaries(session_id) WHERE pinned=1").Error; err != nil {
 		return nil, err
 	}
 	if needsMemoryKindBackfill {
@@ -129,6 +136,9 @@ WHERE run_at IS NULL OR run_at = '' OR run_at < '0002-01-01'`).Error; err != nil
 		return nil, err
 	}
 	if err := migrateTemplateSchemas(gdb); err != nil {
+		return nil, err
+	}
+	if err := reconcileDeletedAnniversaries(gdb); err != nil {
 		return nil, err
 	}
 	return &DB{gdb: gdb}, nil

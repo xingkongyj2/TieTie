@@ -14,7 +14,7 @@ function AIForm({ state, onSave, notify }: { state: RelationshipState; onSave: P
     setBusy(true);
     try {
       await onSave({ ...state.settings, tone });
-      notify('偏好已保存到此设备 ฅ՞•ﻌ•՞ฅ');
+      notify('说话方式已保存 ฅ՞•ﻌ•՞ฅ');
     }
     catch { notify('偏好没保存成功，请再试一下。'); }
     finally { setBusy(false); }
@@ -82,7 +82,7 @@ export function Details({ state, sessionId, onBack, onSaveSettings, notify }: Pr
     <div className="details-scroll">
       <div className="member-selector" role="tablist" aria-label="选择成员">{order.map((id) => {
         const member = state.members.find((m) => m.id === id)!;
-        return <button type="button" key={id} className={`member-tile ${id === selected ? 'selected' : ''}`} role="tab" aria-selected={id === selected} aria-controls={`panel-${id}`} id={`tab-${id}`} aria-label={id === 'ai' ? `${member.name}，AI 伙伴` : member.name} onClick={() => setSelected(id)}><Avatar member={member} size="normal" /><strong>{member.name}</strong>{id === 'ai' && <span className="member-type-hint">AI 伙伴</span>}</button>;
+        return <button type="button" key={id} className={`member-tile ${id === selected ? 'selected' : ''}`} role="tab" aria-selected={id === selected} aria-controls={`panel-${id}`} id={`tab-${id}`} aria-label={member.name} onClick={() => setSelected(id)}><Avatar member={member} size="normal" showAILabel={id === 'ai'} /><strong>{member.name}</strong></button>;
       })}</div>
       <div role="tabpanel" id={`panel-${selected}`} aria-labelledby={`tab-${selected}`} key={selected}>
         {selected === 'ai' ? <AIForm state={state} onSave={onSaveSettings} notify={notify} /> : <PartnerImpression key={sessionId} sessionId={sessionId} member={state.members.find((m) => m.id === selected)!} notify={notify} />}

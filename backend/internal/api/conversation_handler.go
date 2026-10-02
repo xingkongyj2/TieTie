@@ -188,7 +188,7 @@ func (s *Server) processConversationFrom(ctx context.Context, id string, result 
 			warnings = nil // Global feedback concerns only the latest turn.
 			continue
 		}
-		if event.Type == "session.error" && hasOrigin && origin.Hidden && origin.Reminder != nil {
+		if event.Type == "session.error" && hasOrigin && origin.Kind == "reminder_due" && origin.Reminder != nil {
 			_ = s.DB.FailReminderDispatch(ctx, origin.Reminder.ID)
 		}
 		if hasOrigin && origin.Context.ReplyMode == conversation.SilentReply && (event.Type == "agent.message" || event.Type == "agent.custom_tool_use") {
@@ -273,7 +273,7 @@ func (s *Server) processConversationFrom(ctx context.Context, id string, result 
 			message.ReminderError += value
 		}
 		message.Source = "chat"
-		if hasOrigin && origin.Hidden && origin.Reminder != nil {
+		if hasOrigin && origin.Kind == "reminder_due" && origin.Reminder != nil {
 			// Recheck against storage rather than trusting model recipient claims.
 			reminder, loadErr := s.DB.GetDispatchReminder(ctx, id, origin.Reminder.ID)
 			if loadErr != nil {

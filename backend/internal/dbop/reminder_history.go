@@ -46,11 +46,22 @@ type ReminderHistoryMonth struct {
 func (ReminderHistoryMonth) TableName() string { return "reminder_history_months" }
 
 func reminderBoardStatus(r *Reminder) string {
-	if r.CompletedBy != nil {
-		return "completed"
-	}
 	if r.Status == ReminderCancelled {
 		return "cancelled"
+	}
+	if r.Status == ReminderCompleted || r.hasCompletedDelivery() {
+		return "completed"
+	}
+	return "pending"
+}
+
+// Finishing a reminder does not prove the recipient did the real-world task.
+func reminderActivityStatus(r *Reminder) string {
+	if r.Status == ReminderCancelled {
+		return "cancelled"
+	}
+	if r.Status == ReminderCompleted || r.CompletedBy != nil {
+		return "completed"
 	}
 	return "pending"
 }

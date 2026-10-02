@@ -9,20 +9,19 @@ import (
 	"tietie/backend/internal/conversation"
 )
 
-func TestDisplayUserText(t *testing.T) {
+func TestSplitUserAttachments(t *testing.T) {
 	raw := "帮我看看\n\n我还附上了这些文件，请按需读取：\n报告.docx：/mnt/session/uploads/a.txt\n数据.xlsx：/mnt/session/uploads/b.txt"
-	got := displayUserText(raw)
-	want := "帮我看看\n\n📎 报告.docx\n📎 数据.xlsx"
-	if got != want {
-		t.Fatalf("got %q, want %q", got, want)
+	got, files := splitUserAttachments(raw)
+	if got != "帮我看看" || len(files) != 2 || files[0] != "报告.docx" || files[1] != "数据.xlsx" {
+		t.Fatalf("text=%q files=%v", got, files)
 	}
 	// 不含标记时原样返回
-	if displayUserText("普通消息") != "普通消息" {
+	if text, files := splitUserAttachments("普通消息"); text != "普通消息" || len(files) != 0 {
 		t.Fatal("plain text changed")
 	}
 	// 挂载行格式不符时原样返回
 	bad := "我还附上了这些文件，请按需读取：\n随便一行"
-	if displayUserText(bad) != bad {
+	if text, files := splitUserAttachments(bad); text != bad || len(files) != 0 {
 		t.Fatal("malformed mount list should pass through")
 	}
 }
@@ -71,7 +70,7 @@ func TestPublicMessagesSharedConversation(t *testing.T) {
 	if len(msgs) != 2 {
 		t.Fatalf("hidden wakeup should not appear: %+v", msgs)
 	}
-	if msgs[0].UserID != 22 || msgs[0].DisplayName != "小青" || msgs[0].Text != original+"\n\n📎 日程.docx" || len(msgs[0].Actions) != 0 {
+	if msgs[0].UserID != 22 || msgs[0].DisplayName != "小青" || msgs[0].Text != original || len(msgs[0].Files) != 1 || msgs[0].Files[0] != "日程.docx" || len(msgs[0].Actions) != 0 {
 		t.Fatalf("user identity/original text/attachments not preserved: %+v", msgs[0])
 	}
 	if msgs[1].Text != "小青，记得开会哦" || msgs[1].Source != "reminder" || len(msgs[1].RecipientIDs) != 1 || msgs[1].RecipientIDs[0] != 22 {

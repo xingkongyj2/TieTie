@@ -164,6 +164,46 @@ func runClaimedControl(t *testing.T, s *Server) {
 		t.Fatal(err)
 	}
 }
+
+func TestControlReceiptAddressesRequesterIndependentOfRecipientsAndViewer(t *testing.T) {
+	for author := 0; author < 2; author++ {
+		for _, target := range []string{"self", "partner", "both"} {
+			t.Run(fmt.Sprintf("author-%d/%s", author, target), func(t *testing.T) {
+				s, c, _, users, call := setupV2(t)
+				ctx := context.Background()
+				path := "/api/qoder/sessions/sess_shared/messages"
+				out := call(author, "POST", path, map[string]any{"text": "1分钟后提醒我，她今天的排班"})
+				if out.Code != 200 {
+					t.Fatal(out.Body.String())
+				}
+				input := latestInput(t, c)
+				ids := []int64{users[author].ID}
+				if target == "partner" {
+					ids = []int64{users[1-author].ID}
+				} else if target == "both" {
+					ids = []int64{users[0].ID, users[1].ID}
+				}
+				appendProtocolReply(c, map[string]any{"protocol": "tietie.control", "version": 2, "requestId": input.RequestID, "actions": []conversation.Action{{Type: "create_reminder", Key: "shift", Title: "TA今天是白备夜", DueAt: input.Context.Now.Add(time.Minute).Format(time.RFC3339Nano), RecipientIDs: ids, Storage: "database_and_memory"}}})
+				// The other member viewing the shared conversation must not become
+				// the addressee of the original member's confirmation.
+				if out := call(1-author, "GET", path, nil); out.Code != 200 {
+					t.Fatal(out.Body.String())
+				}
+				runClaimedControl(t, s)
+				ack := latestInput(t, c)
+				want := conversation.Member{ID: users[author].ID, Name: users[author].Username}
+				if !ack.Hidden || ack.UserID != 0 || ack.Kind != "action_result" || ack.RequestID != input.RequestID || ack.ReplyTo == nil || *ack.ReplyTo != want {
+					t.Fatalf("confirmation lost original requester: %+v", ack)
+				}
+				rows, err := s.DB.ListReminders(ctx, "sess_shared")
+				if err != nil || len(rows) != 1 || fmt.Sprint(rows[0].RecipientIDs) != fmt.Sprint(ids) {
+					t.Fatalf("reminder recipients changed: %+v %v", rows, err)
+				}
+			})
+		}
+	}
+}
+
 func TestV2ReminderControlAckCloudMemoryAndDueRead(t *testing.T) {
 	s, c, m, u, call := setupV2(t)
 	ctx := context.Background()

@@ -3,6 +3,7 @@ package api
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"tietie/backend/internal/auth"
+	"tietie/backend/internal/conversation"
 	"tietie/backend/internal/dbop"
 	"tietie/backend/internal/qoder"
 )
@@ -122,7 +124,21 @@ func (s *Server) handleReminderUpdate(w http.ResponseWriter, r *http.Request) {
 	case dbop.ReminderScheduled:
 		reminder, err = s.DB.RestoreCompletedReminder(r.Context(), storageID, r.PathValue("reminderId"), auth.UserIDFrom(r.Context()))
 	case dbop.ReminderCancelled:
-		reminder, err = s.DB.CancelReminder(r.Context(), storageID, r.PathValue("reminderId"))
+		if s.useV2() {
+			var space conversation.Context
+			var binding *dbop.Binding
+			space, binding, err = s.conversationContext(r.Context(), storageID, auth.UserIDFrom(r.Context()))
+			if err == nil {
+				requestID := "manual_cancel_" + visible.ID
+				origin := conversation.NewEnvelopeV2(space, "user_message", requestID)
+				origin.Text = "在提醒页手动取消提醒"
+				origin.Compact = true
+				encoded, _ := json.Marshal(origin)
+				reminder, err = s.DB.CancelReminderAndNotify(r.Context(), storageID, visible.ID, dbop.ControlJob{SessionID: storageID, RequestID: requestID, Origin: "\n<TIETIE_INPUT_V2>\n" + string(encoded) + "\n</TIETIE_INPUT_V2>", CreatedBy: space.AuthorID, BindingCreatedAt: binding.CreatedAt})
+			}
+		} else {
+			reminder, err = s.DB.CancelReminder(r.Context(), storageID, visible.ID)
+		}
 	default:
 		writeError(w, qoder.NewApiError(400, "invalid_reminder_status", "不支持这项提醒操作。"))
 		return

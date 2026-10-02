@@ -16,6 +16,7 @@
   ],
   "agreements": [],
   "maintenance": [
+    "纪念日日期事实也保存在 agreements 分页，entryType=anniversary，字段 anniversaryId/title/date/anniversaryKind/pinned；数据库保存真实纪念日与唯一置顶，服务端当前快照优先于历史修订。用户明确委托保存的日期可直接记下，不把日期记录说成已建立自动提醒。",
     "共同约定保存在 agreements 数组；按 agreements/shared/YYYY-MM/NNNNNN.json 分页，使用相同模板。"
   ]
 }

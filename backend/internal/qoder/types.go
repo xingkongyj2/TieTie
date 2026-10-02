@@ -18,7 +18,7 @@ var (
 	base64Re    = regexp.MustCompile(`^[A-Za-z0-9+/]+={0,2}$`)
 
 	imageDimensionRe = regexp.MustCompile(`(?i)image length and width|height:1 or width:1|image.*(size|dimension)`)
-	uploadLineRe     = regexp.MustCompile(`^.+：/mnt/session/uploads/[A-Za-z0-9._-]+$`)
+	uploadLineRe     = regexp.MustCompile(`^(.+)：/mnt/session/uploads/[^\r\n]+$`)
 )
 
 const (
@@ -116,6 +116,7 @@ type PublicMessage struct {
 	Sender          string                `json:"sender"` // self | partner | user (unknown legacy author) | ai
 	Text            string                `json:"text"`
 	Images          []string              `json:"images,omitempty"`
+	Files           []string              `json:"files,omitempty"`
 	Time            string                `json:"time"`
 	CreatedAt       string                `json:"createdAt"`
 	Kind            string                `json:"kind"`
@@ -251,12 +252,9 @@ func publicMessages(events []Event) []PublicMessage {
 					continue
 				}
 				msg.Text = input.Text
-				if tail := strings.TrimSpace(displayUserText(input.Tail)); tail != "" {
-					if msg.Text != "" {
-						msg.Text += "\n\n"
-					}
-					msg.Text += tail
-				}
+				// Transport mount instructions are for the AI. Keep authenticated
+				// member text literal and expose only separate attachment names.
+				_, msg.Files = splitUserAttachments(input.Tail)
 				msg.UserID, msg.DisplayName = input.UserID, input.DisplayName
 				msg.InputSessionID = input.Context.SessionID
 				msg.ReplyMode = input.Context.ReplyMode
@@ -267,7 +265,7 @@ func publicMessages(events []Event) []PublicMessage {
 					msg.Sender = "self" // The API maps this identity relative to its viewer.
 				}
 			} else {
-				msg.Text = displayUserText(msg.Text)
+				msg.Text, msg.Files = splitUserAttachments(msg.Text)
 			}
 		} else {
 			assistant := conversation.ParseAssistant(msg.Text)
@@ -284,7 +282,7 @@ func publicMessages(events []Event) []PublicMessage {
 			}
 			msg.Text += strings.Join(decorations, "\n")
 		}
-		if strings.TrimSpace(msg.Text) == "" && !hasImages && len(msg.Actions) == 0 {
+		if strings.TrimSpace(msg.Text) == "" && !hasImages && len(msg.Files) == 0 && len(msg.Actions) == 0 {
 			continue
 		}
 		if hasImages {
@@ -330,29 +328,25 @@ func parseAskInput(raw json.RawMessage) ([]AskQuestion, bool) {
 // uploadMarker 是发送附件时拼接在用户文本后的固定标记（与 sendMessage 保持一致）。
 const uploadMarker = "我还附上了这些文件，请按需读取：\n"
 
-// displayUserText 把历史消息里的挂载路径列表还原成 📎 文件名 的展示形式。
-func displayUserText(value string) string {
+// splitUserAttachments separates transport metadata from display text. Mount
+// paths can contain Unicode, spaces and parentheses, just like uploaded names.
+func splitUserAttachments(value string) (string, []string) {
 	at := strings.LastIndex(value, uploadMarker)
 	if at == -1 {
-		return value
+		return value, nil
 	}
-	lines := strings.Split(value[at+len(uploadMarker):], "\n")
-	for _, line := range lines {
-		if !uploadLineRe.MatchString(line) {
-			return value
-		}
-	}
-	prefix := strings.TrimRight(value[:at], " \t\r\n")
+	lines := strings.Split(strings.TrimSpace(value[at+len(uploadMarker):]), "\n")
 	names := make([]string, 0, len(lines))
 	for _, line := range lines {
-		name, _, _ := strings.Cut(line, "：/mnt/session/uploads/")
-		names = append(names, "📎 "+name)
+		match := uploadLineRe.FindStringSubmatch(strings.TrimSuffix(line, "\r"))
+		if len(match) != 2 {
+			return value, nil
+		}
+		name := strings.TrimSuffix(match[1], "（已提取为文本）")
+		names = append(names, name)
 	}
-	joined := strings.Join(names, "\n")
-	if prefix != "" {
-		return prefix + "\n\n" + joined
-	}
-	return joined
+	prefix := strings.TrimRight(value[:at], " \t\r\n")
+	return prefix, names
 }
 
 // publicTurnError 把上游 session.error 事件转换成用户可读的提示。

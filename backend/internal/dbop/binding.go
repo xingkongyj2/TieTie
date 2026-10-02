@@ -157,6 +157,9 @@ func (db *DB) CreateInitializedBinding(ctx context.Context, id1, id2 int64, sess
 		if err := tx.Create(&records).Error; err != nil {
 			return err
 		}
+		if err := seedUserProfiles(tx, binding); err != nil {
+			return err
+		}
 		created = true
 		return nil
 	})

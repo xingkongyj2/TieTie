@@ -3,11 +3,61 @@ package dbop
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestOldDeliveredHistoryMovesToCompletedWithoutRepeatedRewrites(t *testing.T) {
+	db, path := openReminderTestDB(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	r := makeReminder(t, db, "old-delivered-board", 0, now.Add(-time.Minute), 1)
+	if _, err := db.ClaimDueReminder(ctx, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.FinishReminderDispatch(ctx, r.ID, []string{"evt_delivered"}, now); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate the previous projection rule, preserving the actual delivery.
+	if err := db.gdb.Model(&ReminderHistoryLocation{}).Where("reminder_id=?", r.ID).Update("board_status", "pending").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var location ReminderHistoryLocation
+	if err := db.gdb.Where("reminder_id=?", r.ID).First(&location).Error; err != nil || location.BoardStatus != "completed" {
+		t.Fatal("old delivery remains pending", location, err)
+	}
+	page, err := db.GetReminderMemory(ctx, *r)
+	if err != nil || page == nil {
+		t.Fatal(err)
+	}
+	body, err := ExtractReminderMemory(page.Content, r.ID)
+	if err != nil || !strings.Contains(body, `"status":"completed"`) || !strings.Contains(body, `"activityStatus":"pending"`) || !strings.Contains(body, `"deliveryStatus":"delivered"`) {
+		t.Fatal("migration changed the actual delivery/activity facts", body, err)
+	}
+	revision := page.Revision
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	page, err = db.GetReminderMemory(ctx, *r)
+	if err != nil || page == nil || page.Revision != revision {
+		t.Fatal("startup rewrote unchanged completed history", err)
+	}
+}
 
 func TestFiveThousandReminderHistoryIsCompleteAndUpdateTouchesOnePage(t *testing.T) {
 	db, path := openReminderTestDB(t)
@@ -333,8 +383,8 @@ func TestPrivateHistoryPromotionPublishesOnlyTheDeliveredReminder(t *testing.T) 
 	if err != nil || canonical == nil || !strings.Contains(canonical.Content, secret.ID) {
 		t.Fatal("canonical private history was truncated", err)
 	}
-	if _, err := db.CancelReminder(ctx, "space", public.ID); err != nil {
-		t.Fatal(err)
+	if _, err := db.CancelReminder(ctx, "space", public.ID); !errors.Is(err, ErrReminderState) {
+		t.Fatal("published reminder was cancelled after delivery", err)
 	}
 	for _, session := range []string{"space", "private"} {
 		var l ReminderHistoryLocation
@@ -343,7 +393,7 @@ func TestPrivateHistoryPromotionPublishesOnlyTheDeliveredReminder(t *testing.T) 
 		}
 		m, _ := db.GetMemoryRecord(ctx, MemoryID(session, l.Path()), session)
 		body, err := ExtractReminderMemory(m.Content, public.ID)
-		if err != nil || !strings.Contains(body, `"status":"cancelled"`) {
+		if err != nil || !strings.Contains(body, `"status":"completed"`) || !strings.Contains(body, `"deliveryStatus":"delivered"`) {
 			t.Fatal("published/private histories diverged", err)
 		}
 	}

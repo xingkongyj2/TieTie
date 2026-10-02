@@ -10,21 +10,24 @@ import (
 )
 
 type Action struct {
-	Type         string            `json:"type"`
-	Key          string            `json:"key"`
-	Title        string            `json:"title,omitempty"`
-	DueAt        string            `json:"dueAt,omitempty"`
-	RecipientIDs []int64           `json:"recipientIds"`
-	ReminderID   string            `json:"reminderId,omitempty"`
-	Storage      string            `json:"storage,omitempty"`
-	Content      string            `json:"content,omitempty"`
-	Scope        string            `json:"scope,omitempty"`
-	MemoryKey    string            `json:"memoryKey,omitempty"`
-	Data         map[string]string `json:"data,omitempty"`
-	Category     string            `json:"category,omitempty"`
-	ExpiresAt    string            `json:"expiresAt,omitempty"`
-	MemoryKeys   []string          `json:"memoryKeys,omitempty"`
-	Revision     int64             `json:"revision,omitempty"`
+	Date            string            `json:"date,omitempty"`
+	AnniversaryID   string            `json:"anniversaryId,omitempty"`
+	AnniversaryKind string            `json:"anniversaryKind,omitempty"`
+	Type            string            `json:"type"`
+	Key             string            `json:"key"`
+	Title           string            `json:"title,omitempty"`
+	DueAt           string            `json:"dueAt,omitempty"`
+	RecipientIDs    []int64           `json:"recipientIds"`
+	ReminderID      string            `json:"reminderId,omitempty"`
+	Storage         string            `json:"storage,omitempty"`
+	Content         string            `json:"content,omitempty"`
+	Scope           string            `json:"scope,omitempty"`
+	MemoryKey       string            `json:"memoryKey,omitempty"`
+	Data            map[string]string `json:"data,omitempty"`
+	Category        string            `json:"category,omitempty"`
+	ExpiresAt       string            `json:"expiresAt,omitempty"`
+	MemoryKeys      []string          `json:"memoryKeys,omitempty"`
+	Revision        int64             `json:"revision,omitempty"`
 }
 
 // Assistant is an AI message after protocol parsing. Actions are suggestions;

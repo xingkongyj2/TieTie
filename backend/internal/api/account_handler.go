@@ -146,6 +146,16 @@ func (s *Server) handleBind(w http.ResponseWriter, r *http.Request) {
 		writeError(w, qoder.NewApiError(503, "memory_required", "新建空间需要开启 V2 会话协议和云端记忆。"))
 		return
 	}
+	selfMemory, err := s.memoryMember(r.Context(), self)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	partnerMemory, err := s.memoryMember(r.Context(), partner)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	agentID, envID, err := s.Qoder.ResolveAgentAndEnv(r.Context(), s.Cfg.AgentID, s.Cfg.EnvironmentID)
 	if err != nil {
 		writeError(w, err)
@@ -165,7 +175,7 @@ func (s *Server) handleBind(w http.ResponseWriter, r *http.Request) {
 	// Seed before mounting, then fill the actual group/session ID before publish.
 	sessionID := ""
 	discarded := func() { s.cleanupInitializedSpace(sessionID, store.ID) }
-	documents, err := memoryspace.Render("待创建会话", spaceID, memoryspace.Member{ID: self.ID, Name: self.Username}, memoryspace.Member{ID: partner.ID, Name: partner.Username})
+	documents, err := memoryspace.Render("待创建会话", spaceID, selfMemory, partnerMemory)
 	if err != nil {
 		discarded()
 		writeError(w, err)
@@ -197,7 +207,7 @@ func (s *Server) handleBind(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	finalized, err := memoryspace.Render(sessionID, spaceID, memoryspace.Member{ID: self.ID, Name: self.Username}, memoryspace.Member{ID: partner.ID, Name: partner.Username})
+	finalized, err := memoryspace.Render(sessionID, spaceID, selfMemory, partnerMemory)
 	if err != nil {
 		discarded()
 		writeError(w, err)

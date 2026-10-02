@@ -69,14 +69,24 @@ func TestCompactSystemEventsAreHiddenAndMemberTextIsLiteral(t *testing.T) {
 	compact, _ := CompactFrame(e, &state)
 	for _, raw := range []string{first, compact} {
 		input, ok := DecodeInput(raw)
-		if !ok || !input.Hidden || input.Kind != "action_result" || input.Context.Visibility != "private" {
+		if !ok || !input.Hidden || input.UserID != 0 || input.Kind != "action_result" || input.Context.Visibility != "private" || input.ReplyTo == nil || input.ReplyTo.ID != ctx.AuthorID {
 			t.Fatal(input, ok)
 		}
+	}
+	// An unchanged member list is omitted, but each receipt carries its own
+	// requester, including when the other member takes the next turn.
+	ctx.AuthorID = ctx.Members[1].ID
+	e = NewEnvelopeV2(ctx, "action_result", "other-receipt")
+	other, _ := CompactFrame(e, &state)
+	frame := frameBody(t, other)
+	input, ok := DecodeInput(other)
+	if len(frame.Members) != 0 || frame.Actor.Kind != "system" || !ok || !input.Hidden || input.UserID != 0 || input.ReplyTo == nil || *input.ReplyTo != ctx.Members[1] {
+		t.Fatal("compact receipt lost original requester", frame, input)
 	}
 	e = NewEnvelopeV2(ctx, "user_message", "user")
 	e.Text = compact
 	raw, _ := CompactFrame(e, &state)
-	input, ok := DecodeInput(raw)
+	input, ok = DecodeInput(raw)
 	if !ok || input.Hidden || input.Text != compact {
 		t.Fatal("nested control changed member message", input, ok)
 	}

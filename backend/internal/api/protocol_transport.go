@@ -7,7 +7,6 @@ import (
 	"tietie/backend/internal/conversation"
 	"tietie/backend/internal/dbop"
 	"tietie/backend/internal/logging"
-	"tietie/backend/internal/memoryspace"
 	"time"
 	"unicode/utf8"
 )
@@ -21,6 +20,45 @@ func (s *Server) prepareProtocolInput(ctx context.Context, e conversation.Envelo
 	}
 	if binding == nil {
 		return "", nil, errors.New("protocol session is no longer bound")
+	}
+	style, err := s.DB.GetAssistantStyle(ctx, e.SessionID)
+	if err != nil {
+		return "", nil, err
+	}
+	e.AssistantStyle = &style
+	rows, next, err := s.DB.ListAnniversaries(ctx, e.SessionID, "", 16)
+	if err != nil {
+		return "", nil, err
+	}
+	featured, err := s.DB.FeaturedAnniversary(ctx, e.SessionID)
+	if err != nil {
+		return "", nil, err
+	}
+	board := &conversation.AnniversaryBoard{Items: []conversation.Anniversary{}, HasMore: next != "", SpaceCreatedAt: binding.CreatedAt}
+	if featured != nil {
+		board.Items = append(board.Items, conversation.Anniversary{ID: featured.ID, Title: featured.Title, Date: featured.Date, Kind: featured.Kind, Pinned: featured.Pinned})
+	}
+	for _, row := range rows {
+		if featured != nil && row.ID == featured.ID {
+			continue
+		}
+		board.Items = append(board.Items, conversation.Anniversary{ID: row.ID, Title: row.Title, Date: row.Date, Kind: row.Kind, Pinned: row.Pinned})
+	}
+	e.AnniversaryBoard = board
+	if e.Kind == "user_message" && s.Cfg != nil && s.Cfg.CloudMemoryEnabled {
+		// A new turn must not read the previously mounted account profile after an
+		// edit. The outbox remains durable if this cloud write cannot complete.
+		profiles, err := s.DB.ProfileMemoryRecords(ctx, e.SessionID, binding.UserA, binding.UserB)
+		if err != nil {
+			return "", nil, err
+		}
+		for _, profile := range profiles {
+			if profile.State != "synced" {
+				if err := s.syncMemoryLocked(ctx, profile); err != nil {
+					return "", nil, err
+				}
+			}
+		}
 	}
 	stored, err := s.DB.GetConversationProtocol(ctx, e.SessionID)
 	if err != nil {
@@ -51,30 +89,12 @@ func (s *Server) prepareProtocolInput(ctx context.Context, e conversation.Envelo
 	return text, candidate, nil
 }
 func (s *Server) storeProtocolMemory(ctx context.Context, e conversation.EnvelopeV2, epoch time.Time) error {
+	if err := s.DB.SetBehaviorInstructions(ctx, e.SessionID, epoch, conversation.TransportInstructions(e.Visibility)); err != nil {
+		return err
+	}
 	existing, err := s.DB.GetMemoryRecord(ctx, dbop.MemoryID(e.SessionID, conversation.ProtocolMemoryPath), e.SessionID)
 	if err != nil {
 		return err
-	}
-	// Keep persona rules and runtime additions in their original template.
-	body := memoryspace.Behavior()
-	if existing != nil && existing.Content != "" {
-		body = existing.Content
-	}
-	var document map[string]any
-	if err := json.Unmarshal([]byte(body), &document); err != nil {
-		return err
-	}
-	document["instructions"] = conversation.TransportInstructions(e.Visibility)
-	content, _ := json.Marshal(document)
-	record := dbop.MemoryRecord{Kind: "template", SessionID: e.SessionID, Path: conversation.ProtocolMemoryPath, Scope: "space", Category: "behavior", Storage: "database_and_memory", Operation: "upsert", PendingContent: string(content), BindingCreatedAt: epoch}
-	if existing == nil || existing.Content != string(content) || !existing.BindingCreatedAt.Equal(epoch) {
-		if err := s.DB.QueueMemory(ctx, record); err != nil {
-			return err
-		}
-		existing, err = s.DB.GetMemoryRecord(ctx, dbop.MemoryID(e.SessionID, record.Path), e.SessionID)
-		if err != nil {
-			return err
-		}
 	}
 	if existing == nil {
 		return errors.New("protocol memory missing after enqueue")

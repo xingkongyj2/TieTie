@@ -1,9 +1,10 @@
-import { ArrowUp, AtSign, Bell, FileSpreadsheet, FileText, Heart, LockKeyhole, Mic, Paperclip, X } from 'lucide-react';
+import { ArrowUp, AtSign, Bell, CalendarDays, FileSpreadsheet, FileText, LockKeyhole, Mic, Paperclip, X } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { MentionText } from './MentionText';
 import type { Member } from '../types';
 import { atomicMentionEdit, completePartnerMention, deleteMention, expandMentionSelection, mentionRanges } from '../lib/mentions';
 import { isImageAttachment, validateAttachments } from '../api/qoder';
+import { attachmentDisplayName } from '../lib/attachments';
 
 interface Props { members: Member[]; sending: boolean; disabled?: boolean; placeholder?: string; onSend: (text: string, files: File[], visibility: 'shared' | 'private') => Promise<boolean>; onTool: (tool: 'reminders' | 'anniversary') => void; onError: (text: string) => void }
 
@@ -144,11 +145,11 @@ export function Composer({ members, sending, disabled = false, placeholder = '�
     <div className="quick-actions">
       <button type="button" aria-label="@TA" aria-pressed={toPartner} disabled={sending || !partner} onMouseDown={(event) => event.preventDefault()} onClick={mentionPartner}><AtSign size={14} /><span>TA</span></button>
       <button onClick={() => onTool('reminders')}><Bell size={14} /><span>添加提醒</span></button>
-      <button onClick={() => onTool('anniversary')}><Heart size={14} /><span>小纪念</span></button>
+      <button onClick={() => onTool('anniversary')}><CalendarDays size={14} /><span>小纪念</span></button>
     </div>
     {files.length > 0 && <div className="composer-attachments" aria-label="待发送附件">{files.map((file, index) => <div className="attachment-chip" key={`${file.name}-${index}`}>
       {previews[index] ? <img src={previews[index]} alt="" /> : /\.(xlsx|xls|xlsm|xlsb)$/i.test(file.name) ? <FileSpreadsheet size={16} /> : <FileText size={16} />}
-      <span title={file.name}>{file.name}</span>
+      <span title={attachmentDisplayName(file.name)}>{attachmentDisplayName(file.name)}</span>
       <button type="button" aria-label={`移除 ${file.name}`} disabled={sending} onClick={() => setFiles((current) => current.filter((_, at) => at !== index))}><X size={13} /></button>
     </div>)}</div>}
     <form className="composer" onSubmit={(event) => { event.preventDefault(); void send(); }}>

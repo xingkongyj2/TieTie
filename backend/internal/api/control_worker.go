@@ -89,7 +89,7 @@ func (s *Server) runControl(ctx context.Context, j dbop.ControlJob) (workErr err
 			_ = s.DB.RetryControl(save, j.ID, attempted)
 		}
 	}()
-	space, binding, err := s.conversationContext(ctx, j.SessionID, 0)
+	space, binding, err := s.conversationContext(ctx, j.SessionID, j.CreatedBy)
 	if err != nil {
 		return err
 	}
@@ -133,6 +133,23 @@ func (s *Server) runControl(ctx context.Context, j dbop.ControlJob) (workErr err
 		frame.ReplyMode, frame.RecipientID = input.Context.ReplyMode, input.Context.RecipientID
 	}
 	frame.Results = results
+	if j.NotificationOnly {
+		input, valid := conversation.DecodeInput(j.Origin)
+		if !valid || input.Hidden || input.UserID != j.CreatedBy || len(results) != 1 || results[0].Type != "cancel_reminder" {
+			return errors.New("invalid manual cancellation receipt")
+		}
+		reminder, err := s.DB.GetReminder(ctx, j.SessionID, results[0].ReminderID)
+		if err != nil || reminder == nil {
+			return errors.New("manual cancellation reminder not found")
+		}
+		if reminder.Status != dbop.ReminderCancelled {
+			return errors.New("manual cancellation was not committed")
+		}
+		frame.Reminder = &conversation.Reminder{ID: reminder.ID, Title: reminder.Title, DueAt: reminder.DueAt, Status: reminder.Status, RecipientIDs: reminder.RecipientIDs}
+		if memory, err := s.DB.GetReminderMemory(ctx, *reminder); err == nil && memory != nil && memory.State == "synced" {
+			frame.Results[0].MemoryStatus = "synced"
+		}
+	}
 	text, protocolState, err := s.prepareProtocolInput(ctx, frame)
 	if err != nil {
 		return err
@@ -197,10 +214,35 @@ func (s *Server) executeAction(ctx context.Context, j dbop.ControlJob, input con
 		return result
 	}
 	var memory *dbop.MemoryRecord
+	deleteAnniversary := func(id string) error {
+		row, err := s.DB.DeleteAnniversary(ctx, j.SessionID, j.ID+"/"+a.Key, input.UserID, id)
+		if err != nil {
+			return err
+		}
+		result.Anniversary = &conversation.Anniversary{ID: row.ID, Title: row.Title, Date: row.Date, Kind: row.Kind, Pinned: false}
+		result.DatabaseStatus = "deleted"
+		memory, err = s.DB.GetMemoryRecord(ctx, dbop.MemoryID(j.SessionID, dbop.AnniversaryMemoryPath(row.ID)), j.SessionID)
+		return err
+	}
 	if input.Context.ReplyMode == conversation.SilentReply && a.Type != "save_memory" && a.Type != "read_memory" {
 		return fail(errors.New("silent turn permits memory only"))
 	}
 	switch a.Type {
+	case "delete_anniversary":
+		if err := deleteAnniversary(a.AnniversaryID); err != nil {
+			return fail(err)
+		}
+	case "save_anniversary":
+		row, err := s.DB.ApplyAnniversary(ctx, j.SessionID, j.ID+"/"+a.Key, input.UserID, a.AnniversaryID, a.Title, a.Date, a.AnniversaryKind)
+		if err != nil {
+			return fail(err)
+		}
+		result.Anniversary = &conversation.Anniversary{ID: row.ID, Title: row.Title, Date: row.Date, Kind: row.Kind, Pinned: row.Pinned}
+		result.DatabaseStatus = "saved"
+		memory, err = s.DB.GetMemoryRecord(ctx, dbop.MemoryID(j.SessionID, dbop.AnniversaryMemoryPath(row.ID)), j.SessionID)
+		if err != nil {
+			return fail(err)
+		}
 	case "create_reminder", "cancel_reminder":
 		proposal := dbop.ReminderAction{CreatedBy: input.UserID, RequestKey: j.RequestID + "/" + a.Key}
 		if a.Type == "create_reminder" {
@@ -257,6 +299,9 @@ func (s *Server) executeAction(ctx context.Context, j dbop.ControlJob, input con
 			}
 			path = current.Path
 			generated = current.CreatedAt
+		}
+		if dbop.AnniversaryIDFromMemoryPath(path) != "" {
+			return fail(errors.New("anniversary corrections require save_anniversary"))
 		}
 		body, _ := json.Marshal(map[string]any{"schemaVersion": 1, "kind": "fact", "category": category, "scope": a.Scope, "ownerId": owner, "content": a.Content, "data": a.Data, "sourceUserId": input.UserID, "sourceRequestId": j.RequestID, "generatedAt": generated, "updatedAt": input.Context.Now, "expiresAt": expires, "expired": false})
 		if len(body) > 79*1024 {
@@ -326,13 +371,20 @@ func (s *Server) executeAction(ctx context.Context, j dbop.ControlJob, input con
 		if current == nil || current.Kind != "fact" || strings.HasPrefix(current.Path, "shared/reminders/") || (current.Scope == "self" && current.OwnerID != input.UserID) {
 			return fail(dbop.ErrReminderForbidden)
 		}
-		current.Operation = "delete"
-		current.PendingContent = ""
-		memory, err = s.DB.ApplyMemoryAction(ctx, j.ID+"/"+a.Key, *current)
-		if err != nil {
-			return fail(err)
+		if id := dbop.AnniversaryIDFromMemoryPath(current.Path); id != "" {
+			// Compatibility with agents that still emit the previous memory action.
+			if err := deleteAnniversary(id); err != nil {
+				return fail(err)
+			}
+		} else {
+			current.Operation = "delete"
+			current.PendingContent = ""
+			memory, err = s.DB.ApplyMemoryAction(ctx, j.ID+"/"+a.Key, *current)
+			if err != nil {
+				return fail(err)
+			}
+			result.DatabaseStatus = "deleted"
 		}
-		result.DatabaseStatus = "deleted"
 	default:
 		return fail(errors.New("unsupported control operation"))
 	}

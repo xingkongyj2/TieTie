@@ -63,7 +63,7 @@ func Page(base string, month string, page int, category string, facts []json.Raw
 					continue
 				}
 				user["entries"] = append(user["entries"].([]any), fact)
-				for _, key := range []string{"name", "nickname", "schedule", "diet", "lifePreference", "taboos", "hobbies", "profession", "communicationPreference"} {
+				for _, key := range []string{"name", "gender", "birthday", "bio", "avatar", "nickname", "schedule", "diet", "lifePreference", "taboos", "hobbies", "profession", "communicationPreference"} {
 					if value, ok := fact[key]; ok {
 						user[key] = value
 					}

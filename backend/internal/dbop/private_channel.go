@@ -39,9 +39,18 @@ func (db *DB) CreateInitializedPrivateChannel(ctx context.Context, row PrivateCh
 			return err
 		}
 		if len(records) > 0 {
-			return tx.Create(&records).Error
+			if err := tx.Create(&records).Error; err != nil {
+				return err
+			}
 		}
-		return nil
+		binding, err := bindingForSession(tx, row.SessionID)
+		if err != nil || binding == nil {
+			return err
+		}
+		if err := seedUserProfiles(tx, *binding); err != nil {
+			return err
+		}
+		return seedAssistantStyle(tx, row)
 	})
 }
 

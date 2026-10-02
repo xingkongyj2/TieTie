@@ -18,7 +18,20 @@ import (
 	"tietie/backend/internal/qoder"
 )
 
-// TestToolResultRelay 验证把用户对选择题的应答按云端要求的结构转发出去，并守住鉴权与入参校验。
+// Re-reading cloud history preserves original text and attachment names once.
+func TestRecordMessageRetainsFilesSeparatelyFromMemberText(t *testing.T) {
+	s, _, users, _ := setupConversation(t)
+	ctx := context.Background()
+	msg := qoder.PublicMessage{ID: "evt_uploaded_schedule", Sender: "self", UserID: users[0].ID, Text: "帮我记住张梦妍排班", Files: []string{"排班表(1).xlsx"}}
+	s.recordMessages(ctx, "sess_shared", []qoder.PublicMessage{msg})
+	s.recordMessages(ctx, "sess_shared", []qoder.PublicMessage{msg})
+	rows, err := s.DB.ListMessages(ctx, "sess_shared", 10)
+	if err != nil || len(rows) != 1 || rows[0].Text != msg.Text || len(rows[0].Files) != 1 || rows[0].Files[0] != msg.Files[0] {
+		t.Fatalf("attachment identity or original text lost during persistence: %+v %v", rows, err)
+	}
+}
+
+// TestToolResultRelay verifies authenticated tool-result forwarding.
 func TestToolResultRelay(t *testing.T) {
 	db, err := dbop.Open(filepath.Join(t.TempDir(), "tool-result.db"))
 	if err != nil {

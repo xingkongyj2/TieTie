@@ -76,7 +76,17 @@ func (s *Server) ensurePrivateChannel(ctx context.Context, space string, owner i
 		s.cleanupInitializedSpace(session.ID, store.ID)
 		return nil, fmt.Errorf("private template member unavailable")
 	}
-	docs, err := memoryspace.Render(session.ID, space, memoryspace.Member{ID: a.ID, Name: a.Username}, memoryspace.Member{ID: b.ID, Name: b.Username})
+	aMemory, err := s.memoryMember(ctx, a)
+	if err != nil {
+		s.cleanupInitializedSpace(session.ID, store.ID)
+		return nil, err
+	}
+	bMemory, err := s.memoryMember(ctx, b)
+	if err != nil {
+		s.cleanupInitializedSpace(session.ID, store.ID)
+		return nil, err
+	}
+	docs, err := memoryspace.Render(session.ID, space, aMemory, bMemory)
 	if err != nil {
 		s.cleanupInitializedSpace(session.ID, store.ID)
 		return nil, err

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"tietie/backend/internal/conversation"
 	"tietie/backend/internal/logging"
 
 	"gorm.io/gorm"
@@ -63,6 +64,10 @@ type Reminder struct {
 }
 
 func (Reminder) TableName() string { return "reminders" }
+
+func (r Reminder) hasCompletedDelivery() bool {
+	return r.Status == ReminderDelivered || r.TaskStatus == "completed" || r.TaskCompletedAt != nil || r.DeliveredAt != nil
+}
 
 // ReminderActionReceipt 与提醒的修改在同一事务提交，重放云端历史不会重复建任务。
 type ReminderActionReceipt struct {
@@ -211,7 +216,7 @@ func (db *DB) ListReminders(ctx context.Context, sessionID string) ([]Reminder, 
 }
 
 // ListContextReminders bounds AI prompt size independently of a space's lifetime
-// history: upcoming tasks plus a few recent delivered reminders for cancellation.
+// history: upcoming tasks plus recent delivered reminders for reference.
 func (db *DB) ListContextReminders(ctx context.Context, sessionID string) ([]Reminder, error) {
 	if !db.enabled() {
 		return nil, errNoDB
@@ -242,9 +247,37 @@ func (db *DB) CancelReminder(ctx context.Context, sessionID, id string) (*Remind
 	return reminder, err
 }
 
+// Commit the manual cancellation and its confirmation queue together. Repeated
+// PATCH requests reuse the same job, and no member message is fabricated.
+func (db *DB) CancelReminderAndNotify(ctx context.Context, sessionID, id string, job ControlJob) (*Reminder, error) {
+	if !db.enabled() {
+		return nil, errNoDB
+	}
+	if job.SessionID != sessionID || job.RequestID != "manual_cancel_"+id || job.CreatedBy <= 0 {
+		return nil, ErrReminderInvalid
+	}
+	var reminder *Reminder
+	err := db.gdb.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var err error
+		reminder, err = cancelReminder(tx, sessionID, id)
+		if err != nil {
+			return err
+		}
+		results, err := json.Marshal([]conversation.ActionResult{{Key: "manual_cancel", Type: "cancel_reminder", Status: "succeeded", ReminderID: reminder.ID, DatabaseStatus: "saved", MemoryStatus: "pending", Message: "用户在提醒页面手动取消了此提醒。请简短确认取消成功，不再执行操作。"}})
+		if err != nil {
+			return err
+		}
+		job.ID = ControlID(sessionID, job.RequestID)
+		job.NotificationOnly, job.Results, job.Actions = true, string(results), "[]"
+		job.Status, job.RunAt = "pending", time.Now().UTC()
+		return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&job).Error
+	})
+	return reminder, err
+}
+
 func cancelReminder(tx *gorm.DB, sessionID, id string) (*Reminder, error) {
-	result := tx.Model(&Reminder{}).Where("session_id = ? AND id = ? AND status IN ?", sessionID, id,
-		[]string{ReminderScheduled, ReminderDelivered, ReminderUncertain, ReminderFailed}).Updates(map[string]any{"status": ReminderCancelled, "task_status": gorm.Expr("CASE WHEN task_completed_at IS NOT NULL THEN 'completed' ELSE 'cancelled' END")})
+	result := tx.Model(&Reminder{}).Where("session_id = ? AND id = ? AND status IN ? AND task_status != 'completed' AND task_completed_at IS NULL AND delivered_at IS NULL", sessionID, id,
+		[]string{ReminderScheduled, ReminderUncertain, ReminderFailed}).Updates(map[string]any{"status": ReminderCancelled, "task_status": "cancelled"})
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -280,19 +313,14 @@ func (db *DB) CompleteReminder(ctx context.Context, sessionID, id string, userID
 		if !slices.Contains(reminder.RecipientIDs, userID) {
 			return ErrReminderForbidden
 		}
-		if reminder.Status == ReminderCompleted {
+		if reminder.Status == ReminderCompleted || reminder.Status != ReminderCancelled && reminder.hasCompletedDelivery() {
 			return nil
 		}
-		if reminder.Status != ReminderScheduled && reminder.Status != ReminderDelivered && reminder.Status != ReminderUncertain {
+		if reminder.Status != ReminderScheduled && reminder.Status != ReminderUncertain {
 			return ErrReminderState
 		}
 		result := tx.Model(&Reminder{}).Where("id = ? AND status = ?", id, reminder.Status).
-			Updates(map[string]any{"status": ReminderCompleted, "completed_by": userID, "task_status": func() string {
-				if reminder.DeliveredAt != nil {
-					return "completed"
-				}
-				return "cancelled"
-			}()})
+			Updates(map[string]any{"status": ReminderCompleted, "completed_by": userID, "task_status": "cancelled"})
 		if result.Error != nil {
 			return result.Error
 		}
@@ -301,9 +329,7 @@ func (db *DB) CompleteReminder(ctx context.Context, sessionID, id string, userID
 		}
 		reminder.Status = ReminderCompleted
 		reminder.CompletedBy = &userID
-		if reminder.DeliveredAt == nil {
-			reminder.TaskStatus = "cancelled"
-		}
+		reminder.TaskStatus = "cancelled"
 		return syncReminderMemory(tx, &reminder)
 	})
 	return &reminder, err
@@ -325,7 +351,7 @@ func (db *DB) RestoreCompletedReminder(ctx context.Context, sessionID, id string
 		if !slices.Contains(reminder.RecipientIDs, userID) {
 			return ErrReminderForbidden
 		}
-		if reminder.Status != ReminderCompleted || !reminder.DueAt.After(time.Now()) || reminder.DeliveredAt != nil {
+		if reminder.Status != ReminderCompleted || !reminder.DueAt.After(time.Now()) || reminder.hasCompletedDelivery() {
 			return ErrReminderState
 		}
 		result := tx.Model(&Reminder{}).Where("id = ? AND status = ?", id, ReminderCompleted).
