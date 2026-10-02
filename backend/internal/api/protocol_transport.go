@@ -26,6 +26,25 @@ func (s *Server) prepareProtocolInput(ctx context.Context, e conversation.Envelo
 		return "", nil, err
 	}
 	e.AssistantStyle = &style
+	for _, id := range []int64{binding.UserA, binding.UserB} {
+		profile, err := s.DB.GetUserProfile(ctx, id)
+		if err != nil {
+			return "", nil, err
+		}
+		metrics, err := s.DB.GetCarePreference(ctx, e.SessionID, id)
+		if err != nil {
+			return "", nil, err
+		}
+		e.WeatherProfiles = append(e.WeatherProfiles, conversation.WeatherProfile{UserID: id, Region: profile.Region, Metrics: metrics})
+	}
+	countdowns, cursor, err := s.DB.ListCountdowns(ctx, e.SessionID, "", time.Now())
+	if err != nil {
+		return "", nil, err
+	}
+	e.CountdownBoard = &conversation.CountdownBoard{Items: []conversation.Countdown{}, HasMore: cursor != ""}
+	for _, row := range countdowns {
+		e.CountdownBoard.Items = append(e.CountdownBoard.Items, protocolCountdown(row))
+	}
 	rows, next, err := s.DB.ListAnniversaries(ctx, e.SessionID, "", 16)
 	if err != nil {
 		return "", nil, err
@@ -112,4 +131,8 @@ func (s *Server) acceptProtocolInput(ctx context.Context, state *dbop.Conversati
 		// input; leave the previous cursor so the next send safely repeats context.
 		logging.System().Error("AI 已接受消息，但增量状态保存失败，下轮将重发必要上下文", "event", "protocol.state_failed", "session_id", state.SessionID, "error", err)
 	}
+}
+
+func protocolCountdown(row dbop.Countdown) conversation.Countdown {
+	return conversation.Countdown{ID: row.ID, Title: row.Title, Date: row.Date, Repeat: row.Repeat, Kind: row.Kind, DaysRemaining: row.DaysRemaining, NextDate: row.NextDate, Expired: row.Expired, LeapAdjusted: row.LeapAdjusted}
 }

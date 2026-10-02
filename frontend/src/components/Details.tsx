@@ -4,6 +4,7 @@ import type { AISettings, Member, MemberId, RelationshipState } from '../types';
 import { Avatar } from './Avatar';
 import { DatePicker } from './DatePicker';
 import { PartnerImpression } from './PartnerImpression';
+import { RegionPicker } from './RegionPicker';
 interface Props { sessionId?: string; state: RelationshipState; onBack: () => void; onSaveMember: (member: Member) => Promise<void>; onSaveSettings: (settings: AISettings) => Promise<void>; notify: (text: string) => void }
 
 function AIForm({ state, onSave, notify }: { state: RelationshipState; onSave: Props['onSaveSettings']; notify: Props['notify'] }) {
@@ -44,8 +45,9 @@ const parseBirthday = (shown: string): string | null => {
 };
 
 export function MemberForm({ member, onSave, notify }: { member: Member; onSave: Props['onSaveMember']; notify: Props['notify'] }) {
-  const [draft, setDraft] = useState({ gender: member.gender, hobbies: member.hobbies });
+  const [draft, setDraft] = useState({ gender: member.gender, hobbies: member.hobbies, region: member.region });
   const [birthday, setBirthday] = useState(displayBirthday(member.birthday));
+  const [regionValid, setRegionValid] = useState(true);
   const [hobby, setHobby] = useState('');
   const [busy, setBusy] = useState(false);
   const addHobby = () => {
@@ -56,6 +58,7 @@ export function MemberForm({ member, onSave, notify }: { member: Member; onSave:
     event.preventDefault();
     const iso = parseBirthday(birthday);
     if (iso === null) { notify('生日还差几位，填成 YYYY.MM.DD 再保存。'); return; }
+    if (!regionValid || draft.region && !draft.region.cityCode) { notify('选好城市和区／县，再保存吧。'); return; }
     setBusy(true);
     const hobbies = hobby.trim() && !draft.hobbies.includes(hobby.trim()) && draft.hobbies.length < 8 ? [...draft.hobbies, hobby.trim()] : draft.hobbies;
     try { await onSave({ ...member, ...draft, birthday: iso, hobbies }); setDraft({ ...draft, hobbies }); setHobby(''); notify('小档案收好啦，懂你又多一点点 ♡'); }
@@ -68,6 +71,7 @@ export function MemberForm({ member, onSave, notify }: { member: Member; onSave:
       <div className="field-label" id="member-gender-label">性别</div><div className="gender-options" role="group" aria-labelledby="member-gender-label">{([{ value: 'male', label: '男' }, { value: 'female', label: '女' }] as const).map((option) => <button type="button" key={option.value} className={draft.gender === option.value ? 'selected' : ''} aria-pressed={draft.gender === option.value} onClick={() => setDraft({ ...draft, gender: option.value })}>{option.label}</button>)}</div>
       <label className="field-label spaced-label" htmlFor="birthday">生日 <Cake size={15} /></label><DatePicker id="birthday" value={birthday} onChange={setBirthday} />
     </section>
+    <RegionPicker value={draft.region} onChange={(region) => setDraft((current) => ({ ...current, region }))} onValidityChange={setRegionValid} />
     <section className="form-card"><label className="field-label" htmlFor="hobby-input">喜欢的事物</label><div className="hobby-tags">{draft.hobbies.map((item) => <button key={item} type="button" aria-label={`移除爱好：${item}`} onClick={() => setDraft({ ...draft, hobbies: draft.hobbies.filter((h) => h !== item) })}>{item}<span>×</span></button>)}</div><div className="hobby-input-row"><input id="hobby-input" placeholder="添加爱好" maxLength={20} value={hobby} onChange={(event) => setHobby(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); addHobby(); } }} /><button type="button" disabled={!hobby.trim() || draft.hobbies.length >= 8} aria-label="添加爱好" onClick={addHobby}>添加</button></div></section>
     <div className="form-bottom"><button className="primary-button" type="submit" disabled={busy}>{busy ? '正在收好…' : '保存'}</button></div>
     </fieldset>

@@ -39,15 +39,15 @@
 .mine-edit-button { display: flex; align-items: center; justify-content: center; gap: 3px; min-height: 44px; padding: 0 0 0 8px; border-radius: 8px; background: transparent; color: #5278b4; font-size: 11px; }
 .mine-edit-button:hover:not(:disabled) { color: var(--mine-accent); }
 .mine-profile-card { padding: 24px; border-radius: 26px; background: #f8f9fb; border: 0; }
-.mine-facts { display: grid; grid-template-columns: 1fr 1fr; margin: 0; }
-.mine-facts > div { min-width: 0; }
-.mine-facts > div + div { padding-left: 25px; border-left: 0; }
-.mine-facts dt { color: var(--mine-muted); font-size: 11px; }
-.mine-facts dd { margin: 10px 0 0; color: #34435c; font-size: 15px; font-weight: 550; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.mine-facts dd.is-empty { color: var(--mine-muted); font-size: 14px; font-weight: 400; }
-.mine-interests { margin-top: 16px; }
-.mine-interests h3 { color: var(--mine-muted); font-size: 11px; font-weight: 400; }
-.mine-interest-tags { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 14px 0 0; list-style: none; }
+.mine-facts { display: grid; gap: 16px; margin: 0; }
+.mine-facts > div { display: grid; grid-template-columns: 58px minmax(0, 1fr); align-items: baseline; gap: 16px; min-width: 0; }
+.mine-facts dt { color: var(--mine-muted); font-size: 12px; line-height: 1.7; }
+.mine-facts dd { margin: 0; color: #34435c; font-size: 14px; font-weight: 450; line-height: 1.7; text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.mine-facts .mine-region dd { color: #607694; font-size: 13px; font-weight: 400; }
+.mine-facts dd.is-empty { color: var(--mine-muted); font-size: 13px; font-weight: 400; }
+.mine-interests { margin-top: 20px; padding-top: 18px; border-top: 1px solid #e9edf3; }
+.mine-interests h3 { color: var(--mine-muted); font-size: 12px; font-weight: 400; }
+.mine-interest-tags { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 12px 0 0; list-style: none; }
 .mine-interest-tags li { display: flex; align-items: baseline; gap: 5px; max-width: 100%; padding: 7px 11px; border: 0; border-radius: 11px; background: #eaf0f8; color: #607694; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .mine-interest-tags li > span { flex: none; color: #8aabd6; }
 .mine-add-interests { display: flex; align-items: center; gap: 5px; min-height: 44px; margin-top: 7px; padding: 0; background: transparent; color: var(--mine-accent); font-size: 13px; }
@@ -79,7 +79,7 @@
   .mine-invite { gap: 10px; padding-right: 14px; padding-left: 20px; }
   .mine-invite-copy strong { font-size: 20px; letter-spacing: 1.4px; }
   .mine-profile-card { padding: 20px; }
-  .mine-facts > div + div { padding-left: 18px; }
+  .mine-facts > div { grid-template-columns: 48px minmax(0, 1fr); gap: 12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

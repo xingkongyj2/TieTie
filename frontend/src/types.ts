@@ -1,6 +1,16 @@
 /** Shared domain models: intentionally independent of React and browser APIs. */
 export type MemberId = 'ai' | 'self' | 'partner'
 
+export interface RegionLocation {
+  provinceCode: string
+  province: string
+  cityCode: string
+  city: string
+  districtCode: string
+  district: string
+  codeSystem: string
+}
+
 export interface Member {
   id: MemberId
   /** Verified account identity for a member of the shared cloud space. */
@@ -10,6 +20,7 @@ export interface Member {
   avatar: string
   gender?: 'male' | 'female' | 'unspecified'
   birthday: string
+  region?: RegionLocation
   hobbies: string[]
   bio: string
 }
@@ -72,6 +83,7 @@ export interface AskQuestion {
 export type MessageVisibility = 'shared' | 'private'
 
 export interface Message {
+	weatherCards?: import('./api/care').WeatherCardData[]
   replyMode?: 'silent'
   visibility?: MessageVisibility
   id: string

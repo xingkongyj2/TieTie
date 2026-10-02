@@ -92,6 +92,21 @@ func (s *Server) RunConversationWorker(ctx context.Context) {
 	workers.Add(1)
 	go func() {
 		defer workers.Done()
+		careOptions := options
+		careOptions.BatchSize = 2
+		careOptions.Concurrency = 2
+		careOptions.JobTimeout = 2 * time.Minute
+		worker := scheduler.Worker[dbop.CareMode]{Options: careOptions, Claim: s.DB.ClaimCareModes,
+			Work: func(c context.Context, j dbop.CareMode) error {
+				// Weather APIs have their own bounded budget. They must not hold
+				// a Qoder slot and delay an ordinary due reminder.
+				return s.runCareMode(c, j)
+			}, OnError: report}
+		worker.Run(ctx)
+	}()
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
 		portraitOptions := options
 		portraitOptions.Concurrency = 1
 		portraitOptions.BatchSize = 4

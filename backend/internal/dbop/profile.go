@@ -11,22 +11,29 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"tietie/backend/internal/memoryspace"
+	"tietie/backend/internal/regions"
 )
 
 // Account profiles survive unbinding. Each space receives its own snapshot and
 // corrections; old spaces are never silently rewritten after a new binding.
 type UserProfile struct {
-	UserID    int64     `json:"userId" gorm:"primaryKey"`
-	Gender    string    `json:"gender"`
-	Birthday  string    `json:"birthday"`
-	Hobbies   []string  `json:"hobbies" gorm:"serializer:json"`
-	Bio       string    `json:"bio"`
-	Avatar    string    `json:"avatar"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	UserID             int64            `json:"userId" gorm:"primaryKey"`
+	Gender             string           `json:"gender"`
+	Birthday           string           `json:"birthday"`
+	Hobbies            []string         `json:"hobbies" gorm:"serializer:json"`
+	Bio                string           `json:"bio"`
+	Avatar             string           `json:"avatar"`
+	Region             regions.Location `json:"region" gorm:"embedded;embeddedPrefix:region_"`
+	RegionSourceUserID int64            `json:"regionSourceUserId,omitempty"`
+	UpdatedAt          time.Time        `json:"updatedAt"`
 }
 
 func (p UserProfile) Fields() map[string]any {
-	return map[string]any{"gender": p.Gender, "birthday": p.Birthday, "hobbies": p.Hobbies, "bio": p.Bio, "avatar": p.Avatar}
+	var region any
+	if p.Region.CityCode != "" {
+		region = p.Region
+	}
+	return map[string]any{"gender": p.Gender, "birthday": p.Birthday, "hobbies": p.Hobbies, "bio": p.Bio, "avatar": p.Avatar, "region": region, "regionSourceUserId": p.RegionSourceUserID}
 }
 
 func (db *DB) GetUserProfile(ctx context.Context, userID int64) (*UserProfile, error) {
@@ -50,7 +57,7 @@ func (db *DB) ProfileMemoryRecords(ctx context.Context, session string, userIDs 
 }
 
 // Returns the actual current binding, not a caller-provided session or identity.
-func (db *DB) SaveUserProfile(ctx context.Context, profile UserProfile) (string, error) {
+func (db *DB) SaveUserProfile(ctx context.Context, profile UserProfile, preserveRegion ...bool) (string, error) {
 	session := ""
 	err := db.gdb.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var user User
@@ -61,6 +68,19 @@ func (db *DB) SaveUserProfile(ctx context.Context, profile UserProfile) (string,
 		lookup := tx.Where("user_id=?", profile.UserID).First(&previous).Error
 		if lookup != nil && !errors.Is(lookup, gorm.ErrRecordNotFound) {
 			return lookup
+		}
+		if len(preserveRegion) > 0 && preserveRegion[0] {
+			profile.Region = previous.Region
+		}
+		canonical, err := regions.Resolve(profile.Region.ProvinceCode, profile.Region.CityCode, profile.Region.DistrictCode)
+		if err != nil {
+			return err
+		}
+		profile.Region = canonical
+		if profile.Region != previous.Region {
+			profile.RegionSourceUserID = profile.UserID
+		} else {
+			profile.RegionSourceUserID = previous.RegionSourceUserID
 		}
 		if lookup == nil && reflect.DeepEqual(previous.Fields(), profile.Fields()) {
 			profile.UpdatedAt = previous.UpdatedAt

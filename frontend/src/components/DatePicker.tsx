@@ -2,7 +2,7 @@ import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import './DatePicker.css'
 
-interface Props { id: string; value: string; onChange: (value: string) => void }
+interface Props { id: string; value: string; onChange: (value: string) => void; allowFuture?: boolean; disabled?: boolean; placement?: 'above' | 'below' }
 
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -16,7 +16,7 @@ function mask(raw: string) {
 }
 
 /** 文本框可直接敲数字；右侧图标展开浮动月历，不改变表单高度。 */
-export function DatePicker({ id, value, onChange }: Props) {
+export function DatePicker({ id, value, onChange, allowFuture = false, disabled = false, placement = 'below' }: Props) {
   const root = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
   const [cursor, setCursor] = useState(() => new Date())
@@ -27,6 +27,7 @@ export function DatePicker({ id, value, onChange }: Props) {
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const lead = new Date(year, month, 1).getDay()
   const atThisMonth = year === today.getFullYear() && month === today.getMonth()
+  const lastMonth = !allowFuture && (year > today.getFullYear() || year === today.getFullYear() && month >= today.getMonth())
 
   useEffect(() => {
     if (!open) return
@@ -47,21 +48,21 @@ export function DatePicker({ id, value, onChange }: Props) {
   const pick = (day: number) => { onChange(stamp(year, month, day)); setOpen(false) }
   const shift = (delta: number) => setCursor(new Date(year, month + delta, 1))
 
-  return <div className="date-picker" ref={root} onKeyDown={(event) => {
-    if (event.altKey && event.key === 'ArrowDown') { event.preventDefault(); setOpen(true) }
+  return <div className={`date-picker ${placement === 'above' ? 'opens-above' : ''}`} ref={root} onKeyDown={(event) => {
+    if (!disabled && event.altKey && event.key === 'ArrowDown') { event.preventDefault(); setOpen(true) }
   }}>
     <div className="date-picker-field">
       <input className="line-input" id={id} type="text" inputMode="numeric" autoComplete="off" placeholder="YYYY.MM.DD" maxLength={10}
-        value={value} onChange={(event) => onChange(mask(event.target.value))} />
-      <button type="button" className="date-picker-toggle" aria-label={open ? '收起日历' : '展开日历'} aria-controls={`${id}-calendar`} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        disabled={disabled} value={value} onChange={(event) => onChange(mask(event.target.value))} />
+      <button type="button" className="date-picker-toggle" disabled={disabled} aria-label={open ? '收起日历' : '展开日历'} aria-controls={`${id}-calendar`} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <CalendarDays size={16} aria-hidden="true" />
       </button>
     </div>
     {open && <div id={`${id}-calendar`} className="date-picker-panel" role="group" aria-label={`选择日期，${year} 年 ${month + 1} 月`}>
       <div className="date-picker-head">
-        <button type="button" aria-label="上一个月" onClick={() => shift(-1)}><ChevronLeft size={17} aria-hidden="true" /></button>
+        <button type="button" aria-label="上一个月" disabled={disabled} onClick={() => shift(-1)}><ChevronLeft size={17} aria-hidden="true" /></button>
         <strong>{year} 年 {month + 1} 月</strong>
-        <button type="button" aria-label="下一个月" disabled={atThisMonth} onClick={() => shift(1)}><ChevronRight size={17} aria-hidden="true" /></button>
+        <button type="button" aria-label="下一个月" disabled={disabled || lastMonth} onClick={() => shift(1)}><ChevronRight size={17} aria-hidden="true" /></button>
       </div>
       <div className="date-picker-week">{WEEKDAYS.map((day) => <span key={day}>{day}</span>)}</div>
       <div className="date-picker-days">
@@ -69,7 +70,8 @@ export function DatePicker({ id, value, onChange }: Props) {
         {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
           const isToday = atThisMonth && day === today.getDate()
           const isSelected = !!selected && Number(selected[1]) === year && Number(selected[2]) === month + 1 && Number(selected[3]) === day
-          return <button type="button" key={day} disabled={atThisMonth && day > today.getDate()}
+          const future = year > today.getFullYear() || year === today.getFullYear() && (month > today.getMonth() || atThisMonth && day > today.getDate())
+          return <button type="button" key={day} disabled={disabled || !allowFuture && future}
             className={`${isSelected ? 'is-selected' : ''} ${isToday ? 'is-today' : ''}`} aria-pressed={isSelected} onClick={() => pick(day)}>{day}</button>
         })}
       </div>

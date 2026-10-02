@@ -9,6 +9,13 @@ import (
 
 // Config 是一份只读的运行配置快照。
 type Config struct {
+	QWeatherHost           string
+	QWeatherKey            string
+	QWeatherKeyID          string
+	QWeatherDeveloperID    string
+	QWeatherProjectID      string
+	QWeatherPrivateKeyFile string
+
 	Host                        string        // 监听地址，默认 127.0.0.1
 	Port                        int           // 监听端口，默认 4173（与 Node 版一致）
 	StaticDir                   string        // 前端构建产物目录，默认 ../frontend/dist
@@ -46,6 +53,14 @@ func Load() Config {
 		}
 	}
 	return Config{
+
+		QWeatherHost:           os.Getenv("QWEATHER_API_HOST"),
+		QWeatherKey:            os.Getenv("QWEATHER_API_KEY"),
+		QWeatherKeyID:          os.Getenv("QWEATHER_KEY_ID"),
+		QWeatherDeveloperID:    os.Getenv("QWEATHER_DEVELOPER_ID"),
+		QWeatherProjectID:      os.Getenv("QWEATHER_PROJECT_ID"),
+		QWeatherPrivateKeyFile: os.Getenv("QWEATHER_PRIVATE_KEY_FILE"),
+
 		ConversationProtocolVersion: 2,
 		CloudMemoryEnabled:          os.Getenv("QODER_MEMORY_ENABLED") != "false",
 		LogDir:                      envOr("LOG_DIR", "logs"),

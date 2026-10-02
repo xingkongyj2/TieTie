@@ -99,7 +99,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     if (pending && (history.session.status.toLowerCase() !== pending.status
       || (history.session.status.toLowerCase() === 'idle' && history.idleEventId !== null
         && history.idleEventId !== pending.idleEventId)
-      || history.messages.some((message) => message.sender === 'ai' && !pending.messageIds.has(message.id)))) {
+      || history.messages.some((message) => message.sender === 'ai' && !message.id.startsWith('evt_care_') && !pending.messageIds.has(message.id)))) {
       pendingTurns.current.delete(id)
     }
     const snapshot = current.current
@@ -145,7 +145,8 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       update({ loading: !current.current.loaded, refreshing: full && current.current.loaded })
     }
     try {
-      const history = await qoderApi.getMessages(id, full || changed ? null : current.current.cursor, abort.signal)
+      const lastCare = full || changed ? undefined : current.current.messages.filter((message) => message.id.startsWith('evt_care_')).reduce<Message | undefined>((latest, message) => !latest || (message.createdAt ?? '') > (latest.createdAt ?? '') || message.createdAt === latest.createdAt && message.id > latest.id ? message : latest, undefined);
+      const history = await qoderApi.getMessages(id, full || changed ? null : current.current.cursor, abort.signal, lastCare?.id)
       if (!isCurrent() || current.current.selectedId !== id) return
       applyHistory(id, history, full || changed)
     } catch (error) {

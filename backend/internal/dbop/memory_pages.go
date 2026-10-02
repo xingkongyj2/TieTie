@@ -142,7 +142,11 @@ func syncFactPage(tx *gorm.DB, l MemoryPageLocation, epoch time.Time, unbound bo
 		if err := json.Unmarshal([]byte(f.Content), &doc); err != nil {
 			doc = map[string]any{"content": f.Content}
 		}
-		delete(doc, "kind")
+		// "fact" is transport metadata; birthday/deadline are domain data
+		// needed to reconstruct a countdown from long-term memory.
+		if doc["kind"] == "fact" {
+			delete(doc, "kind")
+		}
 		delete(doc, "schemaVersion")
 		doc["memoryKey"], doc["revision"] = f.ID, f.Revision
 		for key, value := range map[string]any{"ownerId": f.OwnerID, "sourceUserId": f.SourceUserID, "sourceRequestId": f.SourceRequestID, "scope": f.Scope} {

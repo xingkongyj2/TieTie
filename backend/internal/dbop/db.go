@@ -57,6 +57,12 @@ func Open(dsn string) (*DB, error) {
 	if err := gdb.AutoMigrate(
 		&User{},
 		&UserProfile{},
+		&CareMode{},
+		&CareReport{},
+		&CarePreference{},
+		&ProfileActionReceipt{},
+		&Countdown{},
+		&CountdownReceipt{},
 		&Anniversary{},
 		&AnniversaryActionReceipt{},
 		&AnniversaryDeletionReceipt{},
@@ -83,6 +89,9 @@ func Open(dsn string) (*DB, error) {
 		return nil, err
 	}
 	if err := gdb.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_anniversary_one_pin ON anniversaries(session_id) WHERE pinned=1").Error; err != nil {
+		return nil, err
+	}
+	if err := gdb.Exec("CREATE INDEX IF NOT EXISTS idx_reminders_daily ON reminders(session_id, status, due_at)").Error; err != nil {
 		return nil, err
 	}
 	if needsMemoryKindBackfill {

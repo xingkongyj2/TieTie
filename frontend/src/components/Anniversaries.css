@@ -1,19 +1,19 @@
 .anniversaries { display: flex; flex-direction: column; gap: 17px; }
-.anniversary-feature { position: relative; overflow: hidden; padding: 23px; border-radius: 26px; background: linear-gradient(135deg, #eef5ff, #f7f9fd 70%); }
-.anniversary-feature-art { position: absolute; top: 66px; right: -13px; color: #7199d4; opacity: .15; transform: rotate(-10deg); pointer-events: none; }
-.anniversary-origin-circle { position: absolute; top: 63px; right: -22px; width: 120px; height: 120px; border: 1px solid #d7e5fa; border-radius: 50%; pointer-events: none; }
+.anniversary-feature { position: relative; overflow: hidden; padding: 23px; border-radius: 26px; background: var(--date-card-background, linear-gradient(135deg, #eef5ff, #f7f9fd 70%)); }
+.anniversary-feature-art { position: absolute; top: 66px; right: -13px; color: var(--date-card-color, #7199d4); opacity: .15; transform: rotate(var(--date-card-art-rotation, -10deg)); pointer-events: none; }
+.anniversary-origin-circle { position: absolute; top: 63px; right: -22px; width: 120px; height: 120px; border: 1px solid var(--date-card-color, #d7e5fa); opacity: .25; border-radius: 50%; pointer-events: none; }
 .anniversary-feature-top { position: relative; z-index: 1; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.anniversary-calendar { width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; color: #5481cd; background: #fff; }
+.anniversary-calendar { width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; color: var(--date-card-color, #5481cd); background: #ffffffbb; }
 .anniversary-feature-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; color: #6f88b0; padding: 5px 8px; border-radius: 7px; background: #fff9; }
 .anniversary-feature h2 { position: relative; z-index: 1; font-size: 20px; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
 .anniversary-count-label { margin-top: 14px; color: #7b8ca7; font-size: 11px; }
-.anniversary-day-count { display: flex; align-items: baseline; gap: 9px; color: #326ee0; margin: 2px 0 17px; }
+.anniversary-day-count { display: flex; align-items: baseline; gap: 9px; color: var(--date-card-color, #326ee0); margin: 2px 0 17px; }
 .anniversary-day-count strong { font-size: 58px; line-height: 1.15; font-weight: 550; letter-spacing: -2px; font-variant-numeric: tabular-nums; }
 .anniversary-day-count span { color: #8290a5; font-size: 12px; }
 .anniversary-feature-date { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #7586a2; font-variant-numeric: tabular-nums; }
 .anniversary-list { display: flex; flex-direction: column; gap: 17px; }
 .anniversary-pin { min-height: 30px; padding: 7px 9px; }
-.anniversary-pin[aria-pressed=true] { color: #477ad2; background: #dfeaff; }
+.anniversary-pin[aria-pressed=true] { color: var(--date-card-color, #477ad2); background: #ffffffa6; }
 .anniversary-empty { color: #8a96a9; font-size: 12px; line-height: 1.8; padding: 22px 14px; text-align: center; background: #f8f9fb; border-radius: 20px; }
 .anniversary-more { padding: 10px; background: transparent; color: #7189af; font-size: 11px; }
 .anniversary-error { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #a35143; background: #fff2ee; padding: 12px; border-radius: 12px; font-size: 11px; }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"tietie/backend/internal/conversation"
+	"tietie/backend/internal/weather"
 )
 
 // 上游 ID 与 base64 的格式约束（对应 qoder.mjs 顶部正则）。
@@ -108,6 +109,7 @@ type PublicSession struct {
 
 // PublicMessage 是脱敏后的聊天消息。
 type PublicMessage struct {
+	WeatherCards    []weather.Card        `json:"weatherCards,omitempty"`
 	ReplyMode       string                `json:"replyMode,omitempty"`
 	InputSessionID  string                `json:"-"`
 	Visibility      string                `json:"visibility,omitempty"`

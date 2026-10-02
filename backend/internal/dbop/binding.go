@@ -119,6 +119,9 @@ func (db *DB) Unbind(ctx context.Context, userID int64) (*Binding, error) {
 		return nil, err
 	}
 	err = db.gdb.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&CareMode{}).Where("session_id=? AND binding_created_at=?", binding.SessionID, binding.CreatedAt).Updates(map[string]any{"enabled": false, "state": "off", "token": ""}).Error; err != nil {
+			return err
+		}
 		if err := tx.Exec(`INSERT OR IGNORE INTO archived_bindings (user_a, user_b, session_id, created_at) VALUES (?, ?, ?, ?)`,
 			binding.UserA, binding.UserB, binding.SessionID, binding.CreatedAt).Error; err != nil {
 			return err

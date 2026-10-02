@@ -41,6 +41,10 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 
 // getMessages 拉取会话消息（支持 after 游标增量）。
 func (s *Server) getMessages(w http.ResponseWriter, r *http.Request, id string) {
+	if careAfter := r.Header.Get("X-Tietie-Care-After"); careAfter != "" && !qoder.ValidEventID(careAfter) {
+		writeError(w, qoder.NewApiError(400, "invalid_query", "天气关怀游标无效，请刷新会话。"))
+		return
+	}
 	after, apiErr := parseAfterCursor(r, "会话游标无效，请刷新会话。")
 	if apiErr != nil {
 		writeError(w, apiErr)
@@ -79,6 +83,10 @@ func (s *Server) getMessages(w http.ResponseWriter, r *http.Request, id string) 
 	}
 	filterHistoryAfter(result, after)
 	if err := s.appendPrivateHistory(r.Context(), id, auth.UserIDFrom(r.Context()), result); err != nil {
+		writeError(w, err)
+		return
+	}
+	if err := s.appendCareHistory(r.Context(), id, result, r.Header.Get("X-Tietie-Care-After")); err != nil {
 		writeError(w, err)
 		return
 	}

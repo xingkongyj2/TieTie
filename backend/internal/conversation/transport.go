@@ -28,6 +28,8 @@ func ContractHash(visibility string) string {
 }
 
 type TransportState struct {
+	WeatherProfiles  []WeatherProfile           `json:"weatherProfiles,omitempty"`
+	CountdownBoard   *CountdownBoard            `json:"countdownBoard,omitempty"`
 	AnniversaryBoard *AnniversaryBoard          `json:"anniversaryBoard,omitempty"`
 	AssistantStyle   *memoryspace.SpeakingStyle `json:"assistantStyle,omitempty"`
 	Members          []Member                   `json:"members,omitempty"`
@@ -39,6 +41,8 @@ type TransportState struct {
 // deltas caused by database ordering, not actual changes in business data.
 func CompactFrame(e EnvelopeV2, previous *TransportState) (string, TransportState) {
 	next := TransportState{Members: append([]Member(nil), e.Members...), Reminders: append([]Reminder(nil), e.Reminders...), MemoryIndex: append([]MemoryIndex(nil), e.MemoryIndex...)}
+	next.WeatherProfiles = e.WeatherProfiles
+	next.CountdownBoard = e.CountdownBoard
 	next.AssistantStyle = e.AssistantStyle
 	next.AnniversaryBoard = e.AnniversaryBoard
 	// Template paths are already part of the fixed contract/resource instructions.
@@ -64,6 +68,12 @@ func CompactFrame(e EnvelopeV2, previous *TransportState) (string, TransportStat
 		e.Reminders = next.Reminders
 		e.MemoryIndex = next.MemoryIndex
 	} else {
+		if reflect.DeepEqual(next.WeatherProfiles, previous.WeatherProfiles) {
+			e.WeatherProfiles = nil
+		}
+		if reflect.DeepEqual(next.CountdownBoard, previous.CountdownBoard) {
+			e.CountdownBoard = nil
+		}
 		if reflect.DeepEqual(next.AnniversaryBoard, previous.AnniversaryBoard) {
 			e.AnniversaryBoard = nil
 		}

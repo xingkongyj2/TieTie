@@ -95,3 +95,19 @@ func TestCompactSystemEventsAreHiddenAndMemberTextIsLiteral(t *testing.T) {
 		t.Fatal("bare noncompact frame accepted")
 	}
 }
+
+func TestCompactPronounsFollowEachMemberAfterSystemReceipt(t *testing.T) {
+	ctx := testContext()
+	first := NewEnvelopeV2(ctx, "user_message", "first")
+	_, state := CompactFrame(first, nil)
+	ctx.AuthorID = ctx.Members[1].ID
+	for _, kind := range []string{"action_result", "user_message"} {
+		e := NewEnvelopeV2(ctx, kind, "second")
+		raw, next := CompactFrame(e, &state)
+		got := frameBody(t, raw)
+		if got.Pronouns == nil || got.Pronouns.SelfUserID != ctx.Members[1].ID || got.Pronouns.PartnerUserID != ctx.Members[0].ID {
+			t.Fatal("stale pronoun mapping", raw)
+		}
+		state = next
+	}
+}

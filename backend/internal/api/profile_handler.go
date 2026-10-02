@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"tietie/backend/internal/dbop"
 	"tietie/backend/internal/memoryspace"
 	"tietie/backend/internal/qoder"
+	"tietie/backend/internal/regions"
 )
 
 func (s *Server) handleProfiles(w http.ResponseWriter, r *http.Request) {
@@ -47,11 +49,12 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Gender   string   `json:"gender"`
-		Birthday string   `json:"birthday"`
-		Hobbies  []string `json:"hobbies"`
-		Bio      string   `json:"bio"`
-		Avatar   string   `json:"avatar"`
+		Gender   string          `json:"gender"`
+		Birthday string          `json:"birthday"`
+		Hobbies  []string        `json:"hobbies"`
+		Bio      string          `json:"bio"`
+		Avatar   string          `json:"avatar"`
+		Region   json.RawMessage `json:"region"`
 	}
 	if err := decodeJSONBody(r, &body, 8192); err != nil {
 		writeError(w, err)
@@ -84,7 +87,18 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	profile := dbop.UserProfile{UserID: auth.UserIDFrom(r.Context()), Gender: body.Gender, Birthday: body.Birthday, Hobbies: hobbies, Bio: strings.TrimSpace(body.Bio), Avatar: body.Avatar}
-	session, err := s.DB.SaveUserProfile(r.Context(), profile)
+	if len(body.Region) > 0 && string(body.Region) != "null" {
+		var selected regions.Location
+		err := json.Unmarshal(body.Region, &selected)
+		if err == nil {
+			profile.Region, err = regions.Resolve(selected.ProvinceCode, selected.CityCode, selected.DistrictCode)
+		}
+		if err != nil {
+			writeError(w, qoder.NewApiError(400, "invalid_region", "请选择有效的省份、城市和区／县。"))
+			return
+		}
+	}
+	session, err := s.DB.SaveUserProfile(r.Context(), profile, len(body.Region) == 0)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -99,6 +113,14 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 		status = "pending"
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"profile": saved, "memoryStatus": status})
+}
+
+func (s *Server) handleRegions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeMethodNotAllowed(w)
+		return
+	}
+	writeJSON(w, http.StatusOK, regions.Catalog())
 }
 
 func (s *Server) memoryMember(ctx context.Context, user *dbop.User) (memoryspace.Member, error) {

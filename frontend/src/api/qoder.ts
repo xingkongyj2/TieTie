@@ -207,9 +207,9 @@ export const qoderApi = {
   updateReminder(id: string, reminderId: string, status: 'completed' | 'scheduled' | 'cancelled'): Promise<{ reminder: CloudReminder }> {
     return request(`${remindersPath(id)}/${encodeURIComponent(reminderId)}`, { method: 'PATCH', body: { status } })
   },
-  getMessages(id: string, after?: string | null, signal?: AbortSignal): Promise<CloudHistory> {
+  getMessages(id: string, after?: string | null, signal?: AbortSignal, careAfter?: string): Promise<CloudHistory> {
     const query = after ? `?${new URLSearchParams({ after })}` : ''
-    return request(`${sessionPath(id)}${query}`, { signal })
+    return request(`${sessionPath(id)}${query}`, { signal, headers: careAfter ? { 'X-Tietie-Care-After': careAfter } : undefined })
   },
   async sendMessage(id: string, text: string, files: File[] = [], visibility: 'shared' | 'private' = 'shared'): Promise<{ messages: Message[]; replyMode?: 'silent' }> {
     // Never tie a submitted turn to the current view's abort signal.

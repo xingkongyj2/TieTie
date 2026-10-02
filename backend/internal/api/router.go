@@ -14,6 +14,7 @@ import (
 	"tietie/backend/internal/config"
 	"tietie/backend/internal/dbop"
 	"tietie/backend/internal/qoder"
+	"tietie/backend/internal/weather"
 )
 
 // Server 聚合全部 handler 依赖。
@@ -22,6 +23,8 @@ type Server struct {
 	Qoder        *qoder.Client
 	Auth         *auth.Service
 	DB           *dbop.DB // 可为 nil：未配置数据库时账号类接口返回 503
+	Weather      weather.Provider
+	weatherOnce  sync.Once
 	locksMu      sync.Mutex
 	sessionLocks map[string]*conversationLock
 }
@@ -42,12 +45,16 @@ func NewRouter(s *Server) http.Handler {
 	mux.Handle("/api/account/me", authed(s.handleMe))
 	mux.Handle("/api/account/profiles", authed(s.handleProfiles))
 	mux.Handle("/api/account/profile", authed(s.handleProfile))
+	mux.Handle("/api/account/regions", authed(s.handleRegions))
 	mux.Handle("/api/account/bind", authed(s.handleBind))
 	mux.Handle("/api/account/unbind", authed(s.handleUnbind))
 	mux.Handle("/api/qoder/sessions/{id}/messages", authed(s.handleMessages))
 	mux.Handle("GET /api/qoder/sessions/{id}/memories", authed(s.handleMemoryIndex))
 	mux.Handle("/api/qoder/sessions/{id}/partner-impression", authed(s.handlePartnerImpression))
 	mux.Handle("/api/qoder/sessions/{id}/assistant-settings", authed(s.handleAssistantSettings))
+	mux.Handle("/api/qoder/sessions/{id}/countdowns", authed(s.handleCountdowns))
+	mux.Handle("/api/qoder/sessions/{id}/care-settings", authed(s.handleCareSettings))
+	mux.Handle("/api/qoder/sessions/{id}/care-preview", authed(s.handleCarePreview))
 	mux.Handle("/api/qoder/sessions/{id}/anniversaries", authed(s.handleAnniversaries))
 	mux.Handle("/api/qoder/sessions/{id}/anniversaries/{anniversaryId}", authed(s.handleAnniversaryPin))
 	mux.Handle("/api/qoder/sessions/{id}/tool-result", authed(s.handleToolResult))

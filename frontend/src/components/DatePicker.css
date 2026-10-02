@@ -4,6 +4,7 @@
 .date-picker-toggle { position: absolute; top: 50%; right: 6px; display: grid; place-items: center; width: 34px; height: 34px; transform: translateY(-50%); border-radius: 10px; color: #a2aec6; background: transparent; }
 .date-picker-toggle:hover:not(:disabled) { color: var(--blue); background: var(--blue-pale); }
 .date-picker-panel { position: absolute; top: calc(100% + 8px); left: 0; z-index: 4; width: 100%; padding: 12px; border-radius: 17px; background: #fff; box-shadow: 0 12px 30px #34425826; animation: date-picker-in .16s ease both; }
+.date-picker.opens-above .date-picker-panel { top: auto; bottom: calc(100% + 8px); }
 .date-picker-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 9px; color: #34435c; font-size: 12px; font-weight: 600; }
 .date-picker-head button { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; color: #6d7c95; background: #f3f6fb; }
 .date-picker-head button:hover:not(:disabled) { color: var(--blue); background: var(--blue-pale); }

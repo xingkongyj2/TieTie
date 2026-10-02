@@ -1,0 +1,9 @@
+.region-selects { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.region-select { position: relative; min-width: 0; }
+.region-district { grid-column: 1 / -1; }
+.region-select select { appearance: none; width: 100%; min-height: 46px; padding: 0 30px 0 12px; border: 0; border-radius: 13px; background: #fff; color: #34435c; font-size: 14px; text-overflow: ellipsis; }
+.region-select select:focus-visible { outline: 2px solid var(--blue); outline-offset: 0; }
+.region-select select:disabled { color: #9aa4b4; opacity: .75; }
+.region-select > svg { position: absolute; right: 10px; top: 16px; color: #8f9cba; pointer-events: none; }
+.region-retry { padding: 10px 0 0; color: var(--blue); font-size: 12px; background: none; }
+@media (max-width: 500px) { .region-select select { font-size: 16px; } }

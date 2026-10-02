@@ -109,7 +109,7 @@ func Render(session, space string, a, b Member) ([]Document, error) {
 					if i != 0 {
 						profile = b.Profile
 					}
-					for _, key := range []string{"gender", "birthday", "hobbies", "bio", "avatar", "profileSource", "profileUpdatedAt"} {
+					for _, key := range []string{"gender", "birthday", "hobbies", "bio", "avatar", "region", "profileSource", "profileUpdatedAt"} {
 						if value, ok := profile[key]; ok {
 							user[key] = value
 						}

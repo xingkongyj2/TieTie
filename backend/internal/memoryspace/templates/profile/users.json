@@ -9,6 +9,7 @@
       "name": "{{user_a_name}}",
       "gender": "unspecified",
       "birthday": "",
+      "region": null,
       "bio": "",
       "avatar": "",
       "nickname": "{{user_a_nickname}}",
@@ -27,6 +28,7 @@
       "name": "{{user_b_name}}",
       "gender": "unspecified",
       "birthday": "",
+      "region": null,
       "bio": "",
       "avatar": "",
       "nickname": "{{user_b_nickname}}",
@@ -41,6 +43,7 @@
     }
   ],
   "maintenance": [
+    "region 保存本人小档案中选择的省份、城市、区／县及代码体系；更正或清空替换当前值，历史保留。没有区县层级时 district/districtCode 为空。天气服务需另行映射供应商地区 ID，不猜测当前位置。",
     "A/B 按真实 userId 升序固定；自己/对方相对于当前发言者，不可交换档案。",
     "本人陈述及角色页补充均是已确认的个人信息与偏好；保留 sourceUserId，无需本人再次核实，明确更正优先。",
     "每位用户的结构化字段与 entries 保存同一主体的事实，未知项不猜测。共享事实放 sharedEntries。",

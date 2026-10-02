@@ -10,6 +10,7 @@ import (
 	"tietie/backend/internal/logging"
 	"tietie/backend/internal/memoryspace"
 	"tietie/backend/internal/qoder"
+	"tietie/backend/internal/regions"
 	"time"
 )
 
@@ -228,6 +229,53 @@ func (s *Server) executeAction(ctx context.Context, j dbop.ControlJob, input con
 		return fail(errors.New("silent turn permits memory only"))
 	}
 	switch a.Type {
+	case "set_region":
+		region := regions.Location{}
+		var err error
+		if !a.Region.Clear {
+			region, err = regions.ResolveNames(a.Region.Province, a.Region.City, a.Region.District)
+			if err != nil {
+				return fail(err)
+			}
+		}
+		row, err := s.DB.ApplyProfileRegion(ctx, j.SessionID, j.ID+"/"+a.Key, input.UserID, a.TargetUserID, j.BindingCreatedAt, region)
+		if err != nil {
+			return fail(err)
+		}
+		result.TargetUserID, result.Region, result.DatabaseStatus = a.TargetUserID, &row.Region, "saved"
+		memory, err = s.DB.GetMemoryRecord(ctx, dbop.MemoryID(j.SessionID, memoryspace.FactPath("profile", "self", a.TargetUserID, "account_profile")), j.SessionID)
+		if err != nil {
+			return fail(err)
+		}
+	case "set_weather_metrics":
+		row, err := s.DB.ApplyCarePreference(ctx, j.SessionID, j.ID+"/"+a.Key, input.UserID, a.TargetUserID, j.BindingCreatedAt, a.Metrics)
+		if err != nil {
+			return fail(err)
+		}
+		result.TargetUserID, result.Metrics, result.DatabaseStatus = a.TargetUserID, row.Metrics, "saved"
+		memory, err = s.DB.GetMemoryRecord(ctx, dbop.MemoryID(j.SessionID, dbop.CarePreferenceMemoryPath(a.TargetUserID)), j.SessionID)
+		if err != nil {
+			return fail(err)
+		}
+	case "save_countdown", "delete_countdown":
+		var row *dbop.Countdown
+		var err error
+		if a.Type == "save_countdown" {
+			row, err = s.DB.ApplyCountdown(ctx, j.SessionID, j.ID+"/"+a.Key, input.UserID, j.BindingCreatedAt, a.CountdownID, a.Title, a.Date, a.CountdownRepeat, a.CountdownKind, time.Now())
+			result.DatabaseStatus = "saved"
+		} else {
+			row, err = s.DB.DeleteCountdown(ctx, j.SessionID, j.ID+"/"+a.Key, input.UserID, j.BindingCreatedAt, a.CountdownID)
+			result.DatabaseStatus = "deleted"
+		}
+		if err != nil {
+			return fail(err)
+		}
+		snapshot := protocolCountdown(*row)
+		result.Countdown = &snapshot
+		memory, err = s.DB.GetMemoryRecord(ctx, dbop.MemoryID(j.SessionID, dbop.CountdownMemoryPath(row.ID)), j.SessionID)
+		if err != nil {
+			return fail(err)
+		}
 	case "delete_anniversary":
 		if err := deleteAnniversary(a.AnniversaryID); err != nil {
 			return fail(err)

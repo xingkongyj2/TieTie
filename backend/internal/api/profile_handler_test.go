@@ -8,7 +8,86 @@ import (
 
 	"tietie/backend/internal/dbop"
 	"tietie/backend/internal/memoryspace"
+	"tietie/backend/internal/regions"
 )
+
+func TestProfileRegionCanonicalizationCorrectionAndClear(t *testing.T) {
+	s, _, _, users, call := setupV2(t)
+	ctx := context.Background()
+	if res := call(0, "GET", "/api/account/regions", nil); res.Code != 200 || !strings.Contains(res.Body.String(), "仙桃市") {
+		t.Fatal("region catalog unavailable", res.Body.String())
+	}
+	body := map[string]any{"gender": "female", "birthday": "1998-11-16", "hobbies": []string{"画画"}, "region": map[string]string{"provinceCode": "420000", "cityCode": "420100", "districtCode": "420111", "district": "伪造区县", "province": "伪造省份", "city": "伪造城市"}}
+	if res := call(0, "PUT", "/api/account/profile", body); res.Code != 200 {
+		t.Fatal(res.Body.String())
+	}
+	check := func(want string) {
+		t.Helper()
+		profile, err := s.DB.GetUserProfile(ctx, users[0].ID)
+		if err != nil || profile.Region.CityCode != want {
+			t.Fatal(profile, err)
+		}
+		root, err := s.DB.GetMemoryRecord(ctx, dbop.MemoryID("sess_shared", "profile/users.json"), "sess_shared")
+		if err != nil || root == nil {
+			t.Fatal(root, err)
+		}
+		var doc struct {
+			Users []struct {
+				UserID int64             `json:"userId"`
+				Region *regions.Location `json:"region"`
+			}
+		}
+		if err := json.Unmarshal([]byte(root.Content), &doc); err != nil {
+			t.Fatal(err)
+		}
+		for _, user := range doc.Users {
+			if user.UserID != users[0].ID {
+				if user.Region != nil {
+					t.Fatal("partner region overwritten")
+				}
+				continue
+			}
+			if want == "" {
+				if user.Region != nil {
+					t.Fatal("cleared region remains in memory", user)
+				}
+			} else if user.Region == nil || user.Region.CityCode != want || *user.Region != profile.Region {
+				t.Fatal("memory region differs from database", user)
+			}
+		}
+	}
+	check("420100")
+	canonical, _ := s.DB.GetUserProfile(ctx, users[0].ID)
+	if canonical.Region.Province != "湖北省" || canonical.Region.City != "武汉市" || canonical.Region.District != "洪山区" {
+		t.Fatal("client labels were trusted", canonical.Region)
+	}
+	for _, invalid := range []any{map[string]string{"provinceCode": "420000", "cityCode": "330100"}, map[string]string{"provinceCode": "420000", "cityCode": "420100", "districtCode": "330106"}, map[string]string{"provinceCode": "", "cityCode": "", "districtCode": "420111"}, map[string]string{"provinceCode": "420000"}, "武汉", map[string]string{"provinceCode": "unknown", "cityCode": "unknown"}} {
+		body["region"] = invalid
+		if res := call(0, "PUT", "/api/account/profile", body); res.Code != 400 {
+			t.Fatal("invalid region accepted", invalid, res.Code)
+		}
+		check("420100")
+	}
+	delete(body, "region")
+	if res := call(0, "PUT", "/api/account/profile", body); res.Code != 200 {
+		t.Fatal(res.Body.String())
+	}
+	check("420100") // older clients and avatar edits must not clear the region.
+	body["region"] = map[string]string{"provinceCode": "330000", "cityCode": "330100", "districtCode": "330106"}
+	if res := call(0, "PUT", "/api/account/profile", body); res.Code != 200 {
+		t.Fatal(res.Body.String())
+	}
+	check("330100")
+	body["region"] = nil
+	if res := call(0, "PUT", "/api/account/profile", body); res.Code != 200 {
+		t.Fatal(res.Body.String())
+	}
+	check("")
+	other, _ := s.DB.GetUserProfile(ctx, users[1].ID)
+	if other.Region.CityCode != "" {
+		t.Fatal("partner database region overwritten")
+	}
+}
 
 func TestProfileSaveCorrectsMemoryAndChatWaitsForCurrentProfile(t *testing.T) {
 	s, cloud, memory, users, call := setupV2(t)

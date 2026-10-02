@@ -9,7 +9,20 @@ import (
 	"time"
 )
 
+type RegionUpdate struct {
+	Province string `json:"province"`
+	City     string `json:"city"`
+	District string `json:"district"`
+	Clear    bool   `json:"clear,omitempty"`
+}
+
 type Action struct {
+	TargetUserID    int64             `json:"targetUserId,omitempty"`
+	Region          *RegionUpdate     `json:"region,omitempty"`
+	Metrics         []string          `json:"metrics,omitempty"`
+	CountdownID     string            `json:"countdownId,omitempty"`
+	CountdownRepeat string            `json:"repeat,omitempty"`
+	CountdownKind   string            `json:"countdownKind,omitempty"`
 	Date            string            `json:"date,omitempty"`
 	AnniversaryID   string            `json:"anniversaryId,omitempty"`
 	AnniversaryKind string            `json:"anniversaryKind,omitempty"`

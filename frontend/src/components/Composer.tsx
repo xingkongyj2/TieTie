@@ -1,4 +1,4 @@
-import { ArrowUp, AtSign, Bell, CalendarDays, FileSpreadsheet, FileText, LockKeyhole, Mic, Paperclip, X } from 'lucide-react';
+import { ArrowUp, AtSign, Bell, CalendarDays, FileSpreadsheet, FileText, LockKeyhole, Mic, Paperclip, Square, X } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { MentionText } from './MentionText';
 import type { Member } from '../types';
@@ -172,11 +172,13 @@ export function Composer({ members, sending, disabled = false, placeholder = '�
         <button type="button" className={`composer-private-button ${!toPartner && visibility === 'private' ? 'is-selected' : ''}`} disabled={sending || toPartner} aria-pressed={!toPartner && visibility === 'private'} aria-describedby={privacyHintId} onClick={() => setVisibility((current) => current === 'private' ? 'shared' : 'private')}><LockKeyhole size={13} /><span>仅自己可见</span></button>
         <span id={privacyHintId} role="tooltip" className="composer-private-tooltip">{toPartner ? '发给对方的消息双方可见。' : '消息仅自己和 AI 可见，提醒仍会提醒双方。'}</span>
       </div>
-      <button type="button" className={`voice-button ${listening ? 'is-listening' : ''}`} aria-label={listening ? '停止语音输入' : '语音输入'} aria-pressed={listening} title={listening ? '停止语音输入' : '语音转文字'} disabled={sending} onClick={toggleVoice}><Mic size={19} strokeWidth={2} /></button>
+      <div className="voice-control">
+        <button type="button" className={`voice-button ${listening ? 'is-listening' : ''}`} aria-label={listening ? '停止语音输入' : '语音输入'} aria-pressed={listening} title={listening ? '停止语音输入' : '语音转文字'} disabled={sending} onClick={toggleVoice}>{listening ? <Square size={13} fill="currentColor" strokeWidth={0} aria-hidden="true" /> : <Mic size={19} strokeWidth={2} aria-hidden="true" />}</button>
+        {listening && <div className="voice-status" role="status"><div className="voice-wave" aria-hidden="true"><i /><i /><i /><i /><i /></div><div className="voice-status-copy"><strong>正在听你说话</strong><span>说完后点语音按钮结束</span></div></div>}
+      </div>
       <button type="submit" className="send-button" aria-label="发送消息" disabled={(!text.trim() && !files.length) || sending || disabled}>{sending ? <span className="spinner" /> : <ArrowUp size={22} strokeWidth={2.2} />}</button>
       </div>
     </form>
-    {listening && <div className="voice-status" role="status"><span />正在听你说话，点麦克风结束</div>}
     {!toPartner && <p className="composer-caption"><span>✧</span> 默认和贴贴聊，输入 @ 直接告诉对方 <span>✧</span></p>}
   </footer>;
 }

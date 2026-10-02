@@ -38,6 +38,7 @@ function messageDayLabel(createdAt?: string) {
 }
 
 export default function App() {
+  const [editProfileInitially, setEditProfileInitially] = useState(false);
   useViewportHeight();
   const account = useAccount();
   const { state, error, reload, saveMember, saveSettings } = useRelationship(account.account?.user.userId, account.account?.binding?.partnerId, account.account?.binding?.sessionId);
@@ -149,10 +150,10 @@ export default function App() {
       <Composer members={sharedMembers} key={chat.selectedId ?? 'no-session'} sending={chat.submitting} disabled={!chat.canSend} placeholder={chat.awaitingAsk ? '先回答上面那道选择题…' : chat.busy ? (chat.silent ? '消息已发给对方，可以先写下一句…' : '伙伴正在回复，可以先写下一句…') : '聊聊日常，或记下一个共同提醒…'} onSend={sendMessage} onTool={setTool} onError={notify} />
       </> : <BindPage code={account.account.user.code} onBind={account.bind} notify={notify} embedded />}
     </div>
-    {view === 'things' && <LittleThings state={state} anniversaries={anniversaries} reminderState={sharedState} onSaveSettings={saveSettings} onToggle={toggleReminder} onCancel={cancelReminder} remindersLoading={chat.loading} reminderNotice={!account.account.binding ? '绑定两人空间后，可以一起安排和查看提醒。' : chat.remindersError || chat.error} onReloadReminders={account.account.binding ? chat.reload : undefined} notify={notify} />}
-    {view === 'mine' && <Mine state={state} username={account.account.user.username} code={account.account.user.code} hasSession={!!account.account.binding} onSaveMember={saveMember} onLogout={account.logout} onExitSession={account.unbind} notify={notify} />}
+    {view === 'things' && <LittleThings sessionId={account.account.binding?.sessionId} selfId={selfId} onEditRegion={() => { setEditProfileInitially(true); setView('mine'); }} onBind={() => setView('we')} state={state} anniversaries={anniversaries} reminderState={sharedState} onSaveSettings={saveSettings} onToggle={toggleReminder} onCancel={cancelReminder} remindersLoading={chat.loading} reminderNotice={!account.account.binding ? '绑定两人空间后，可以一起安排和查看提醒。' : chat.remindersError || chat.error} onReloadReminders={account.account.binding ? chat.reload : undefined} notify={notify} />}
+    {view === 'mine' && <Mine editProfileInitially={editProfileInitially} state={state} username={account.account.user.username} code={account.account.user.code} hasSession={!!account.account.binding} onSaveMember={saveMember} onLogout={account.logout} onExitSession={account.unbind} notify={notify} />}
     {view === 'details' && <Details state={sharedState} sessionId={account.account.binding?.sessionId} onBack={() => setView('we')} onSaveMember={saveMember} onSaveSettings={saveSettings} notify={notify} />}
-    {view !== 'details' && <BottomNav view={view} onChange={setView} />}
+    {view !== 'details' && <BottomNav view={view} onChange={(next) => { setEditProfileInitially(false); setView(next); }} />}
     {tool && <Tools tool={tool} state={sharedState} anniversaries={anniversaries} onClose={() => setTool(null)} onAdd={addReminder} notify={notify} />}
     {previewImage && <ImageViewer src={previewImage.src} alt={previewImage.alt} onClose={() => setPreviewImage(null)} />}
     {toast && <div className="toast" role="status"><Sparkles size={16} />{toast}</div>}

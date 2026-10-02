@@ -6,6 +6,7 @@ import { MentionText } from './MentionText';
 import { MarkdownMessage } from './MarkdownMessage';
 import { isVisibleChatMessage } from '../lib/chatMessages';
 import { attachmentDisplayName } from '../lib/attachments';
+import { WeatherCard } from './WeatherCard';
 
 interface Props { message: Message; members: Member[]; onError: (text: string) => void; onOpenImage: (src: string, alt: string) => void; onAnswer: (toolUseId: string, text: string) => Promise<unknown> }
 
@@ -21,7 +22,7 @@ export function ChatMessage({ message, members, onError, onOpenImage, onAnswer }
     <Avatar member={{ ...member, name }} showAILabel={message.sender === 'ai'} />
     <div className="message-content">
       <div className="message-meta"><span>{name}</span>{message.visibility === 'private' && <span className="message-private-label"><LockKeyhole size={10} aria-hidden="true" />仅自己可见</span>}<time dateTime={message.createdAt}>{message.createdAt && !Number.isNaN(Date.parse(message.createdAt)) ? new Date(message.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }) : message.time}</time></div>
-      {ask.length ? <AskCard message={message} questions={ask} onAnswer={onAnswer} onError={onError} /> : <div className={`message-bubble ${isReminder ? 'has-reminder-type' : ''}`}>
+      {message.weatherCards?.length ? <div className="message-bubble has-weather-card">{message.weatherCards.map((card, index) => <WeatherCard key={index} card={card} />)}</div> : ask.length ? <AskCard message={message} questions={ask} onAnswer={onAnswer} onError={onError} /> : <div className={`message-bubble ${isReminder ? 'has-reminder-type' : ''}`}>
         {isReminder && <span className="message-type-badge"><Bell size={12} aria-hidden="true" />到点提醒</span>}
         {message.sender === 'ai' ? <MarkdownMessage text={message.text} memberNames={members.filter((m) => m.id !== 'ai').map((m) => m.name)} onOpenImage={onOpenImage} /> : message.text && <div className="message-text"><MentionText text={message.text} names={members.filter((m) => m.id !== 'ai').map((m) => m.name)} /></div>}
         {message.files?.length ? <div className="message-files" role="list" aria-label="消息附件">{message.files.map((file, index) => <span className="message-file" role="listitem" key={`${file}-${index}`}>

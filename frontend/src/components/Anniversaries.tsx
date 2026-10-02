@@ -1,7 +1,8 @@
 import { BriefcaseBusiness, CakeSlice, CalendarDays, Clock3, Flag, Flower2, Gem, Gift, GraduationCap, Hand, House, Leaf, Moon, Mountain, Music, PartyPopper, PawPrint, Pin, RefreshCw, Sparkles, Star, Trophy, UsersRound } from 'lucide-react'
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import type { Anniversary } from '../api/anniversaries'
 import type { AnniversaryState } from '../hooks/useAnniversaries'
+import { recordCardStyle, recordCardStyles } from '../lib/cardAppearance'
 import './Anniversaries.css'
 
 const kindLabels: Record<Anniversary['kind'], string> = { together: '在一起', birthday: '生日', wedding: '结婚', first_meet: '初次相遇', other: '纪念日' }
@@ -34,7 +35,7 @@ const shanghaiDate = (value: Date) => { const parts = new Intl.DateTimeFormat('e
 const stamp = (date: string) => { const [year, month, day] = date.split('-').map(Number); const value = new Date(0); value.setUTCFullYear(year, month - 1, day); value.setUTCHours(0, 0, 0, 0); return value.getTime() }
 function elapsed(date: string) { return Math.round((stamp(shanghaiDate(new Date())) - stamp(date)) / 86400000) }
 
-function Hero({ item, spaceCreatedAt, onPin, pinDisabled = false, pinning = false, originPinned = true }: { item: Anniversary | null; spaceCreatedAt: string; onPin?: () => void; pinDisabled?: boolean; pinning?: boolean; originPinned?: boolean }) {
+function Hero({ item, spaceCreatedAt, style, onPin, pinDisabled = false, pinning = false, originPinned = true }: { item: Anniversary | null; spaceCreatedAt: string; style?: CSSProperties; onPin?: () => void; pinDisabled?: boolean; pinning?: boolean; originPinned?: boolean }) {
   const created = new Date(spaceCreatedAt)
   const valid = !Number.isNaN(created.getTime())
   const date = item?.date || (valid ? shanghaiDate(created) : '')
@@ -42,7 +43,7 @@ function Hero({ item, spaceCreatedAt, onPin, pinDisabled = false, pinning = fals
   const days = elapsed(date)
   const Graphic = anniversaryGraphic(item)
   const pinned = item ? item.pinned : originPinned
-  return <article className={`anniversary-feature ${pinned ? 'is-pinned' : ''}`} aria-label={item ? `${onPin ? '纪念日' : '首页展示'}：${item.title}` : '专属空间开始'}>
+  return <article className={`anniversary-feature ${pinned ? 'is-pinned' : ''}`} style={style ?? recordCardStyle(item?.id || `origin:${spaceCreatedAt}`, item ? undefined : 'blue')} aria-label={item ? `${onPin ? '纪念日' : '首页展示'}：${item.title}` : '专属空间开始'}>
     {item ? <Graphic className="anniversary-feature-art" size={132} strokeWidth={0.8} aria-hidden="true" /> : <span className="anniversary-origin-circle" aria-hidden="true" />}
     <div className="anniversary-feature-top"><span className="anniversary-calendar"><Graphic size={22} aria-hidden="true" /></span>{onPin ? <button type="button" className="anniversary-feature-tag anniversary-pin" aria-label={item ? `${pinned ? '取消置顶' : '置顶'}：${item.title}` : '置顶：专属空间开始'} aria-pressed={pinned} disabled={pinDisabled || (!item && pinned)} onClick={onPin}><Pin size={12} aria-hidden="true" />{pinning ? '保存中' : pinned ? '已置顶' : '置顶'}</button> : <span className="anniversary-feature-tag">{pinned ? <><Pin size={12} aria-hidden="true" />已置顶</> : item ? kindLabels[item.kind] : '空间起点'}</span>}</div>
     <h2>{item?.title || '专属空间开始'}</h2>
@@ -69,11 +70,12 @@ export function Anniversaries({ state, compact = false, notify }: { state: Anniv
     finally { setBusy(null) }
   }
   const items = [...new Map([...(state.featured ? [state.featured] : []), ...state.anniversaries].map(item => [item.id, { ...item, pinned: item.id === state.featured?.id }])).values()].sort((a, b) => Number(b.pinned) - Number(a.pinned) || (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0) || b.id.localeCompare(a.id))
+  const styles = recordCardStyles(items, ['blue'])
   const originCard = <Hero key="origin" item={null} spaceCreatedAt={state.spaceCreatedAt} originPinned={!state.featured} onPin={() => void pinOrigin()} pinDisabled={busy !== null} pinning={busy === 'origin'} />
-  const cards = items.map(item => <Hero key={item.id} item={item} spaceCreatedAt={state.spaceCreatedAt} onPin={() => void pin(item)} pinDisabled={busy !== null} pinning={busy === item.id} />)
+  const cards = items.map(item => <Hero key={item.id} item={item} style={styles.get(item.id)} spaceCreatedAt={state.spaceCreatedAt} onPin={() => void pin(item)} pinDisabled={busy !== null} pinning={busy === item.id} />)
   return <div className={`anniversaries ${compact ? 'is-compact' : ''}`}>
     {state.error && <div className="anniversary-error" role="alert"><span>{state.error}</span><button type="button" disabled={state.loading} onClick={() => void state.reload()} aria-label="刷新纪念日"><RefreshCw size={15} /></button></div>}
-    {state.loading && !state.spaceCreatedAt ? <p className="anniversary-empty" role="status">正在找回纪念日…</p> : compact ? <Hero item={state.featured} spaceCreatedAt={state.spaceCreatedAt} /> : <div className="anniversary-list">
+    {state.loading && !state.spaceCreatedAt ? <p className="anniversary-empty" role="status">正在找回纪念日…</p> : compact ? <Hero item={state.featured} style={state.featured ? styles.get(state.featured.id) : undefined} spaceCreatedAt={state.spaceCreatedAt} /> : <div className="anniversary-list">
       {state.featured ? [...cards, originCard] : [originCard, ...cards]}
     </div>}
     {!compact && state.nextCursor && <button className="anniversary-more" disabled={state.loading} onClick={() => void state.loadMore()}>{state.loading ? '正在加载…' : '查看更多纪念日'}</button>}

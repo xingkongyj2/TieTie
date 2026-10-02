@@ -28,6 +28,7 @@ export function useRelationship(userId?: number, partnerId?: number, sessionId?:
         // Never upload demo/local profiles or another account's cached facts.
         return { ...member, userId: id, gender: profile?.gender ?? 'unspecified' as const,
           birthday: profile?.birthday ?? '', hobbies: profile?.hobbies ?? [], bio: profile?.bio ?? '',
+          region: profile?.region?.cityCode ? profile.region : undefined,
           avatar: profile?.avatar || (member.id === 'self' ? '/avatars/cream-cat.png' : '/avatars/peach-cat.png') };
       });
       if (scope.current !== key || requestId !== sequence.current) return;
@@ -38,7 +39,7 @@ export function useRelationship(userId?: number, partnerId?: number, sessionId?:
     }
   }, [key, userId, partnerId, sessionId]);
 
-  useEffect(() => { setError(''); void reload(); }, [reload]);
+  useEffect(() => { setError(''); void reload(); const timer=setInterval(() => { void reload(); },30_000); const focus=()=>{void reload()}; window.addEventListener('focus',focus); return ()=>{clearInterval(timer);window.removeEventListener('focus',focus)}; }, [reload]);
 
   const saveMember = async (member: Member) => {
     if (member.id !== 'self' || !userId) throw new Error('只能编辑自己的小档案。');
@@ -47,6 +48,7 @@ export function useRelationship(userId?: number, partnerId?: number, sessionId?:
     setLoaded((current) => current?.key === key ? { ...current, state: { ...current.state,
       members: current.state.members.map((item) => item.id === 'self' ? { ...item,
         gender: profile.gender, birthday: profile.birthday, hobbies: profile.hobbies,
+        region: profile.region?.cityCode ? profile.region : undefined,
         bio: profile.bio, avatar: profile.avatar || '/avatars/cream-cat.png' } : item),
     } } : current);
     await reload();

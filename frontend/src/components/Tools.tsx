@@ -1,10 +1,12 @@
-import { ChevronDown, Plus } from 'lucide-react';
+import { ChevronDown, Clock3, Plus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import type { RelationshipState, Reminder } from '../types';
 import { Anniversaries } from './Anniversaries';
 import type { AnniversaryState } from '../hooks/useAnniversaries';
 import { ReminderCard } from './ReminderCard';
 import { Sheet } from './Sheet';
+import { DatePicker } from './DatePicker';
+import { TimePicker } from './TimePicker';
 import { compareReminderTime, reminderPhase } from '../lib/reminders';
 
 export type ToolName = 'reminders' | 'anniversary';
@@ -28,18 +30,21 @@ export function ReminderBoard({ state, onToggle, onCancel, notify, pendingAssign
   </div>;
 }
 
-function ReminderCompose({ state, onAdd, onClose, notify }: Pick<Props, 'state' | 'onAdd' | 'onClose' | 'notify'>) {
+function ReminderCompose({ state, onAdd, onClose, notify, onPickTime }: Pick<Props, 'state' | 'onAdd' | 'onClose' | 'notify'> & { onPickTime: (value: string, onConfirm: (time: string) => void) => void }) {
   const [content, setContent] = useState('');
   const [assignee, setAssignee] = useState<'both' | 'self' | 'partner'>('both');
   const [time, setTime] = useState('');
+  const [date, setDate] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const title = content.trim();
     if (!title || busy) return;
-    const due = new Date(time);
-    if (!time || Number.isNaN(due.getTime()) || due.getTime() <= Date.now()) { setError('请选择一个未来的提醒时间。'); return; }
+    const isoDate = date.replaceAll('.', '-');
+    const due = new Date(`${isoDate}T${time}:00`);
+    const localDate = Number.isNaN(due.getTime()) ? '' : `${String(due.getFullYear()).padStart(4, '0')}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate) || !/^\d{2}:\d{2}$/.test(time) || localDate !== isoDate || due.getHours() !== Number(time.slice(0, 2)) || due.getMinutes() !== Number(time.slice(3, 5)) || due.getTime() <= Date.now()) { setError('请选择一个有效且未来的提醒时间。'); return; }
     setBusy(true);
     setError('');
     try { await onAdd({ title, assignee, time: due.toISOString() }); notify('共享提醒已安排，到点会在聊天里提醒'); onClose(); }
@@ -54,14 +59,22 @@ function ReminderCompose({ state, onAdd, onClose, notify }: Pick<Props, 'state' 
         <label className="reminder-mention"><span className="sr-only">提醒对象</span><select value={assignee} disabled={busy} onChange={(event) => setAssignee(event.target.value as typeof assignee)}><option value="both">@我们两人</option><option value="self">@我</option><option value="partner">@{state.members.find((member) => member.id === 'partner')?.name || '另一位成员'}</option></select><ChevronDown size={14} aria-hidden="true" /></label>
       </div>
     </div>
-    <label className="reminder-time-field" htmlFor="quick-reminder-time"><span>提醒时间</span><input id="quick-reminder-time" type="datetime-local" required value={time} disabled={busy} onChange={(event) => { setTime(event.target.value); setError(''); }} /><small>按设备当前时区设置，到点会在共享聊天里提醒所选的人。</small></label>
+    <div className="reminder-time-field"><span>提醒时间</span><div className="reminder-date-time">
+      <div><label className="sr-only" htmlFor="quick-reminder-date">提醒日期</label><DatePicker id="quick-reminder-date" value={date} allowFuture placement="above" disabled={busy} onChange={(value) => { setDate(value); setError(''); }} /></div>
+      <button type="button" className="reminder-clock" disabled={busy} aria-label={time ? `提醒时刻 ${time}` : '选择提醒时刻'} aria-haspopup="dialog" onClick={() => {
+        const next = new Date(Date.now() + 60 * 60_000);
+        const initial = time || `${String(next.getHours()).padStart(2, '0')}:${String(next.getMinutes()).padStart(2, '0')}`;
+        onPickTime(initial, (value) => { setTime(value); setError(''); });
+      }}><Clock3 size={15} aria-hidden="true" /><span>{time || '选择时间'}</span></button>
+    </div><small>按设备当前时区设置，到点会在共享聊天里提醒所选的人。</small></div>
     {error && <p className="form-error" role="alert">{error}</p>}
-    <button className="primary-button" type="submit" disabled={busy || !content.trim() || !time}>{busy ? '正在添加…' : '添加提醒'}<Plus size={17} /></button>
+    <button className="primary-button" type="submit" disabled={busy || !content.trim() || !date || !time}>{busy ? '正在添加…' : '添加提醒'}<Plus size={17} /></button>
   </form>;
 }
 
 export function Tools(props: Props) {
+  const [timeEdit, setTimeEdit] = useState<{ value: string; onConfirm: (time: string) => void } | null>(null);
   const { tool, onClose } = props;
   const labels = { reminders: '添加提醒', anniversary: '我们的小纪念' };
-  return <Sheet title={labels[tool]} onClose={onClose}>{(close) => tool === 'reminders' ? <ReminderCompose state={props.state} onAdd={props.onAdd} onClose={close} notify={props.notify} /> : <Anniversaries state={props.anniversaries} compact notify={props.notify} />}</Sheet>;
+  return <><Sheet title={labels[tool]} onClose={onClose}>{(close) => tool === 'reminders' ? <ReminderCompose state={props.state} onAdd={props.onAdd} onClose={close} notify={props.notify} onPickTime={(value, onConfirm) => setTimeEdit({ value, onConfirm })} /> : <Anniversaries state={props.anniversaries} compact notify={props.notify} />}</Sheet>{timeEdit && <TimePicker title="提醒时刻" value={timeEdit.value} onClose={() => setTimeEdit(null)} onConfirm={async (value) => { timeEdit.onConfirm(value); return true; }} />}</>;
 }

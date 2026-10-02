@@ -9,6 +9,7 @@ import { SpaceBuddies } from './SpaceBuddies'
 import './Mine.css'
 
 interface Props {
+  editProfileInitially?: boolean
   state: RelationshipState
   username: string
   code: string
@@ -19,10 +20,10 @@ interface Props {
   notify: (text: string) => void
 }
 
-export function Mine({ state, username, code, hasSession, onSaveMember, onLogout, onExitSession, notify }: Props) {
+export function Mine({ editProfileInitially, state, username, code, hasSession, onSaveMember, onLogout, onExitSession, notify }: Props) {
   const self = state.members.find((member) => member.id === 'self')!
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [editorOpen, setEditorOpen] = useState(false)
+  const [editorOpen, setEditorOpen] = useState(!!editProfileInitially)
   const [exitOpen, setExitOpen] = useState(false)
   const [savingAvatar, setSavingAvatar] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
@@ -103,6 +104,7 @@ export function Mine({ state, username, code, hasSession, onSaveMember, onLogout
           <dl className="mine-facts">
             <div><dt>性别</dt><dd className={self.gender && self.gender !== 'unspecified' ? '' : 'is-empty'}>{gender}</dd></div>
             <div><dt>生日</dt><dd className={self.birthday ? '' : 'is-empty'}>{self.birthday ? self.birthday.replaceAll('-', '.') : '还没填写'}</dd></div>
+            <div className="mine-region"><dt>地区</dt><dd className={self.region ? '' : 'is-empty'}>{self.region ? [self.region.province, self.region.province === self.region.city ? '' : self.region.city, self.region.district].filter(Boolean).join(' · ') : '还没填写'}</dd></div>
           </dl>
           <div className="mine-interests">
             <h3>喜欢的事物</h3>

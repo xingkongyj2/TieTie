@@ -139,3 +139,8 @@ frontend/src/components/       聊天、输入栏、资料与工具弹层
 双人身份、AI 控制回执、定时提醒和云端长期记忆的逐步流程见 [会话场景说明](docs/conversation-scenarios.md)。
 
 每会话独立 JSON 模板、习惯与长期行动、存储职责、有效期和分页索引见 [记忆系统设计](docs/memory-system.md)。
+
+
+提醒页支持早安、晚安天气关怀和倒计时。天气仅接入和风天气，需在后端 `.env.local` 配置专属 `QWEATHER_API_HOST` 与 `QWEATHER_API_KEY`；地区未补齐时开关保持关闭，并在群里说明双方填写情况。聊天中可直接修改自己或对方的地区、天气关注指标和倒计时，修改先落库，再通过持久化队列同步已有 JSON 记忆模板。过去的倒计时日期默认每年循环，未来日期默认单次倒数。
+
+天气接口、数据范围与城市推荐依据见 [天气关怀说明](backend/internal/weather/README.md)，独立处理规范见 [天气处理规则](backend/internal/weather/care-policy.txt)。
