@@ -81,12 +81,9 @@ go run ./cmd/server           # 或 make dev
 - 旧数据库启动时自动迁移用户 ID 与绑定关系；重复的历史绑定保留最早记录，其他记录归档到 `archived_bindings`。`users` 表不含 `legacy_password_hash` 列；旧账号哈希暂存 `legacy_passwords` 表，首次成功登录后转存明文密码并删除哈希。旧 JWT 需重新登录。
 - 消息/SSE 接口校验会话属于当前用户的绑定，越权返回 403 `session_forbidden`。
 
-## 测试与构建
+## 构建
 
 ```bash
-go test ./...          # make test
-# 明确启用的真实云端一分钟验证；临时数据库、空间、记忆仓库，结束后清理
-QODER_LIVE_TEST=1 go test -tags live ./internal/api -run TestLiveOneMinuteReminderWithoutBrowser -v -count=1 -timeout=4m
 go vet ./...
 go build -o bin/server ./cmd/server   # make build
 docker build -t tietie-backend .      # 镜像只含后端，静态文件用卷挂载并设 STATIC_DIR
@@ -102,7 +99,7 @@ docker build -t tietie-backend .      # 镜像只含后端，静态文件用卷�
 
 ## 与 Node 版的差异
 
-- 对外接口、错误码、SSE 帧格式与 `server/qoder.mjs` 完全一致（有冒烟对照）。
+- 对外接口、错误码、SSE 帧格式与 `server/qoder.mjs` 完全一致。
 - `.doc` / `.xls` / `.xlsb` 旧版二进制格式暂不支持解析（返回 `document_unsupported`，
   提示转存为 `.docx` / `.xlsx`）；`.docx` / `.xlsx` / `.xlsm` 用纯标准库实现。
 - `dto/upload.go` 中的白名单是 `frontend/src/api/upload-types.json` 的副本，修改契约时两边同步。
@@ -127,8 +124,6 @@ docker build -t tietie-backend .      # 镜像只含后端，静态文件用卷�
 - 消息历史额外包含 `members`、`reminders`、`remindersError`；消息包含 `userId`、`displayName`、`recipientIds`、`source`、提醒回执 ID/错误。原始云端 Events 与提醒操作 JSON 不对外公开。
 
 当前只支持一次性提醒，默认用 Asia/Shanghai 解释相对时间。服务需常驻，页面关闭不影响保存与唤醒；离线手机/微信推送尚未接入。SQLite 单实例方案含跨连接原子领取验证，但多副本运行仍需分布式租约与跨实例空间锁，不能直接运行多个进程各自在启动时恢复相同队列。
-
-回归测试使用隔离的假 Qoder HTTP 服务，覆盖双方身份、无浏览器保存、定时唤醒、到点对象、协议隐藏、繁忙重试、超时防重发、历史去重和解绑重绑。查询计划测试包含 10,000 条未来任务，确认按执行时间及空间索引查找，不扫描用户；它是正确性和索引验证，不是线上吞吐量承诺。
 
 ## 提醒落库、记忆与运行日志
 
