@@ -26,6 +26,8 @@ func TestQWeatherAuthenticationUnitsDatesAirAndCache(t *testing.T) {
 		switch {
 		case strings.Contains(r.URL.Path, "/daily/"):
 			body = map[string]any{"metadata": metadata, "days": []any{map[string]any{"forecastStartTime": "2026-10-02T16:00Z", "temperatureMin": value(15, "°C"), "temperatureMax": value(23, "°C"), "daytime": map[string]any{"condition": map[string]any{"code": "305", "text": "小雨"}, "wind": map[string]any{"speed": value(5, "m/s")}, "precipitation": map[string]any{"probability": .7}}}}}
+		case strings.Contains(r.URL.Path, "/weather/v1/current/"):
+			body = map[string]any{"metadata": metadata, "condition": map[string]any{"code": "305", "text": "小雨"}, "temperature": value(18, "°C"), "feelsLike": value(17, "°C"), "humidity": .8, "visibility": value(8000, "m"), "wind": map[string]any{"speed": value(2, "m/s")}}
 		case strings.Contains(r.URL.Path, "/weather/v1/hourly/"):
 			if r.URL.Query().Get("hours") != "48" {
 				t.Error("night needs tomorrow's full hours")
@@ -69,6 +71,21 @@ func TestQWeatherAuthenticationUnitsDatesAirAndCache(t *testing.T) {
 	if calls.Load() != 4 {
 		t.Fatal("cached forecast fetched again", calls.Load())
 	}
+	for i := 0; i < 2; i++ {
+		f, err := client.ForecastFresh(context.Background(), r)
+		if err != nil || f.CurrentWeather == nil || *f.CurrentWeather.Temperature != 18 || *f.CurrentWeather.Humidity != 80 || *f.CurrentWeather.Wind != 7.2 {
+			t.Fatal("fresh current data missing or units wrong", f, err)
+		}
+		*f.CurrentWeather.Temperature = 999
+	}
+	if calls.Load() != 14 {
+		t.Fatal("manual query reused cache", calls.Load())
+	}
+	cached, err := client.Forecast(context.Background(), r)
+	if err != nil || cached.CurrentWeather == nil || *cached.CurrentWeather.Temperature != 18 || calls.Load() != 14 {
+		t.Fatal("current snapshot mutated cached data", cached, err)
+	}
+
 }
 func TestSelectedMetricsExcludeOtherDetailsAndClimateRequiresForecast(t *testing.T) {
 	now := time.Date(2026, 10, 2, 21, 0, 0, 0, Shanghai)

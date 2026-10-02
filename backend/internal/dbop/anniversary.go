@@ -208,6 +208,12 @@ func (db *DB) ApplyAnniversary(ctx context.Context, session, request string, act
 			if err := syncAnniversary(tx, row); err != nil {
 				return err
 			}
+			// A newly added or corrected date must also be checked today, even
+			// if the daily scan has already completed. Report IDs deduplicate it.
+			due := anniversaryReminderTime(time.Now())
+			if err := tx.Model(&AnniversaryReminderSettings{}).Where("session_id=? AND binding_created_at=? AND enabled=1", session, binding.CreatedAt).Updates(map[string]any{"next_due": due, "run_at": due, "token": "", "revision": gorm.Expr("revision + 1")}).Error; err != nil {
+				return err
+			}
 		}
 		return tx.Create(&AnniversaryActionReceipt{ID: receiptID, AnniversaryID: row.ID}).Error
 	})

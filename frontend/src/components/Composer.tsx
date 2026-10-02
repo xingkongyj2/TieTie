@@ -1,4 +1,4 @@
-import { ArrowUp, AtSign, Bell, CalendarDays, FileSpreadsheet, FileText, LockKeyhole, Mic, Paperclip, Square, X } from 'lucide-react';
+import { ArrowUp, AtSign, Bell, CalendarDays, CloudSun, FileSpreadsheet, FileText, LockKeyhole, Mic, Paperclip, X } from 'lucide-react';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { MentionText } from './MentionText';
 import type { Member } from '../types';
@@ -34,6 +34,7 @@ export function Composer({ members, sending, disabled = false, placeholder = '�
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [listening, setListening] = useState(false);
+  const [queryingWeather, setQueryingWeather] = useState(false);
   const mirrorRef = useRef<HTMLDivElement>(null);
   const compositionRef = useRef<string | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -141,11 +142,26 @@ export function Composer({ members, sending, disabled = false, placeholder = '�
       if (await onSend(draft, files, toPartner ? 'shared' : visibility)) { setText(''); setFiles([]); setVisibility('shared'); }
     } catch (error) { onError(error instanceof Error ? error.message : '消息还没发出去，草稿帮你留着啦。'); }
   };
+  const queryWeather = async () => {
+    if (queryingWeather || sending || disabled) return;
+    const locationOf = (member?: Member) => member?.region?.cityCode
+      ? [member.region.province, member.region.city === member.region.province ? '' : member.region.city, member.region.district].filter(Boolean).join('')
+      : '';
+    const selfLocation = locationOf(members.find((member) => member.id === 'self'));
+    const question = selfLocation
+      ? `贴贴，我这边（${selfLocation}）现在天气怎么样呀？`
+      : '贴贴，我这边现在天气怎么样呀？帮我查查吧～';
+    setQueryingWeather(true);
+    try { await onSend(question, [], visibility); }
+    catch (error) { onError(error instanceof Error ? error.message : '天气查询暂未发送，请再试一次。'); }
+    finally { setQueryingWeather(false); }
+  };
   return <footer className="composer-area">
     <div className="quick-actions">
       <button type="button" aria-label="@TA" aria-pressed={toPartner} disabled={sending || !partner} onMouseDown={(event) => event.preventDefault()} onClick={mentionPartner}><AtSign size={14} /><span>TA</span></button>
       <button onClick={() => onTool('reminders')}><Bell size={14} /><span>添加提醒</span></button>
       <button onClick={() => onTool('anniversary')}><CalendarDays size={14} /><span>小纪念</span></button>
+      <button type="button" disabled={queryingWeather || sending || disabled} onClick={() => void queryWeather()}><CloudSun size={14} /><span>{queryingWeather ? '查询中' : '查天气'}</span></button>
     </div>
     {files.length > 0 && <div className="composer-attachments" aria-label="待发送附件">{files.map((file, index) => <div className="attachment-chip" key={`${file.name}-${index}`}>
       {previews[index] ? <img src={previews[index]} alt="" /> : /\.(xlsx|xls|xlsm|xlsb)$/i.test(file.name) ? <FileSpreadsheet size={16} /> : <FileText size={16} />}
@@ -173,8 +189,7 @@ export function Composer({ members, sending, disabled = false, placeholder = '�
         <span id={privacyHintId} role="tooltip" className="composer-private-tooltip">{toPartner ? '发给对方的消息双方可见。' : '消息仅自己和 AI 可见，提醒仍会提醒双方。'}</span>
       </div>
       <div className="voice-control">
-        <button type="button" className={`voice-button ${listening ? 'is-listening' : ''}`} aria-label={listening ? '停止语音输入' : '语音输入'} aria-pressed={listening} title={listening ? '停止语音输入' : '语音转文字'} disabled={sending} onClick={toggleVoice}>{listening ? <Square size={13} fill="currentColor" strokeWidth={0} aria-hidden="true" /> : <Mic size={19} strokeWidth={2} aria-hidden="true" />}</button>
-        {listening && <div className="voice-status" role="status"><div className="voice-wave" aria-hidden="true"><i /><i /><i /><i /><i /></div><div className="voice-status-copy"><strong>正在听你说话</strong><span>说完后点语音按钮结束</span></div></div>}
+        <button type="button" className={`voice-button ${listening ? 'is-listening' : ''}`} aria-label={listening ? '停止语音输入' : '语音输入'} aria-pressed={listening} title={listening ? undefined : '语音转文字'} disabled={sending} onClick={toggleVoice}><Mic size={19} strokeWidth={2} aria-hidden="true" /></button>
       </div>
       <button type="submit" className="send-button" aria-label="发送消息" disabled={(!text.trim() && !files.length) || sending || disabled}>{sending ? <span className="spinner" /> : <ArrowUp size={22} strokeWidth={2.2} />}</button>
       </div>

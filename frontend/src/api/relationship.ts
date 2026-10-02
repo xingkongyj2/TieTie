@@ -5,7 +5,7 @@ import type { AISettings, Member, MemberId, Message, RelationshipState, Reminder
 const STORAGE_KEY = 'tietie.relationship.v1'
 const MEMBER_IDS: MemberId[] = ['ai', 'self', 'partner']
 const TONES: AISettings['tone'][] = ['warm', 'playful', 'concise']
-const SETTING_FLAGS = ['weatherCare', 'anniversaryReminders', 'quietHours'] as const
+const SETTING_FLAGS = ['weatherCare', 'anniversaryReminders'] as const
 
 const delay = () => new Promise<void>((resolve) => setTimeout(resolve, 120 + Math.random() * 180))
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
@@ -45,6 +45,10 @@ function isSettings(value: unknown): value is AISettings {
     && SETTING_FLAGS.every((key) => typeof value[key] === 'boolean')
 }
 
+function currentSettings(value: AISettings): AISettings {
+  return { name: value.name, tone: value.tone, weatherCare: value.weatherCare, anniversaryReminders: value.anniversaryReminders }
+}
+
 function isReminder(value: unknown): value is Reminder {
   return isRecord(value) && typeof value.id === 'string' && value.id.length > 0
     && typeof value.title === 'string' && value.title.trim().length > 0 && value.title.length <= 500
@@ -73,7 +77,8 @@ function loadState(): RelationshipState {
   if (isState(stored)) {
     // Retired avatar files must not leave broken images in profiles saved earlier.
     const defaults = createInitialState().members
-    let changed = false
+    const settings = currentSettings(stored.settings)
+    let changed = Object.keys(stored.settings).length !== Object.keys(settings).length
     const members = stored.members.map((member) => {
       if (member.avatar === '/avatars/bunny.png') {
         changed = true
@@ -86,7 +91,7 @@ function loadState(): RelationshipState {
       return member
     })
     if (changed) {
-      const migrated = { ...stored, members }
+      const migrated = { ...stored, members, settings }
       writeStorage(STORAGE_KEY, migrated)
       return migrated
     }
@@ -132,7 +137,7 @@ export const relationshipApi = {
 
   async saveSettings(settings: AISettings): Promise<AISettings> {
     if (!isSettings(settings)) throw new Error('设置格式不正确，请检查昵称和语气选项。')
-    const updated = { ...clone(settings), name: settings.name.trim() }
+    const updated = { ...currentSettings(settings), name: settings.name.trim() }
     await delay()
     const state = loadState()
     state.settings = updated

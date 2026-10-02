@@ -64,6 +64,7 @@ func Open(dsn string) (*DB, error) {
 		&Countdown{},
 		&CountdownReceipt{},
 		&Anniversary{},
+		&AnniversaryReminderSettings{},
 		&AnniversaryActionReceipt{},
 		&AnniversaryDeletionReceipt{},
 		&Binding{},

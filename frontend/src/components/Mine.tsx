@@ -66,9 +66,9 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
     try {
       await onExitSession()
       close()
-      notify('已退出当前会话，重新绑定后才能继续聊天')
+      notify('已退出专属空间，重新绑定后才能继续聊天')
     } catch (e) {
-      notify(e instanceof Error ? e.message : '退出会话失败，请稍后重试。')
+      notify(e instanceof Error ? e.message : '退出专属空间失败，请稍后重试。')
     } finally {
       setExiting(false)
     }
@@ -114,10 +114,10 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
         <p className="mine-about-note">小小世界 · 好好做自己</p>
       </section>
 
-      <footer className="mine-footer"><div className="mine-footer-actions">{hasSession && <button type="button" className="secondary-button" disabled={saving || exiting} onClick={() => setExitOpen(true)}><Unlink size={14} aria-hidden="true" />退出当前会话</button>}<button type="button" className="secondary-button" disabled={saving || exiting} onClick={() => { onLogout(); notify('已退出登录') }}><LogOut size={14} aria-hidden="true" />退出登录</button></div></footer>
+      <footer className="mine-footer"><div className="mine-footer-actions">{hasSession && <button type="button" className="secondary-button" disabled={saving || exiting} onClick={() => setExitOpen(true)}><Unlink size={14} aria-hidden="true" />退出专属空间</button>}<button type="button" className="secondary-button" disabled={saving || exiting} onClick={() => { onLogout(); notify('已退出登录') }}><LogOut size={14} aria-hidden="true" />退出登录</button></div></footer>
     </div>
     {pickerOpen && <CharacterPicker selectedAvatar={self.avatar} onSelect={(avatar) => { void selectAvatar(avatar) }} onClose={() => setPickerOpen(false)} />}
-    {exitOpen && <Sheet title="退出当前会话" onClose={() => setExitOpen(false)}>{(close) => <div className="mine-exit-sheet">
+    {exitOpen && <Sheet title="退出专属空间" onClose={() => setExitOpen(false)}>{(close) => <div className="mine-exit-sheet">
       <p>退出后，你和 TA 都会回到绑定引导页，要重新输入对方邀请码才能继续聊天。</p>
       <p>重新绑定时会创建新的会话和记忆空间。</p>
       <div className="mine-exit-actions">

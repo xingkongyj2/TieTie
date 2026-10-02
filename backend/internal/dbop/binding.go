@@ -122,6 +122,9 @@ func (db *DB) Unbind(ctx context.Context, userID int64) (*Binding, error) {
 		if err := tx.Model(&CareMode{}).Where("session_id=? AND binding_created_at=?", binding.SessionID, binding.CreatedAt).Updates(map[string]any{"enabled": false, "state": "off", "token": ""}).Error; err != nil {
 			return err
 		}
+		if err := tx.Model(&AnniversaryReminderSettings{}).Where("session_id=? AND binding_created_at=?", binding.SessionID, binding.CreatedAt).Updates(map[string]any{"enabled": false, "token": ""}).Error; err != nil {
+			return err
+		}
 		if err := tx.Exec(`INSERT OR IGNORE INTO archived_bindings (user_a, user_b, session_id, created_at) VALUES (?, ?, ?, ?)`,
 			binding.UserA, binding.UserB, binding.SessionID, binding.CreatedAt).Error; err != nil {
 			return err

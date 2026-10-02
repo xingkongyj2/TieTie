@@ -157,7 +157,7 @@ func (s *Server) buildCareCards(ctx context.Context, job dbop.CareMode, members 
 		if err != nil {
 			return nil, err
 		}
-		reports, reportErr := s.DB.ListCareReports(ctx, job.SessionID, 8)
+		reports, reportErr := s.DB.ListWeatherCareReports(ctx, job.SessionID, 8)
 		if reportErr != nil {
 			return nil, reportErr
 		}
@@ -338,6 +338,8 @@ func (s *Server) appendCareHistory(ctx context.Context, session string, result *
 		source := "reminder"
 		if report.Mode == "region_notice" {
 			source = "chat"
+		}
+		if report.Mode == "region_notice" || report.Mode == "anniversary" {
 			members, _, err := s.DB.CareMembers(ctx, session)
 			if err != nil {
 				return err

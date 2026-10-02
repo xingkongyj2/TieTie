@@ -92,6 +92,15 @@ func (s *Server) RunConversationWorker(ctx context.Context) {
 	workers.Add(1)
 	go func() {
 		defer workers.Done()
+		worker := scheduler.Worker[dbop.AnniversaryReminderSettings]{Options: options, Claim: s.DB.ClaimAnniversaryReminders,
+			Work: func(c context.Context, job dbop.AnniversaryReminderSettings) error {
+				return s.DB.DeliverAnniversaryReminders(c, job, time.Now())
+			}, OnError: report}
+		worker.Run(ctx)
+	}()
+	workers.Add(1)
+	go func() {
+		defer workers.Done()
 		careOptions := options
 		careOptions.BatchSize = 2
 		careOptions.Concurrency = 2

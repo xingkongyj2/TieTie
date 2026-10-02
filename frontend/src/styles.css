@@ -238,27 +238,20 @@ h1, h2, h3, p { margin: 0; }
 .attachment-chip button { display: grid; place-items: center; flex: 0 0 auto; color: #8d98ad; padding: 2px; }
 .attachment-button, .voice-button { display: grid; place-items: center; flex: 0 0 auto; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 11px; background: transparent; color: var(--nav-idle); }
 .attachment-button:disabled { opacity: .45; }
-.voice-button { transition: background .2s, color .2s, box-shadow .2s; }
-.voice-button.is-listening { background: #e2ecfc; color: var(--blue); box-shadow: 0 0 0 3px #dfeafb66; }
-.composer:has(.voice-button.is-listening) { background: linear-gradient(120deg, #f2f6fd, #eef3fb); box-shadow: inset 0 0 0 1px #dce7fa; }
+.voice-button { position: relative; transition: background .2s, color .2s; }
+.voice-button.is-listening { border-radius: 50%; background: #e2ecfc; color: var(--blue); }
+.voice-button.is-listening::before, .voice-button.is-listening::after { content: ''; position: absolute; inset: 3px; border: 1px solid currentColor; border-radius: 50%; pointer-events: none; animation: voice-ripple 1.6s ease-out infinite; }
+.voice-button.is-listening::after { animation-delay: -.8s; }
+.voice-button.is-listening svg { position: relative; animation: voice-breathe 1.6s ease-in-out infinite; }
 .voice-control { position: relative; flex: 0 0 auto; }
-.voice-status { position: absolute; z-index: 3; right: -6px; bottom: calc(100% + 11px); display: flex; align-items: center; gap: 12px; width: max-content; padding: 12px 17px; border: 1px solid #e2ebf8; border-radius: 17px; background: linear-gradient(135deg, #fff, #f6faff); box-shadow: 0 6px 22px #456cac12; pointer-events: none; }
-.voice-status::after { content: ''; position: absolute; bottom: -5px; right: 19px; width: 8px; height: 8px; transform: rotate(45deg); border-right: 1px solid #e2ebf8; border-bottom: 1px solid #e2ebf8; background: #f6faff; }
-.voice-status-copy { display: grid; gap: 4px; min-width: 0; }
-.voice-status-copy strong { color: #5b7eaf; font-size: 12px; font-weight: 500; line-height: 1.4; }
-.voice-status-copy > span { color: #98aac3; font-size: 10px; line-height: 1.4; }
-.voice-wave { display: flex; align-items: center; justify-content: center; flex: none; gap: 3px; width: 29px; height: 27px; color: #7ea5df; }
-.voice-wave i { display: block; width: 3px; height: 12px; border-radius: 3px; background: currentColor; animation: voice-wave 1.2s ease-in-out infinite; }
-.voice-wave i:nth-child(2), .voice-wave i:nth-child(4) { height: 19px; animation-delay: -.3s; }
-.voice-wave i:nth-child(3) { height: 26px; animation-delay: -.6s; }
-.voice-wave i:nth-child(5) { animation-delay: -.9s; }
-@keyframes voice-wave { 0%, 100% { transform: scaleY(.55); opacity: .65; } 50% { transform: scaleY(1); opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .voice-wave i { animation: none; } .voice-button { transition: none; } }
+@keyframes voice-ripple { 0% { transform: scale(.95); opacity: .4; } 100% { transform: scale(1.5); opacity: 0; } }
+@keyframes voice-breathe { 0%, 100% { transform: scale(.96); } 50% { transform: scale(1.08); } }
+@media (prefers-reduced-motion: reduce) { .voice-button { transition: none; } .voice-button.is-listening svg { animation: none; } .voice-button.is-listening::before, .voice-button.is-listening::after { display: none; animation: none; } }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
 .quick-actions { display: flex; align-items: center; gap: 8px; margin: 0 2px 7px; }
 .quick-actions button { min-height: 28px; background: var(--surface); border: 0; border-radius: 12px; padding: 4px 12px; font-size: 11px; color: #667d9e; display: flex; align-items: center; gap: 6px; }
-.quick-actions button:not(:last-child) svg { color: var(--blue); }
-.quick-actions button:last-child svg { color: #729ce3; }
+.quick-actions button svg { color: var(--blue); }
+@media(max-width:370px) { .quick-actions { gap: 5px; } .quick-actions button { padding-left: 9px; padding-right: 9px; gap: 4px; } }
 .composer { display: flex; flex-direction: column; gap: 5px; align-items: stretch; background: #f4f5f7; border: 0; border-radius: 21px; padding: 10px 12px 8px; transition: background .2s ease; }
 .composer textarea { width: 100%; border: none; background: none; min-height: 34px; max-height: 188px; font-size: 14px; line-height: 22px; padding: 6px 2px; resize: none; overflow-y: auto; scrollbar-width: none; }
 .composer-toolbar { display: flex; align-items: center; gap: 5px; }

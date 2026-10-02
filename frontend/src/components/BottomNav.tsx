@@ -5,7 +5,7 @@ export type MainView = 'we' | 'things' | 'mine'
 
 const items = [
   { id: 'we', label: '我们', icon: MessageCircle },
-  { id: 'things', label: '提醒', icon: Bell },
+  { id: 'things', label: '待办', icon: Bell },
   { id: 'mine', label: '我的', icon: UserRound },
 ] as const
 

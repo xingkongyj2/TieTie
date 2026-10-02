@@ -61,6 +61,10 @@
 .weather-personal-heading { font-size: 11px; color: #6481b5; font-weight: 500; }
 .weather-personal-temperature { font-size: 23px; color: #5681c2; margin-top: 8px; }
 .weather-local-advice { margin-top: 7px; color: #7789a9; }
+.weather-query-air { display: flex; flex-wrap: wrap; gap: 9px 15px; margin-top: 13px; color: #8196b6; font-size: 10px; }
+.weather-query-air strong { color: #577bab; font-size: 13px; font-weight: 500; }
+.weather-query-air small { font-size: 9px; }
+.weather-query-notice { padding: 9px 11px; background: #ffffff80; border-radius: 10px; }
 .weather-hours { table-layout: fixed; width: 100%; }
 .weather-hours th { overflow-wrap: anywhere; }
 

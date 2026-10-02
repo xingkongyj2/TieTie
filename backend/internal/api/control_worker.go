@@ -66,6 +66,9 @@ func (s *Server) attachControlReply(ctx context.Context, id string, input conver
 		return err
 	}
 	for _, r := range results {
+		if r.Type == "query_weather" && len(r.WeatherCards) > 0 {
+			message.WeatherCards = append(message.WeatherCards, r.WeatherCards...)
+		}
 		if r.ReminderID != "" {
 			message.ReminderIDs = append(message.ReminderIDs, r.ReminderID)
 		}
@@ -229,6 +232,8 @@ func (s *Server) executeAction(ctx context.Context, j dbop.ControlJob, input con
 		return fail(errors.New("silent turn permits memory only"))
 	}
 	switch a.Type {
+	case "query_weather":
+		return s.executeWeatherQuery(ctx, j, input, a)
 	case "set_region":
 		region := regions.Location{}
 		var err error

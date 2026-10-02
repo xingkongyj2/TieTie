@@ -42,7 +42,6 @@ export const initialRelationshipState: RelationshipState = {
     tone: 'playful',
     weatherCare: false,
     anniversaryReminders: true,
-    quietHours: true,
   },
   messages: [
     {

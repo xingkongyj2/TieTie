@@ -30,7 +30,6 @@ export interface AISettings {
   tone: 'warm' | 'playful' | 'concise'
   weatherCare: boolean
   anniversaryReminders: boolean
-  quietHours: boolean
 }
 
 export interface Reminder {

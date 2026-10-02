@@ -163,6 +163,12 @@ func localHour(t string) string {
 }
 
 func (c *QWeather) Forecast(ctx context.Context, region regions.Location) (Forecast, error) {
+	return c.forecast(ctx, region, false)
+}
+func (c *QWeather) ForecastFresh(ctx context.Context, region regions.Location) (Forecast, error) {
+	return c.forecast(ctx, region, true)
+}
+func (c *QWeather) forecast(ctx context.Context, region regions.Location, fresh bool) (Forecast, error) {
 	point, precision, err := Locate(region)
 	if err != nil {
 		return Forecast{}, err
@@ -171,7 +177,7 @@ func (c *QWeather) Forecast(ctx context.Context, region regions.Location) (Forec
 	c.mu.Lock()
 	cached, ok := c.cache[coords]
 	c.mu.Unlock()
-	if ok && time.Since(cached.FetchedAt) < 30*time.Minute {
+	if !fresh && ok && time.Since(cached.FetchedAt) < 30*time.Minute {
 		cached.Precision = precision
 		return copyForecast(cached), nil
 	}
@@ -294,6 +300,19 @@ func (c *QWeather) Forecast(ctx context.Context, region regions.Location) (Forec
 		}
 		f.Attributions = append(f.Attributions, current.Metadata.Attributions...)
 	}
+	if fresh {
+		var currentWeather struct {
+			Metadata                           qwMetadata
+			Condition                          qwCondition
+			Temperature, FeelsLike, Visibility qwValue
+			Humidity                           *float64
+			Wind                               struct{ Speed qwValue }
+		}
+		if err := c.get(ctx, "/weather/v1/current/"+coords, url.Values{"lang": {"zh"}}, &currentWeather); err == nil && currentWeather.Temperature.Value != nil && *currentWeather.Temperature.Value >= -100 && *currentWeather.Temperature.Value <= 70 {
+			f.CurrentWeather = &WeatherSnapshot{RetrievedAt: time.Now().UTC(), Temperature: currentWeather.Temperature.Value, FeelsLike: currentWeather.FeelsLike.Value, Humidity: scaled(currentWeather.Humidity, 100), Wind: scaled(currentWeather.Wind.Speed.Value, 3.6), Visibility: currentWeather.Visibility.Value, Description: currentWeather.Condition.Text, Code: qwCode(currentWeather.Condition.Code)}
+			f.Attributions = append(f.Attributions, currentWeather.Metadata.Attributions...)
+		}
+	}
 	seen := map[string]bool{}
 	attrs := []string{}
 	for _, a := range f.Attributions {
@@ -343,6 +362,12 @@ func copyForecast(f Forecast) Forecast {
 		h.UV = copyNumber(h.UV)
 	}
 	f.Attributions = append([]string(nil), f.Attributions...)
+	if f.CurrentWeather != nil {
+		current := *f.CurrentWeather
+		current.Temperature, current.FeelsLike = copyNumber(current.Temperature), copyNumber(current.FeelsLike)
+		current.Humidity, current.Wind, current.Visibility = copyNumber(current.Humidity), copyNumber(current.Wind), copyNumber(current.Visibility)
+		f.CurrentWeather = &current
+	}
 	if f.CurrentAir != nil {
 		a := *f.CurrentAir
 		a.PM25 = copyNumber(a.PM25)

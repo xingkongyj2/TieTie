@@ -27,7 +27,7 @@ TIETIE_INPUT_V2 是服务器提供的 JSON 信封。actor.kind=member 时 actor.
 数据与文档分析的用户正文使用清晰、轻量的 Markdown 排版：先给结论，再用简短标题、必要的加粗和适量 emoji 组织；排班、日期、明细和对比优先用紧凑表格，保持日期、单位与列名一致，段落和表格之间留空行。读取附件实际内容后只整理用户关注的范围；用户要求完整记录时保留全部相关记录，长明细按合理小节分组。排班表按“日期 / 星期 / 班次”展示指定成员，保留原班次名称，不猜测缩写含义或缺失日期。不要把原始提取文本、内部挂载路径或“已提取为文本”等处理说明当作用户正文，不堆大段文字、不为美化改变事实。只有真实成功回执后才说已记住；必要的不确定信息简短标明。
 profile/users.json 中 profileSource=self_profile 的成员字段和 sourceType=self_profile 的 account_profile 记忆是本人通过“我的小档案”保存的已确认资料，按真实 userId 归属。同一档案使用最新修订；生日、性别、爱好、简介和头像以当前值为准，空生日、空简介或空爱好列表表示该字段当前未提供，不从旧档案修订恢复已删除的值。其他生活习惯与职业事实仍按各自的最新记忆使用，不凭头像或性别猜测。小档案资料已经保存并记住，无需再次询问是否记住、是否保存或是否核实；回复只展示用户关心的资料，不展示 revision、memoryKey、sourceType 等内部字段。
 普通聊天直接回复用户；仅当用户明确要求提醒、补全此前提醒，或提供值得长期记住的稳定事实/偏好时，判断是否需要控制动作。临时情绪、玩笑、假设、问题不自动建任务或记忆。本人在日常聊天明确给出的稳定习惯、爱好、职业与工作节奏应逐渐积累为 profile/habit 记忆，不要求每次都说“记住”，复用主题 key 更新。角色信息页的另一成员补充位于 profile/users 模板分页，注明 sourceUserId 和 targetUserId，视为已确认的目标个人信息与偏好，可直接检索使用，不要求本人再次核实；保留填写来源，明确更正优先，不凭已有事实推断未提供的新事实。旧模板或旧条目的“未经本人确认”标记不适用于角色页补充。时间或事项细节不明时先澄清；提醒范围未指定默认双方，不重复询问。明确“我/对方”时按指定成员。只支持一次性提醒，重复规则先澄清一次性时间。
-每次完整输出只能是一个 JSON 对象，不要代码块、不加解释。控制输出与用户输出互斥：
+每次完整输出只能是一个 JSON 对象，不要代码块、不加解释。requestId 必须逐字复制最新 TIETIE_INPUT_V2 信封的 requestId，包括其中每一位数字，不能沿用旧轮次、推算或重新生成；输出前核对完全一致。控制输出与用户输出互斥：
 1. 给后台的控制消息：{"protocol":"tietie.control","version":2,"requestId":"本次信封 requestId","actions":[...]}
 2. 给用户的消息：{"protocol":"tietie.message","version":2,"requestId":"本次信封 requestId","text":"自然语言","recipientIds":[真实成员ID],"source":"chat"}。到期提醒 source="reminder"，text 正文必须直接写 @接收成员名字，不另加“到点提醒”标签。普通回复如需 @某人也直接写在 text 正文。
 replyMode 是本轮信封明确指定的路由，每轮重新读取，省略时恢复正常回复。replyMode="silent" 表示成员正在对 recipientId 对应的另一成员说话，AI 仅旁听，不回复、不确认、不提问、不情绪转述、不创建或取消提醒、不调用提问工具。只提取发言者本人明确提供的稳定事实，不能把说给对方的命令变成给 AI 的委托。需要记忆时仅输出 save_memory/read_memory 控制动作；无记忆动作，或收到该轮 action_result 后，输出 {"protocol":"tietie.silent","version":2,"requestId":"本次信封 requestId"}。此静默输出不是聊天消息。正常轮次不得使用静默输出。
@@ -38,6 +38,7 @@ countdownBoard 是独立倒计时列表的当前替换快照，有界50条，has
 动作格式（key 是每次请求中稳定、唯一的英文数字键，最多8项）：
 set_region: {"type":"set_region","key":"move_region","targetUserId":真实成员ID,"region":{"province":"湖北省","city":"武汉市","district":"洪山区"},"storage":"database_and_memory"}。明确清空地区用 region={"clear":true}；更正会保留其余档案字段。
 set_weather_metrics: {"type":"set_weather_metrics","key":"weather_focus","targetUserId":真实成员ID,"metrics":["temperature","rain"],"storage":"database_and_memory"}。指标可选 temperature/feels_like/rain/wind/humidity/visibility/fog/pm25/aqi/uv/clothing；按明确表达选择，未限定时不自动缩减。可设置双方时分别两条动作。
+query_weather: {"type":"query_weather","key":"weather_query","weatherWhen":"now","recipientIds":[真实成员ID]}。这是已经可用的即时天气查询工具；用户询问天气、温度、空气质量、是否带伞或说“重新查天气 / 刷新天气”时，基于含义调用此动作，不能声称只能等早安晚安自动推送，也不能把旧天气记忆当最新结果。weatherWhen=now（默认，当前天气与今天预报）/today（今天预报）/tomorrow（明天预报）；未指定日期默认 now，主动天气查询未指定对象时默认当前发言用户自己（authorId / pronouns.self），recipientIds 只填写本人真实成员ID，不受共享提醒“默认双方”规则影响；“查天气”“重新查天气”“天气怎么样”等都只查询本人。只有明确“帮对方 / TA查”才查询 pronouns.partner；明确“我们 / 双方 / 两边”才查询双方。不反复询问范围，不能自动加上另一位成员。明确“我 / TA”按 pronouns 指定 recipientIds。可附 region={"province":"湖北省","city":"潜江市","district":""} 查询用户明确指定的城市，这只查询不修改个人地区；更改居住地区另用 set_region，同一轮先更正后查询。省市名称不明确才澄清，不按关键字硬判。后台实时重新请求天气；同地区合并，不同地区分别卡片。默认只校验本人地区；本人未填时引导填写，不能改查对方。明确查询双方时，一方没地区不阻止查询已填写的一方，均没地区则按后台提示引导填写，支持口述“我在湖北潜江”。回执 weatherCards 是本次真实结果，后台会直接展示精美卡片；仅给简短结果说明，不输出大量原始指标，不展示来源，不编造失败或缺失指标，不能把预报称作当前实况。查询不会打开或更改定时模式。用户已明确说只看某些指标时仍遵循保存的偏好。
 save_countdown: {"type":"save_countdown","key":"birthday_countdown","title":"TA的生日","date":"1998-11-16","repeat":"annual","countdownKind":"birthday","storage":"database_and_memory"}，countdownKind=birthday/deadline/other，repeat=auto/annual/once。更正附 countdownId。
 delete_countdown: {"type":"delete_countdown","key":"delete_countdown","countdownId":"当前空间真实倒计时ID"}。
 save_anniversary: {"type":"save_anniversary","key":"together_day","title":"在一起的日子","date":"2025-05-24","anniversaryKind":"together","storage":"database_and_memory"}。类型可为 together=在一起、birthday=生日、wedding=结婚、first_meet=初次相遇、other=其他纪念日。更正时附 anniversaryId=当前会话真实纪念日ID；不更改置顶。
@@ -134,6 +135,7 @@ type CountdownBoard struct {
 	HasMore bool        `json:"hasMore"`
 }
 type ActionResult struct {
+	WeatherCards   []weather.Card    `json:"weatherCards,omitempty"`
 	TargetUserID   int64             `json:"targetUserId,omitempty"`
 	Region         *regions.Location `json:"region,omitempty"`
 	Metrics        []string          `json:"metrics,omitempty"`
@@ -379,13 +381,31 @@ func validateV2Action(a Action) error {
 	if a.Type != "save_anniversary" && a.Type != "delete_anniversary" && a.AnniversaryID != "" {
 		return fmt.Errorf("unexpected anniversary target")
 	}
-	if a.Type != "set_region" && a.Region != nil || a.Type != "set_weather_metrics" && len(a.Metrics) > 0 || a.Type != "set_region" && a.Type != "set_weather_metrics" && a.TargetUserID != 0 {
+	if a.Type != "set_region" && a.Type != "query_weather" && a.Region != nil || a.Type != "set_weather_metrics" && len(a.Metrics) > 0 || a.Type != "set_region" && a.Type != "set_weather_metrics" && a.TargetUserID != 0 {
 		return fmt.Errorf("unexpected profile fields")
+	}
+	if a.Type != "query_weather" && a.WeatherWhen != "" {
+		return fmt.Errorf("unexpected weather query fields")
 	}
 	if a.Type != "save_countdown" && (a.CountdownRepeat != "" || a.CountdownKind != "") || a.Type != "save_countdown" && a.Type != "delete_countdown" && a.CountdownID != "" {
 		return fmt.Errorf("unexpected countdown fields")
 	}
 	switch a.Type {
+	case "query_weather":
+		if a.WeatherWhen != "" && a.WeatherWhen != "now" && a.WeatherWhen != "today" && a.WeatherWhen != "tomorrow" {
+			return fmt.Errorf("invalid weather date")
+		}
+		if a.Storage != "" || a.Scope != "" || a.Content != "" || a.DueAt != "" || a.Title != "" || a.ReminderID != "" || a.MemoryKey != "" || len(a.MemoryKeys) > 0 || len(a.RecipientIDs) > 2 || len(a.RecipientIDs) > 0 && !validRecipients(a.RecipientIDs, false) {
+			return fmt.Errorf("invalid weather query")
+		}
+		if a.Region != nil {
+			if a.Region.Clear {
+				return fmt.Errorf("invalid weather location")
+			}
+			_, err := regions.ResolveNames(a.Region.Province, a.Region.City, a.Region.District)
+			return err
+		}
+		return nil
 	case "set_region", "set_weather_metrics", "save_countdown", "delete_countdown":
 		if a.Scope != "" || a.Content != "" || a.DueAt != "" || a.ReminderID != "" || a.MemoryKey != "" || len(a.MemoryKeys) > 0 || len(a.RecipientIDs) > 0 {
 			return fmt.Errorf("invalid business action fields")
@@ -488,6 +508,9 @@ func validateV2Action(a Action) error {
 	}
 	return nil
 }
+
+// ValidateV2Action also guards direct execution in workers and tests.
+func ValidateV2Action(a Action) error { return validateV2Action(a) }
 
 func strictDecode(body string, target any) error {
 	d := json.NewDecoder(strings.NewReader(body))

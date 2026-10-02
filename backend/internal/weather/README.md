@@ -1,6 +1,8 @@
 # 天气关怀
 
-只使用和风天气专属 API Host：`/weather/v1/daily`（3天）、`/weather/v1/hourly`（48小时）、`/airquality/v1/hourly`（24小时）、`/airquality/v1/current`。原 Open-Meteo/CAMS 查询已删除，不回退其他来源。
+只使用和风天气专属 API Host：`/weather/v1/current`（实时天气）、`/weather/v1/daily`（3天）、`/weather/v1/hourly`（48小时）、`/airquality/v1/hourly`（24小时）、`/airquality/v1/current`。原 Open-Meteo/CAMS 查询已删除，不回退其他来源。
+
+聊天询问天气或点击输入框上方的「查天气」会通过大模型的 `query_weather` 控制动作即时查询，绕过30分钟预报缓存。支持当前天气、今天/明天预报、自己/对方和指定省市区；没有指定对象时只查询发言用户自己已保存的地区；只有明确帮对方查或查双方时才扩大范围，默认查询不会借用对方地区。双方查询时，同地区合并请求和卡片。实时天气接口不可用时明确标注仅有日期预报，不用最高/最低温冒充实时温度。地区未填写时引导补充；查询不会修改地区或开启早晚提醒。查询结果存入控制动作历史，并通过 context/realtime 同模板分页保存带过期时间的快照，刷新页面不会再次请求天气接口。
 
 在后端 `.env.local` 配置 `QWEATHER_API_HOST` 和 `QWEATHER_API_KEY`，密钥不发送到浏览器。也支持 Ed25519 JWT，配置 `QWEATHER_KEY_ID`、`QWEATHER_DEVELOPER_ID`、`QWEATHER_PROJECT_ID`、`QWEATHER_PRIVATE_KEY_FILE` 后服务端自动签名与续期。专属 Host 见[官方说明](https://dev.qweather.com/docs/configuration/api-host/)。
 

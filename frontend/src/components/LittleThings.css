@@ -1,6 +1,6 @@
 @font-face {
   font-family: 'TieTie Reminder Titles';
-  src: url('/fonts/reminder-titles-2a274389d872.woff2') format('woff2');
+  src: url('/fonts/reminder-titles-a3c80cd66a1e.woff2') format('woff2');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -49,7 +49,11 @@
 .things-page .things-tabs { display: flex; align-items: center; gap: 16px; margin: 0; padding: 0; border: 0; background: transparent; }
 .things-page .things-tabs button { position: relative; display: flex; align-items: flex-start; justify-content: center; flex: none; min-width: 44px; min-height: 44px; padding: 2px 2px 6px; color: #8b929f; border-radius: 0; background: transparent; font-family: 'TieTie Reminder Titles', 'Yuanti SC', 'PingFang SC', sans-serif; font-size: 24px; line-height: 1.3; font-weight: 400; letter-spacing: 2px; white-space: nowrap; text-shadow: 0 1px 0 #fff, 0 2px 0 #c4d5f4, 0 4px 6px #537cb926; transition: color .3s, text-shadow .3s; }
 .things-page .things-tabs button:active:not(:disabled) { transform: none; }
-.things-page .things-tabs button.is-active { color: #2864ef; text-shadow: 0 1px 0 #fff, 0 2px 0 #adc6ea, 0 6px 10px #3f6fb366; }
+.things-page .things-tabs button.is-active { color: #2864ef; }
+/* 同一艺术字体的字形高度略有差异，校正文字比例，保持字号和按钮尺寸一致。 */
+.things-page .things-tab-label { display: block; transform: scaleY(var(--tab-label-scale-y, 1)); transform-origin: center; }
+.things-page #things-care-tab { --tab-label-scale-y: 1.04; }
+.things-page #things-countdown-tab { --tab-label-scale-y: 1.02; }
 .things-page .things-tab-panel { padding-top: 0; }
 .things-page #things-reminders-panel > .things-section-heading { margin-top: 24px; }
 .things-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; margin: 0 2px 12px; }

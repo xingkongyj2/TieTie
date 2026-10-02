@@ -61,6 +61,8 @@ type Reminder struct {
 	RecipientIDs []int64 `json:"recipientIds"`
 }
 type Card struct {
+	QueryNotice    string           `json:"queryNotice,omitempty"`
+	CurrentWeather *WeatherSnapshot `json:"currentWeather,omitempty"`
 	PreviousDay    *Day             `json:"previousDay,omitempty"`
 	CurrentAir     *AirSnapshot     `json:"currentAir,omitempty"`
 	AirComparison  string           `json:"airComparison,omitempty"`
@@ -93,19 +95,35 @@ type AirSnapshot struct {
 	AQI         *float64  `json:"aqi"`
 	AQILabel    string    `json:"aqiLabel"`
 }
+type WeatherSnapshot struct {
+	RetrievedAt time.Time `json:"retrievedAt"`
+	Temperature *float64  `json:"temperature"`
+	FeelsLike   *float64  `json:"feelsLike"`
+	Humidity    *float64  `json:"humidity"`
+	Wind        *float64  `json:"wind"`
+	Visibility  *float64  `json:"visibility"`
+	Description string    `json:"description"`
+	Code        int       `json:"code"`
+}
 type Forecast struct {
-	CurrentAir   *AirSnapshot
-	Source       string
-	AQILabel     string
-	Attributions []string
-	Days         []Day
-	Hours        []Hour
-	AirAvailable bool
-	Precision    string
-	FetchedAt    time.Time
+	CurrentWeather *WeatherSnapshot
+	CurrentAir     *AirSnapshot
+	Source         string
+	AQILabel       string
+	Attributions   []string
+	Days           []Day
+	Hours          []Hour
+	AirAvailable   bool
+	Precision      string
+	FetchedAt      time.Time
 }
 type Provider interface {
 	Forecast(context.Context, regions.Location) (Forecast, error)
+}
+
+// Manual queries bypass the scheduled forecast cache.
+type FreshProvider interface {
+	ForecastFresh(context.Context, regions.Location) (Forecast, error)
 }
 
 func Locate(region regions.Location) (Point, string, error) {
@@ -169,11 +187,11 @@ func Description(code int) string {
 }
 func Analyze(f Forecast, region regions.Location, mode string, now time.Time) (Card, error) {
 	dayTime := now.In(Shanghai)
-	if mode == "night" {
+	if mode == "night" || mode == "query_tomorrow" {
 		dayTime = dayTime.AddDate(0, 0, 1)
 	}
 	date := dayTime.Format("2006-01-02")
-	c := Card{Mode: mode, Region: region, Precision: f.Precision, GeneratedAt: f.FetchedAt, Source: f.Source, AQILabel: f.AQILabel, Attributions: f.Attributions, Hours: []Hour{}, Alerts: []string{}, Reminders: []Reminder{}}
+	c := Card{CurrentWeather: f.CurrentWeather, Mode: mode, Region: region, Precision: f.Precision, GeneratedAt: f.FetchedAt, Source: f.Source, AQILabel: f.AQILabel, Attributions: f.Attributions, Hours: []Hour{}, Alerts: []string{}, Reminders: []Reminder{}}
 	if c.Source == "" {
 		c.Source = "和风天气"
 	}

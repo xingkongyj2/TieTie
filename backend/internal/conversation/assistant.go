@@ -17,6 +17,7 @@ type RegionUpdate struct {
 }
 
 type Action struct {
+	WeatherWhen     string            `json:"weatherWhen,omitempty"`
 	TargetUserID    int64             `json:"targetUserId,omitempty"`
 	Region          *RegionUpdate     `json:"region,omitempty"`
 	Metrics         []string          `json:"metrics,omitempty"`

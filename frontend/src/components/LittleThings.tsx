@@ -1,6 +1,5 @@
-import { Cake, Moon } from 'lucide-react'
-import { useId, useState, type ReactNode } from 'react'
-import type { AISettings, RelationshipState } from '../types'
+import { useState } from 'react'
+import type { RelationshipState } from '../types'
 import { ReminderBoard } from './Tools'
 import { Anniversaries } from './Anniversaries'
 import type { AnniversaryState } from '../hooks/useAnniversaries'
@@ -8,9 +7,8 @@ import { SpaceBuddy } from './SpaceBuddies'
 import { reminderPhase } from '../lib/reminders'
 import { Countdowns } from './Countdowns'
 import { CareModes } from './CareModes'
+import { AnniversaryReminders } from './AnniversaryReminders'
 import './LittleThings.css'
-
-type CareKey = 'weatherCare' | 'anniversaryReminders' | 'quietHours'
 
 interface Props {
   sessionId?: string
@@ -20,7 +18,6 @@ interface Props {
   anniversaries: AnniversaryState
   state: RelationshipState
   reminderState?: RelationshipState
-  onSaveSettings: (settings: AISettings) => Promise<void>
   onToggle: (id: string) => Promise<void>
   onCancel?: (id: string) => Promise<void>
   reminderNotice?: string
@@ -29,13 +26,7 @@ interface Props {
   notify: (text: string) => void
 }
 
-function CareRow({ icon, title, description, checked, disabled, onChange }: { icon: ReactNode; title: string; description: string; checked: boolean; disabled: boolean; onChange: () => void }) {
-  const descriptionId = useId()
-  return <div className="setting-row"><span className="setting-icon">{icon}</span><div className="setting-copy"><strong>{title}</strong><p id={descriptionId}>{description}</p></div><button type="button" className={`toggle ${checked ? 'is-on' : ''}`} role="switch" aria-checked={checked} aria-label={title} aria-describedby={descriptionId} disabled={disabled} onClick={onChange}><span /></button></div>
-}
-
-export function LittleThings({ sessionId, selfId, onEditRegion, onBind, state, anniversaries, reminderState = state, onSaveSettings, onToggle, onCancel, reminderNotice, remindersLoading, onReloadReminders, notify }: Props) {
-  const [busyKey, setBusyKey] = useState<CareKey | null>(null)
+export function LittleThings({ sessionId, selfId, onEditRegion, onBind, state, anniversaries, reminderState = state, onToggle, onCancel, reminderNotice, remindersLoading, onReloadReminders, notify }: Props) {
   const [activeTab, setActiveTab] = useState<'care' | 'reminders' | 'anniversary' | 'countdown'>('reminders')
   const [activeFilter, setActiveFilter] = useState<'both' | 'self' | 'partner' | null>(null)
   const pendingReminders = reminderState.reminders.filter((reminder) => reminderPhase(reminder) === 'pending')
@@ -45,24 +36,12 @@ export function LittleThings({ sessionId, selfId, onEditRegion, onBind, state, a
     { assignee: 'self', audience: '我', className: 'things-stat-self' },
     { assignee: 'partner', audience: 'TA', className: 'things-stat-partner' },
   ] as const
-  const tabs = [{ id: 'reminders', label: '提醒' }, { id: 'countdown', label: '倒计时' }, { id: 'anniversary', label: '纪念日' }, { id: 'care', label: '贴贴' }] as const
-  const change = async (key: CareKey) => {
-    if (busyKey) return
-    setBusyKey(key)
-    try {
-      await onSaveSettings({ ...state.settings, [key]: !state.settings[key] })
-      notify('提醒偏好已保存到此设备')
-    } catch {
-      notify('提醒偏好没保存成功，请再试一次。')
-    } finally {
-      setBusyKey(null)
-    }
-  }
-  return <section className="tab-page things-page" aria-label="提醒">
+  const tabs = [{ id: 'reminders', label: '待办' }, { id: 'countdown', label: '倒计时' }, { id: 'anniversary', label: '纪念日' }, { id: 'care', label: '贴贴' }] as const
+  return <section className="tab-page things-page" aria-label="待办">
       <header className="things-header">
         <div className="things-heading">
-          <h1 className="sr-only">提醒</h1>
-          <div className="things-tabs" role="tablist" aria-label="提醒分类">
+          <h1 className="sr-only">待办</h1>
+          <div className="things-tabs" role="tablist" aria-label="待办分类">
         {tabs.map(({ id, label }, index) => <button type="button" role="tab" key={id} id={`things-${id}-tab`} aria-controls={`things-${id}-panel`} aria-selected={activeTab === id} tabIndex={activeTab === id ? 0 : -1} className={activeTab === id ? 'is-active' : ''} onClick={() => setActiveTab(id)} onKeyDown={(event) => {
           let next = index
           if (event.key === 'ArrowRight') next = (index + 1) % tabs.length
@@ -73,13 +52,13 @@ export function LittleThings({ sessionId, selfId, onEditRegion, onBind, state, a
           event.preventDefault()
           setActiveTab(tabs[next].id)
           document.getElementById(`things-${tabs[next].id}-tab`)?.focus()
-        }}>{label}</button>)}
+        }}><span className="things-tab-label">{label}</span></button>)}
           </div>
         </div>
       </header>
     <div className="tab-page-scroll things-scroll">
       <section role="tabpanel" id="things-reminders-panel" aria-labelledby="things-reminders-tab" className="things-tab-panel" hidden={activeTab !== 'reminders'}>
-        <section className="things-hero" aria-label="提醒概览">
+        <section className="things-hero" aria-label="待办概览">
           <div className="things-hero-top">
             <div className="things-hero-copy">
               <h2 aria-label={`全部还有 ${pendingCount} 件待完成`}>
@@ -118,8 +97,7 @@ export function LittleThings({ sessionId, selfId, onEditRegion, onBind, state, a
       <section role="tabpanel" id="things-care-panel" aria-labelledby="things-care-tab" className="things-tab-panel" hidden={activeTab !== 'care'}>
         <div className="form-card settings-card" aria-label="提醒偏好">
           {activeTab === 'care' && <CareModes key={sessionId} sessionId={sessionId} selfId={selfId} onEditRegion={onEditRegion} onBind={onBind} notify={notify} />}
-          <CareRow icon={<Cake size={18} />} title="纪念日提醒" description="希望提前 3 天收到纪念日提示" checked={state.settings.anniversaryReminders} disabled={busyKey !== null} onChange={() => void change('anniversaryReminders')} />
-          <CareRow icon={<Moon size={18} />} title="安静模式" description="希望在 23:00–08:00 暂停打扰" checked={state.settings.quietHours} disabled={busyKey !== null} onChange={() => void change('quietHours')} />
+          {activeTab === 'care' && <AnniversaryReminders key={`anniversary:${sessionId}`} sessionId={sessionId} onBind={onBind} notify={notify} />}
         </div>
       </section>
     </div>

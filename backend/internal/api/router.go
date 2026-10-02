@@ -56,6 +56,7 @@ func NewRouter(s *Server) http.Handler {
 	mux.Handle("/api/qoder/sessions/{id}/care-settings", authed(s.handleCareSettings))
 	mux.Handle("/api/qoder/sessions/{id}/care-preview", authed(s.handleCarePreview))
 	mux.Handle("/api/qoder/sessions/{id}/anniversaries", authed(s.handleAnniversaries))
+	mux.Handle("/api/qoder/sessions/{id}/anniversary-reminder-settings", authed(s.handleAnniversaryReminderSettings))
 	mux.Handle("/api/qoder/sessions/{id}/anniversaries/{anniversaryId}", authed(s.handleAnniversaryPin))
 	mux.Handle("/api/qoder/sessions/{id}/tool-result", authed(s.handleToolResult))
 	mux.Handle("/api/qoder/sessions/{id}/stream", authed(s.handleStream))

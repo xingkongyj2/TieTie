@@ -19,6 +19,12 @@ export interface AnniversaryResult {
   resetRequired?: boolean
 }
 const path = (session: string) => `/api/qoder/sessions/${encodeURIComponent(session)}/anniversaries`
+export interface AnniversaryReminderSettings { enabled: boolean; nextDue: string }
+const reminderPath = (session: string) => `/api/qoder/sessions/${encodeURIComponent(session)}/anniversary-reminder-settings`
+export const anniversaryRemindersApi = {
+  get: (session: string): Promise<AnniversaryReminderSettings> => request(reminderPath(session)),
+  save: (session: string, enabled: boolean): Promise<AnniversaryReminderSettings> => request(reminderPath(session), { method: 'PUT', body: { enabled } }),
+}
 export const anniversariesApi = {
   list(session: string, after = '', afterDeletion = ''): Promise<AnniversaryResult> {
     const query = new URLSearchParams()

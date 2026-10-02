@@ -290,6 +290,18 @@ func (db *DB) CompleteCareReport(ctx context.Context, job CareMode, members []Ca
 		return tx.Model(&current).Updates(map[string]any{"next_due": next, "run_at": next, "state": "scheduled", "last_error": "", "token": "", "last_delivered_at": now.UTC()}).Error
 	})
 }
+
+// Weather comparisons need previous forecasts even when many anniversary
+// notices have been added to the shared message history in the meantime.
+func (db *DB) ListWeatherCareReports(ctx context.Context, session string, limit int) ([]CareReport, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 8
+	}
+	rows := []CareReport{}
+	err := db.gdb.WithContext(ctx).Where("session_id=? AND binding_created_at=(SELECT created_at FROM bindings WHERE session_id=?) AND mode IN ('morning','night')", session, session).Order("created_at DESC,id DESC").Limit(limit).Find(&rows).Error
+	return rows, err
+}
+
 func (db *DB) ListCareReports(ctx context.Context, session string, limit int, after ...string) ([]CareReport, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 30

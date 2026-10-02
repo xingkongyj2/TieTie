@@ -7,8 +7,9 @@ export interface WeatherHour {
 }
 export interface WeatherView { recipientIds: number[]; recipientNames: string[]; metrics: string[]; summary?: string[]; comparisons: { metric: string; text: string }[]; alerts: string[]; clothing?: string; localAdvice?: string; preferenceHint: string }
 export interface WeatherCardData {
+ queryNotice?: string; currentWeather?: { retrievedAt: string; temperature: number | null; feelsLike: number | null; humidity: number | null; wind: number | null; visibility: number | null; description: string; code: number }
  aqiLabel?: string; attributions?: string[]; views?: WeatherView[]; currentAir?: { retrievedAt: string; pm25: number | null; aqi: number | null; aqiLabel: string }; airComparison?: string
-  mode: 'morning' | 'night'; region: RegionLocation; precision: 'district' | 'city'
+  mode: 'morning' | 'night' | 'query' | 'query_today' | 'query_tomorrow'; region: RegionLocation; precision: 'district' | 'city'
   recipientIds: number[]; recipientNames: string[]
   day: { date: string; min: number; max: number; code: number; rainChance: number | null; wind: number | null; uv: number | null }
   description: string; comparison: string; alerts: string[]; clothing: string; hours: WeatherHour[]
