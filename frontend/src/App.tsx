@@ -49,7 +49,6 @@ export default function App() {
   const [tool, setTool] = useState<ToolName | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
   const [toast, setToast] = useState('');
-  const [composerExpanded, setComposerExpanded] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const chatRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
@@ -171,7 +170,7 @@ export default function App() {
   };
 
 
-  return <div className={`app-shell ${view !== 'details' ? 'has-bottom-nav' : ''}${composerExpanded ? ' is-composer-expanded' : ''}`} data-view={view}>
+  return <div className={`app-shell ${view !== 'details' ? 'has-bottom-nav' : ''}`} data-view={view}>
     <div className="chat-view" hidden={view !== 'we'}>
       {account.account.binding ? <>
       <header className="chat-header"><div className="chat-heading"><h1>我们</h1></div><button className="icon-button details-button" aria-label="查看角色信息" onClick={() => setView('details')}><Ellipsis size={18} /></button></header>
@@ -186,7 +185,7 @@ export default function App() {
         {chat.turnError && !feedback && <div className="turn-error" role="alert">{chat.turnError}</div>}
         {chat.remindersError && <div className="turn-error" role="alert">{chat.remindersError}</div>}
       </main>
-      <Composer members={sharedMembers} key={chat.selectedId ?? 'no-session'} sending={chat.submitting} disabled={!chat.canSend} placeholder={chat.awaitingAsk ? '先回答上面那道选择题…' : chat.busy ? (chat.silent ? '消息已发给对方，可以先写下一句…' : '伙伴正在回复，可以先写下一句…') : '记下一个共同提醒…'} onSend={sendMessage} onTool={setTool} onError={notify} onExpandedChange={setComposerExpanded} />
+      <Composer members={sharedMembers} key={chat.selectedId ?? 'no-session'} sending={chat.submitting} disabled={!chat.canSend} placeholder={chat.awaitingAsk ? '先回答上面那道选择题…' : chat.busy ? (chat.silent ? '消息已发给对方，可以先写下一句…' : '伙伴正在回复，可以先写下一句…') : '记下一个共同提醒…'} onSend={sendMessage} onTool={setTool} onError={notify} />
       </> : <BindPage code={account.account.user.code} onBind={account.bind} notify={notify} embedded />}
     </div>
     {view === 'things' && <LittleThings sessionId={account.account.binding?.sessionId} selfId={selfId} onEditRegion={() => { setEditProfileInitially(true); setView('mine'); }} onBind={() => setView('we')} state={state} anniversaries={anniversaries} reminderState={sharedState} onToggle={toggleReminder} onCancel={cancelReminder} remindersLoading={chat.loading} reminderNotice={!account.account.binding ? '绑定两人空间后，可以一起安排和查看提醒。' : chat.remindersError || chat.error} onReloadReminders={account.account.binding ? chat.reload : undefined} notify={notify} />}
