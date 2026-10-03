@@ -158,19 +158,11 @@ func (s *Server) processConversationFrom(ctx context.Context, id string, result 
 	for index, message := range result.Messages {
 		byID[message.ID] = index
 	}
-	// 一次历史重放里同一轮对话会被反复问到控制任务是否存在；远端数据库一个往返要上百毫秒，
-	// 这里在单次请求内按 requestID 记忆查询结果。
-	controlCache := map[string]*dbop.ControlJob{}
-	getControl := func(requestID string) (*dbop.ControlJob, error) {
-		if job, seen := controlCache[requestID]; seen {
-			return job, nil
-		}
-		job, err := s.DB.GetControl(ctx, id, requestID)
-		if err != nil {
-			return nil, err
-		}
-		controlCache[requestID] = job
-		return job, nil
+	// 历史重放里每一轮 AI 动作原本要 4 条语句（存在性查询、幂等插入、结果读取、完成改写），
+	// 远端数据库一次往返上百毫秒，页面就会被拖到十几秒。这里开头一次查全，之后只在确实要写时才写。
+	controls, err := s.DB.ListSessionControls(ctx, id)
+	if err != nil {
+		return space, "", err
 	}
 	origin, hasOrigin := conversation.DecodeInput(priorInput)
 	if hasOrigin && origin.Context.SessionID != id {
@@ -208,7 +200,7 @@ func (s *Server) processConversationFrom(ctx context.Context, id string, result 
 		if hasOrigin && origin.Context.ReplyMode == conversation.SilentReply && (event.Type == "agent.message" || event.Type == "agent.custom_tool_use") {
 			silentMessages[event.ID] = true
 			if origin.Kind == "action_result" && event.Type == "agent.message" {
-				if err := s.attachControlReply(ctx, id, origin, &qoder.PublicMessage{}); err != nil {
+				if err := s.attachControlReply(ctx, id, origin, &qoder.PublicMessage{}, controls); err != nil {
 					return space, "", err
 				}
 			}
@@ -222,7 +214,7 @@ func (s *Server) processConversationFrom(ctx context.Context, id string, result 
 				if hasOrigin && origin.Version == 2 && !origin.Hidden {
 					hiddenTurns[origin.RequestID] = true
 				}
-				if err := s.acceptControlEvent(ctx, id, binding, origin, hasOrigin, event, assistant); err != nil {
+				if err := s.acceptControlEvent(ctx, id, binding, origin, hasOrigin, event, assistant, controls); err != nil {
 					return space, "", err
 				}
 				continue
@@ -245,7 +237,7 @@ func (s *Server) processConversationFrom(ctx context.Context, id string, result 
 					actions[i].Storage = "database_and_memory"
 				}
 			}
-			if err := s.acceptControlEvent(ctx, id, binding, origin, true, event, conversation.Assistant{Control: true, Version: 2, RequestID: origin.RequestID, Actions: actions}); err != nil {
+			if err := s.acceptControlEvent(ctx, id, binding, origin, true, event, conversation.Assistant{Control: true, Version: 2, RequestID: origin.RequestID, Actions: actions}, controls); err != nil {
 				return space, "", err
 			}
 			hiddenTurns[origin.RequestID] = true
@@ -255,9 +247,7 @@ func (s *Server) processConversationFrom(ctx context.Context, id string, result 
 		if hasOrigin && origin.Version == 2 {
 			if !origin.Hidden {
 				messageTurns[event.ID] = origin.RequestID
-				if existing, err := getControl(origin.RequestID); err != nil {
-					return space, "", err
-				} else if existing != nil {
+				if _, existing := controls[origin.RequestID]; existing {
 					hiddenTurns[origin.RequestID] = true
 				}
 			}
@@ -267,7 +257,7 @@ func (s *Server) processConversationFrom(ctx context.Context, id string, result 
 				continue
 			}
 			if origin.Kind == "action_result" {
-				if err := s.attachControlReply(ctx, id, origin, message); err != nil {
+				if err := s.attachControlReply(ctx, id, origin, message, controls); err != nil {
 					return space, "", err
 				}
 			}

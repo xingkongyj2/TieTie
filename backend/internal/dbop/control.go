@@ -42,6 +42,24 @@ func (db *DB) EnqueueControl(ctx context.Context, id, request, origin, event str
 	job := ControlJob{ID: ControlID(id, request), SessionID: id, RequestID: request, Origin: origin, SourceEventID: event, Actions: string(payload), CreatedBy: author, BindingCreatedAt: binding, Status: "pending", RunAt: time.Now().UTC()}
 	return db.gdb.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&job).Error
 }
+
+// ListSessionControls 一次取回该会话的全部控制任务，按 request_id 索引。
+// 历史重放每轮都要判断任务是否存在、是否已完成，逐条查写在远端数据库上会把一次页面加载拖到十几秒。
+func (db *DB) ListSessionControls(ctx context.Context, id string) (map[string]*ControlJob, error) {
+	if !db.enabled() {
+		return nil, errNoDB
+	}
+	var rows []ControlJob
+	if err := db.gdb.WithContext(ctx).Where("session_id = ?", id).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	byRequest := make(map[string]*ControlJob, len(rows))
+	for i := range rows {
+		byRequest[rows[i].RequestID] = &rows[i]
+	}
+	return byRequest, nil
+}
+
 func (db *DB) GetControl(ctx context.Context, id, request string) (*ControlJob, error) {
 	var j ControlJob
 	err := db.gdb.WithContext(ctx).Where("id = ?", ControlID(id, request)).First(&j).Error

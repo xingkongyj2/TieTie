@@ -21,7 +21,7 @@ func (s *Server) encodeMember(space conversation.Context, text string) string {
 	}
 	return conversation.EncodeUser(space, text)
 }
-func (s *Server) acceptControlEvent(ctx context.Context, id string, binding *dbop.Binding, origin conversation.Input, known bool, event qoder.Event, a conversation.Assistant) error {
+func (s *Server) acceptControlEvent(ctx context.Context, id string, binding *dbop.Binding, origin conversation.Input, known bool, event qoder.Event, a conversation.Assistant, controls map[string]*dbop.ControlJob) error {
 	date, err := time.Parse(time.RFC3339Nano, event.ProcessedAt)
 	if !known || origin.Version != 2 || origin.Hidden || origin.Context.Now.Before(binding.CreatedAt) || err != nil || date.Before(binding.CreatedAt) || (origin.UserID != binding.UserA && origin.UserID != binding.UserB) {
 		logging.Scheduler().Warn("控制消息没有有效成员来源，已忽略", "event", "control.rejected", "session_id", id, "source_event_id", event.ID)
@@ -51,16 +51,28 @@ func (s *Server) acceptControlEvent(ctx context.Context, id string, binding *dbo
 	// Local provenance needs identity, not another copy of the long contract.
 	provenance.Compact = true
 	encoded, _ := json.Marshal(provenance)
-	return s.DB.EnqueueControl(ctx, id, origin.RequestID, "\n<TIETIE_INPUT_V2>\n"+string(encoded)+"\n</TIETIE_INPUT_V2>", event.ID, a.Actions, origin.UserID, binding.CreatedAt)
-}
-func (s *Server) attachControlReply(ctx context.Context, id string, input conversation.Input, message *qoder.PublicMessage) error {
-	job, err := s.DB.GetControl(ctx, id, input.RequestID)
-	if err != nil {
+	if _, queued := controls[origin.RequestID]; queued {
+		return nil // 这一轮的任务已在库里，幂等插入只会空转一次写
+	}
+	if err := s.DB.EnqueueControl(ctx, id, origin.RequestID, "\n<TIETIE_INPUT_V2>\n"+string(encoded)+"\n</TIETIE_INPUT_V2>", event.ID, a.Actions, origin.UserID, binding.CreatedAt); err != nil {
 		return err
+	}
+	controls[origin.RequestID] = nil // 详情未知：同轮再出现不重复插入，需要内容时回源查一次
+	return nil
+}
+func (s *Server) attachControlReply(ctx context.Context, id string, input conversation.Input, message *qoder.PublicMessage, controls map[string]*dbop.ControlJob) error {
+	job, cached := controls[input.RequestID]
+	if !cached || job == nil {
+		loaded, err := s.DB.GetControl(ctx, id, input.RequestID)
+		if err != nil {
+			return err
+		}
+		job = loaded
 	}
 	if job == nil {
 		return nil
 	}
+	controls[input.RequestID] = job
 	var results []conversation.ActionResult
 	if err := json.Unmarshal([]byte(job.Results), &results); err != nil {
 		return err
@@ -78,6 +90,9 @@ func (s *Server) attachControlReply(ctx context.Context, id string, input conver
 			}
 			message.ReminderError += r.Message
 		}
+	}
+	if job.Status == "completed" {
+		return nil // 历史轮次早已完成，重放时不必再改写一次状态
 	}
 	return s.DB.CompleteControl(ctx, job.ID)
 }
