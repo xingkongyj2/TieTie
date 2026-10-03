@@ -67,11 +67,11 @@ export default function App() {
   useEffect(() => {
     const changedSession = lastChat.current.id !== chat.selectedId;
     if (changedSession) nearBottom.current = true;
-    if (chat.messages.length && (nearBottom.current || chat.submitting)) {
+    if ((chat.messages.length || chat.replyFeedback) && (nearBottom.current || chat.submitting)) {
       chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: changedSession || !lastChat.current.count ? 'instant' : 'smooth' });
     }
     lastChat.current = { id: chat.selectedId ?? '', count: chat.messages.length };
-  }, [chat.selectedId, chat.messages.length, chat.messages.at(-1)?.text.length, chat.submitting, view, !!state]);
+  }, [chat.selectedId, chat.messages.length, chat.messages.at(-1)?.text.length, chat.replyFeedback?.phase, chat.replyFeedback?.message, chat.submitting, view, !!state]);
   useEffect(() => {
     if (!chat.selectedId || chat.loading) return;
     const seen = seenReminders.current;
@@ -144,16 +144,16 @@ export default function App() {
     <div className="chat-view" hidden={view !== 'we'}>
       {account.account.binding ? <>
       <header className="chat-header"><div className="chat-heading"><h1>我们</h1></div><button className="icon-button details-button" aria-label="查看角色信息" onClick={() => setView('details')}><Ellipsis size={18} /></button></header>
-      {chat.error && <div className="cloud-error" role="alert"><span>{chat.error}</span><button disabled={chat.loading || chat.refreshing || chat.submitting} onClick={() => void chat.reload()}>重试</button></div>}
-      <main className={`chat-scroll ${!chat.messages.length ? 'is-empty' : ''}`} ref={chatRef} aria-label="云端聊天记录" aria-busy={chat.loading} onScroll={() => { const el = chatRef.current; if (el) nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100; }}>
-        {chat.loading && !chat.messages.length ? <div className="cloud-empty" role="status"><span className="spinner" /><p>正在找回我们聊过的话…</p></div> : !chat.messages.length && !chat.error ? <div className="cloud-empty chat-welcome"><span className="welcome-eyebrow"><Sparkles size={13} />我们的共享空间</span><SpaceBuddy variant="blue" className="chat-welcome-buddy" /><h2>共同的提醒，日常的分享</h2>{!chat.session && <p>正在准备我们的共享空间…</p>}</div> : null}
+      {chat.error && !feedback && <div className="cloud-error" role="alert"><span>{chat.error}</span><button disabled={chat.loading || chat.refreshing || chat.submitting} onClick={() => void chat.reload()}>重试</button></div>}
+      <main className={`chat-scroll ${!chat.messages.length && !feedback ? 'is-empty' : ''}`} ref={chatRef} aria-label="云端聊天记录" aria-busy={chat.loading} onScroll={() => { const el = chatRef.current; if (el) nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100; }}>
+        {chat.loading && !chat.messages.length && !feedback ? <div className="cloud-empty" role="status"><span className="spinner" /><p>正在找回我们聊过的话…</p></div> : !chat.messages.length && !chat.error && !feedback ? <div className="cloud-empty chat-welcome"><span className="welcome-eyebrow"><Sparkles size={13} />我们的共享空间</span><SpaceBuddy variant="blue" className="chat-welcome-buddy" /><h2>共同的提醒，日常的分享</h2>{!chat.session && <p>正在准备我们的共享空间…</p>}</div> : null}
         <div className="messages">{chat.messages.map((message, index) => <Fragment key={message.id}>
           {(index === 0 || messageDay(chat.messages[index - 1].createdAt) !== messageDay(message.createdAt)) && <div className="chat-date"><span /><strong>{messageDayLabel(message.createdAt)}</strong><span /></div>}
           <ChatMessage message={message} members={sharedMembers} onError={notify} onOpenImage={(src, alt) => setPreviewImage({ src, alt })} onAnswer={chat.answerAsk} />
         </Fragment>)}</div>
-        {chat.loading && chat.messages.length > 0 && <div className="chat-syncing" role="status"><span className="spinner" />正在同步完整历史…</div>}
-        {feedback && <div className={`assistant-feedback${feedback.phase === 'error' ? ' is-error' : ''}${feedback.phase === 'sent' || feedback.phase === 'error' ? ' is-terminal' : ''}`} role={feedback.phase === 'error' ? 'alert' : 'status'} aria-live="polite"><Avatar member={ai} /><div className="assistant-feedback-bubble"><span>{feedbackText}</span><span className="typing-dots" aria-hidden="true"><i /><i /><i /></span></div></div>}
-        {chat.turnError && feedback?.phase !== 'error' && <div className="turn-error" role="alert">{chat.turnError}</div>}
+        {chat.loading && chat.messages.length > 0 && !feedback && <div className="chat-syncing" role="status"><span className="spinner" />正在同步完整历史…</div>}
+        {feedback && <div className={`assistant-feedback${feedback.phase === 'error' ? ' is-error' : ''}${feedback.phase === 'sent' || feedback.phase === 'error' ? ' is-terminal' : ''}`} role={feedback.phase === 'error' ? 'alert' : 'status'} aria-live="polite"><Avatar member={ai} /><div className="assistant-feedback-bubble"><span>{feedbackText}</span><span className="typing-dots" aria-hidden="true"><i /><i /><i /></span>{chat.error && <button className="assistant-feedback-retry" disabled={chat.loading || chat.refreshing || chat.submitting} onClick={() => void chat.reload()}>重新同步</button>}</div></div>}
+        {chat.turnError && !feedback && <div className="turn-error" role="alert">{chat.turnError}</div>}
         {chat.remindersError && <div className="turn-error" role="alert">{chat.remindersError}</div>}
       </main>
       <Composer members={sharedMembers} key={chat.selectedId ?? 'no-session'} sending={chat.submitting} disabled={!chat.canSend} placeholder={chat.awaitingAsk ? '先回答上面那道选择题…' : chat.busy ? (chat.silent ? '消息已发给对方，可以先写下一句…' : '伙伴正在回复，可以先写下一句…') : '记下一个共同提醒…'} onSend={sendMessage} onTool={setTool} onError={notify} />

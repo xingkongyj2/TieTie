@@ -229,6 +229,7 @@ h1, h2, h3, p { margin: 0; }
 .assistant-feedback-bubble { display: inline-flex; align-items: center; gap: 8px; min-width: min(205px, calc(100vw - 95px)); min-height: 36px; max-width: calc(100% - 48px); padding: 8px 12px; border-radius: 0 14px 14px 14px; background: #fff; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .assistant-feedback.is-error .assistant-feedback-bubble { color: #a35143; background: #fff1ed; }
 .assistant-feedback.is-terminal .typing-dots { visibility: hidden; }
+.assistant-feedback-retry { flex-shrink: 0; padding: 2px 0; color: #436ec7; background: none; font-size: inherit; font-weight: 600; }
 .typing-dots { display: inline-flex; gap: 3px; margin-left: 3px; }
 .typing-dots i { width: 3px; height: 3px; background: var(--blue); border-radius: 100%; animation: typing 1s infinite; }
 .typing-dots i:nth-child(2) { animation-delay: .15s; }

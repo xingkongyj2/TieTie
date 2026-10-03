@@ -33,6 +33,7 @@ type ReplyPhase = 'sending' | 'waiting' | 'thinking' | 'replying' | 'syncing' | 
 interface ReplyFeedback { phase: ReplyPhase; message?: string }
 
 interface PendingTurn {
+  startedAt: number
   messageIds: Set<string>
   idleEventId: string | null
   silent: boolean
@@ -104,7 +105,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     let replyFeedback = snapshot.replyFeedback?.phase === 'complete' && history.session.status.toLowerCase() === 'idle'
       ? null : snapshot.replyFeedback
     if (pending) {
-      const replied = history.messages.some((message) => message.sender === 'ai' && message.source === 'chat'
+      const replied = !pending.silent && history.messages.some((message) => message.sender === 'ai' && message.source === 'chat'
         && !pending.messageIds.has(message.id))
       const turnEnded = history.session.status.toLowerCase() === 'idle' && history.idleEventId !== null
         && history.idleEventId !== pending.idleEventId
@@ -113,6 +114,8 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
         replyFeedback = replied ? { phase: 'complete' }
           : pending.silent ? { phase: 'sent', message: '消息已发给对方' }
             : { phase: 'error', message: history.turnError || '这次没有收到 AI 回复，请稍后重试。' }
+      } else if (!pending.silent && Date.now() - pending.startedAt > 30_000) {
+        replyFeedback = { phase: 'delayed', message: '回复时间较长，仍在等待并自动检查…' }
       }
     }
     update({
@@ -175,10 +178,14 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       if (error instanceof ApiError && error.code === 'session_forbidden') {
         void onSessionForbidden?.()
       }
-      if (isCurrent()) update({
-        error: errorMessage(error), loading: false, refreshing: false,
-        ...(pendingTurns.current.has(id) ? { replyFeedback: { phase: 'delayed', message: '回复还在同步，正在自动重试…' } as ReplyFeedback } : {}),
-      })
+      if (isCurrent()) {
+        const pendingTurn = pendingTurns.current.get(id)
+        update({
+          error: pendingTurn ? '' : errorMessage(error), loading: false, refreshing: false,
+          ...(pendingTurn && !pendingTurn.silent
+            ? { replyFeedback: { phase: 'delayed', message: '回复还在同步，正在自动重试…' } as ReplyFeedback } : {}),
+        })
+      }
     } finally {
       if (isCurrent()) {
         controller.current = null
@@ -223,6 +230,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     sendLock.current = true
     cancelRead()
     pendingTurns.current.set(id, {
+      startedAt: Date.now(),
       messageIds: new Set(snapshot.messages.map((message) => message.id)),
       idleEventId: snapshot.lastIdleEventId,
       silent,
@@ -249,7 +257,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     } catch (error) {
       pendingTurns.current.delete(id)
       if (mounted.current && current.current.selectedId === id) {
-        update({ pending: false, error: errorMessage(error), replyFeedback: { phase: 'error', message: errorMessage(error) } })
+        update({ pending: false, error: '', replyFeedback: { phase: 'error', message: errorMessage(error) } })
       }
       throw error
     } finally {
@@ -283,6 +291,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     sendLock.current = true
     cancelRead()
     pendingTurns.current.set(id, {
+      startedAt: Date.now(),
       messageIds: new Set(snapshot.messages.map((message) => message.id)),
       idleEventId: snapshot.lastIdleEventId,
       silent: false,
@@ -298,7 +307,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       return true
     } catch (error) {
       pendingTurns.current.delete(id)
-      if (mounted.current && current.current.selectedId === id) update({ pending: false, error: errorMessage(error), replyFeedback: { phase: 'error', message: errorMessage(error) } })
+      if (mounted.current && current.current.selectedId === id) update({ pending: false, error: '', replyFeedback: { phase: 'error', message: errorMessage(error) } })
       throw error
     } finally {
       sendLock.current = false
