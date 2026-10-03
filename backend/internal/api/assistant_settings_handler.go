@@ -18,14 +18,15 @@ func (s *Server) handleAssistantSettings(w http.ResponseWriter, r *http.Request)
 		writeError(w, err)
 		return
 	}
-	unlock := s.lockConversation(session)
-	defer unlock()
-	if err := s.ensureBoundSession(r.Context(), session); err != nil {
-		writeError(w, err)
-		return
-	}
 	status := ""
 	if r.Method == http.MethodPut {
+		// 只有写入需要与本会话的 AI 任务串行；读取不占这把锁，否则一次慢回复会把页面卡住。
+		unlock := s.lockConversation(session)
+		defer unlock()
+		if err := s.ensureBoundSession(r.Context(), session); err != nil {
+			writeError(w, err)
+			return
+		}
 		var body struct {
 			Tone string `json:"tone"`
 		}

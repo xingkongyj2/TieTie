@@ -33,10 +33,7 @@ export function CareModes({ sessionId, selfId, onEditRegion, onBind, notify }: {
   }, [reload])
   const missing = state?.members.filter((member) => !member.region?.cityCode) ?? []
   const selfMissing = missing.some((member) => member.userId === selfId)
-  const guide = () => {
-    if (selfMissing) onEditRegion()
-    else notify(`请${missing.map((member) => member.name).join('和')}在「我的 → 关于我 → 编辑资料」填写地区。`)
-  }
+  const missingLabel = missing.map((member) => member.userId === selfId ? '你' : member.name).join('和')
   const save = async (mode: CareMode, enabled: boolean, time = mode.time, timeOnly = false): Promise<boolean> => {
     if (!sessionId || mutating.current) return false
     mutating.current = true
@@ -49,7 +46,12 @@ export function CareModes({ sessionId, selfId, onEditRegion, onBind, notify }: {
         notify(timeOnly ? `提醒时间已改为 ${time}。` : enabled ? `${mode.mode === 'morning' ? '早安' : '晚安'}提醒已开启，每天 ${time} 发到群里。` : '已关闭这个模式。')
       }
       return true
-    } catch (e) { notify(e instanceof Error ? e.message : '保存失败，请再试一次。'); if(e instanceof ApiError && e.code==='care_region_required' && selfMissing) onEditRegion(); return false }
+    } catch (e) {
+      const regionGap = e instanceof ApiError && e.code === 'care_region_required'
+      notify(regionGap ? (selfMissing ? '还没开启：先填写你的地区。' : `还没开启：请${missingLabel}在「我的 → 关于我 → 编辑资料」填写地区。`) : e instanceof Error ? e.message : '保存失败，请再试一次。')
+      if (regionGap && selfMissing) onEditRegion()
+      return false
+    }
     finally { mutating.current = false; if (mounted.current) setBusy(null); void reload() }
   }
   if (!sessionId) return <div className="care-region-guide"><MapPin size={18} /><p>绑定两人空间后，就能一起收到早安和晚安提醒。</p><button type="button" onClick={onBind}>去绑定<ArrowUpRight size={14} /></button></div>
@@ -57,7 +59,6 @@ export function CareModes({ sessionId, selfId, onEditRegion, onBind, notify }: {
   if (!state) return <p className="empty-note" role="status">正在打开天气关怀…</p>
   return <div className="care-modes">
     {error && <p className="care-status" role="alert">{error}</p>}
-    {missing.length > 0 && <div className="care-region-guide"><MapPin size={18} /><p>{missing.map((member) => member.userId === selfId ? '你' : member.name).join('和')}还没有填写地区，暂时无法开启。</p><button type="button" onClick={guide}>{selfMissing ? '填写我的地区' : '查看填写位置'}<ArrowUpRight size={14} /></button></div>}
     {state.modes.map((mode) => {
       const night = mode.mode === 'night'
       const time = mode.time

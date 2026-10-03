@@ -40,7 +40,7 @@ export function LoginPage({ onLogin, onRegister, notify }: Props) {
     try {
       if (mode === 'register') {
         await onRegister(name, password);
-        notify(`欢迎加入贴贴，${name} 💞`);
+        notify(`欢迎加入贴贴，${name}`);
       } else {
         await onLogin(name, password);
         notify(`欢迎回来，${name}`);

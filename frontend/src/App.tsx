@@ -143,7 +143,7 @@ export default function App() {
           {(index === 0 || messageDay(chat.messages[index - 1].createdAt) !== messageDay(message.createdAt)) && <div className="chat-date"><span /><strong>{messageDayLabel(message.createdAt)}</strong><span /></div>}
           <ChatMessage message={message} members={sharedMembers} onError={notify} onOpenImage={(src, alt) => setPreviewImage({ src, alt })} onAnswer={chat.answerAsk} />
         </Fragment>)}</div>
-        {!chat.silent && (chat.busy || chat.submitting || chat.thinking) && <div className="typing-indicator" role="status"><Avatar member={ai} size="small" /><span>{chat.submitting ? '正在发送给云端伙伴' : chat.thinking ? `${ai.name}正在思考` : `${ai.name}正在回复`}</span><span className="typing-dots"><i /><i /><i /></span></div>}
+        {!chat.silent && (chat.busy || chat.submitting || chat.thinking) && <div className="typing-indicator" role="status"><Avatar member={ai} /><span>{chat.submitting || chat.thinking ? `${ai.name}正在思考` : `${ai.name}正在回复`}</span><span className="typing-dots"><i /><i /><i /></span></div>}
         {chat.turnError && <div className="turn-error" role="alert">{chat.turnError}</div>}
         {chat.remindersError && <div className="turn-error" role="alert">{chat.remindersError}</div>}
       </main>

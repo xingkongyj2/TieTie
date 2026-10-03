@@ -54,6 +54,16 @@ type MemoryRecord struct {
 }
 
 func (MemoryRecord) TableName() string { return "memory_records" }
+
+// BeforeCreate 兜住"没有排期"的记录：绑定初始化时模板文档是直接以 synced 落库的，
+// 不填 run_at 就是 Go 零值，驱动会写成 '0000-00-00'，MySQL 严格模式当场拒收。
+func (m *MemoryRecord) BeforeCreate(*gorm.DB) error {
+	if m.RunAt.IsZero() {
+		m.RunAt = epochTime
+	}
+	return nil
+}
+
 func MemoryID(session, path string) string {
 	sum := sha256.Sum256([]byte(session + "/" + path))
 	return "memory_" + hex.EncodeToString(sum[:16])

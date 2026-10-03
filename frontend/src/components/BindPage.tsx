@@ -54,7 +54,7 @@ export function BindPage({ code, onBind, notify, embedded = false }: Props) {
     notify(await copyText(code) ? '邀请码已复制' : '复制失败，请长按邀请码手动复制');
   };
   const copyShare = async () => {
-    const text = `来「贴贴」和我绑定我们的小窝 💞 打开链接输入我的邀请码 ${code}：${shareLink(code)}`;
+    const text = `来「贴贴」和我绑定我们的小窝，打开链接输入我的邀请码 ${code}：${shareLink(code)}`;
     notify(await copyText(text) ? '分享链接已复制' : '复制失败，请手动分享');
   };
 
@@ -66,7 +66,7 @@ export function BindPage({ code, onBind, notify, embedded = false }: Props) {
     setError('');
     try {
       await onBind(target);
-      notify('绑定成功，小窝已就绪 💞');
+      notify('绑定成功，小窝已就绪');
     } catch (e) {
       setError(e instanceof Error ? e.message : '绑定失败，请稍后重试。');
     } finally {
