@@ -1,3 +1,5 @@
+# CNB_TOKEN、CNB_TOKEN_USER_NAME 和 CNB_DOCKER_REGISTRY 由 CNB 在流水线运行时自动注入。
+# 不要在仓库中填写个人访问令牌；这里的令牌仅供本次构建使用。
 main:
   push:
     - services:
