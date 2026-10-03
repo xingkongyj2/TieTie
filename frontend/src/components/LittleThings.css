@@ -7,7 +7,7 @@
 }
 .things-page { background: transparent; color: #202b40; }
 .things-page .things-scroll { padding: 0 24px 30px; }
-.things-header { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; gap: 12px; padding: max(var(--page-title-top), env(safe-area-inset-top)) 24px 0; margin-bottom: 9px; }
+.things-header { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; gap: 12px; padding: max(var(--page-title-top), env(safe-area-inset-top)) 24px 0; margin-bottom: 3px; }
 .things-heading { min-width: 0; }
 .things-hero { position: relative; padding: 18px 21px 19px; overflow: hidden; border: 0; border-radius: 28px; background: #f8f9fb; }
 .things-hero-top { display: grid; grid-template-columns: minmax(0, 1fr) 133px; align-items: center; gap: 1px; }
@@ -47,7 +47,7 @@
 .things-stat .things-stat-status { display: block; margin-top: 3px; color: var(--stat-color); font-size: 10px; line-height: 1.5; }
 .things-stat.is-selected .things-stat-status { font-weight: 650; }
 .things-page .things-tabs { display: flex; align-items: center; gap: 16px; margin: 0; padding: 0; border: 0; background: transparent; }
-.things-page .things-tabs button { position: relative; display: flex; align-items: flex-start; justify-content: center; flex: none; min-width: 44px; min-height: 44px; padding: 2px 2px 6px; color: #8b929f; border-radius: 0; background: transparent; font-family: 'TieTie Reminder Titles', 'Yuanti SC', 'PingFang SC', sans-serif; font-size: 24px; line-height: 1.3; font-weight: 400; letter-spacing: 2px; white-space: nowrap; text-shadow: 0 1px 0 #fff, 0 2px 0 #c4d5f4, 0 4px 6px #537cb926; transition: color .3s, text-shadow .3s; }
+.things-page .things-tabs button { position: relative; display: flex; align-items: center; justify-content: center; flex: none; min-width: 44px; min-height: 36px; padding: 0 2px 4px; color: #8b929f; border-radius: 0; background: transparent; font-family: 'TieTie Reminder Titles', 'Yuanti SC', 'PingFang SC', sans-serif; font-size: 20px; line-height: 1.3; font-weight: 400; letter-spacing: 2px; white-space: nowrap; text-shadow: 0 1px 0 #fff, 0 2px 0 #c4d5f4, 0 4px 6px #537cb926; transition: color .3s, text-shadow .3s; }
 .things-page .things-tabs button:active:not(:disabled) { transform: none; }
 .things-page .things-tabs button.is-active { color: #2864ef; }
 /* 同一艺术字体的字形高度略有差异，校正文字比例，保持字号和按钮尺寸一致。 */
@@ -95,6 +95,7 @@
 .things-page .settings-card { padding: 2px 17px; border: 0; border-radius: 24px; background: #f7f8fa; }
 .things-page .setting-row { gap: 11px; padding: 19px 0; }
 .things-page .setting-row + .setting-row { border-top: 0; }
+.things-page .care-modes + .anniversary-reminders .setting-row { border-top: 1px solid #e9edf3; }
 .things-page .setting-icon { width: 36px; height: 38px; color: #6b91cc; background: #fff; border-radius: 12px; }
 .things-page .setting-copy strong { color: #202b40; font-size: 13px; font-weight: 550; }
 .things-page .setting-copy p { margin-top: 5px; color: #75859e; font-size: 10px; line-height: 1.6; }
@@ -106,7 +107,7 @@
   .things-page .things-scroll { padding-left: 18px; padding-right: 18px; }
   .things-header { padding-left: 18px; padding-right: 18px; }
   .things-page .things-tabs { gap: 10px; }
-  .things-page .things-tabs button { font-size: 20px; letter-spacing: 1px; }
+  .things-page .things-tabs button { font-size: 19px; letter-spacing: 1px; }
   .things-hero { padding-left: 17px; padding-right: 17px; }
   .things-hero-top { grid-template-columns: minmax(0, 1fr) 109px; }
   .things-hero-count { font-size: 36px; }

@@ -227,8 +227,8 @@ func (db *DB) ListContextReminders(ctx context.Context, sessionID string) ([]Rem
 		return nil, err
 	}
 	var recent []Reminder
-	if err := db.gdb.WithContext(ctx).Where("session_id = ? AND status = ?", sessionID, ReminderDelivered).
-		Order("due_at DESC").Limit(10).Find(&recent).Error; err != nil {
+	if err := db.gdb.WithContext(ctx).Where("session_id = ? AND status IN ?", sessionID, []string{ReminderDelivered, ReminderCompleted}).
+		Order("updated_at DESC").Limit(10).Find(&recent).Error; err != nil {
 		return nil, err
 	}
 	return append(reminders, recent...), nil
@@ -302,37 +302,76 @@ func (db *DB) CompleteReminder(ctx context.Context, sessionID, id string, userID
 	if !db.enabled() {
 		return nil, errNoDB
 	}
-	var reminder Reminder
+	var reminder *Reminder
 	err := db.gdb.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("session_id = ? AND id = ?", sessionID, id).First(&reminder).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return ErrReminderNotFound
-			}
+		var err error
+		reminder, _, err = completeReminder(tx, sessionID, id, userID)
+		return err
+	})
+	return reminder, err
+}
+
+// CompleteReminderAndNotify commits the fact, memory outbox and AI confirmation
+// together. Retried PATCH requests do not create a second confirmation.
+func (db *DB) CompleteReminderAndNotify(ctx context.Context, sessionID, id string, userID int64, job ControlJob) (*Reminder, error) {
+	if !db.enabled() {
+		return nil, errNoDB
+	}
+	if job.SessionID != sessionID || !strings.HasPrefix(job.RequestID, "manual_complete_"+id+"_") || job.CreatedBy != userID || userID <= 0 {
+		return nil, ErrReminderInvalid
+	}
+	var reminder *Reminder
+	err := db.gdb.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var changed bool
+		var err error
+		reminder, changed, err = completeReminder(tx, sessionID, id, userID)
+		if err != nil || !changed {
 			return err
 		}
-		if !slices.Contains(reminder.RecipientIDs, userID) {
-			return ErrReminderForbidden
+		results, err := json.Marshal([]conversation.ActionResult{{Key: "manual_complete", Type: "complete_reminder", Status: "succeeded", ReminderID: reminder.ID, DatabaseStatus: "saved", MemoryStatus: "pending", Message: "用户在提醒页面手动标记此事项完成。请确认是用户手动完成，不要重新执行操作。"}})
+		if err != nil {
+			return err
 		}
-		if reminder.Status == ReminderCompleted || reminder.Status != ReminderCancelled && reminder.hasCompletedDelivery() {
-			return nil
-		}
-		if reminder.Status != ReminderScheduled && reminder.Status != ReminderUncertain {
-			return ErrReminderState
-		}
-		result := tx.Model(&Reminder{}).Where("id = ? AND status = ?", id, reminder.Status).
-			Updates(map[string]any{"status": ReminderCompleted, "completed_by": userID, "task_status": "cancelled"})
-		if result.Error != nil {
-			return result.Error
-		}
-		if result.RowsAffected != 1 {
-			return ErrReminderState
-		}
-		reminder.Status = ReminderCompleted
-		reminder.CompletedBy = &userID
-		reminder.TaskStatus = "cancelled"
-		return syncReminderMemory(tx, &reminder)
+		job.ID = ControlID(sessionID, job.RequestID)
+		job.NotificationOnly, job.Results, job.Actions = true, string(results), "[]"
+		job.Status, job.RunAt = "pending", time.Now().UTC()
+		return tx.Create(&job).Error
 	})
-	return &reminder, err
+	return reminder, err
+}
+
+func completeReminder(tx *gorm.DB, sessionID, id string, userID int64) (*Reminder, bool, error) {
+	var reminder Reminder
+	if err := tx.Where("session_id = ? AND id = ?", sessionID, id).First(&reminder).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, false, ErrReminderNotFound
+		}
+		return nil, false, err
+	}
+	if !slices.Contains(reminder.RecipientIDs, userID) {
+		return nil, false, ErrReminderForbidden
+	}
+	if reminder.Status == ReminderCompleted || reminder.Status != ReminderCancelled && reminder.hasCompletedDelivery() {
+		return &reminder, false, nil
+	}
+	if reminder.Status != ReminderScheduled && reminder.Status != ReminderUncertain {
+		return nil, false, ErrReminderState
+	}
+	result := tx.Model(&Reminder{}).Where("id = ? AND status = ?", id, reminder.Status).
+		Updates(map[string]any{"status": ReminderCompleted, "completed_by": userID, "task_status": "cancelled"})
+	if result.Error != nil {
+		return nil, false, result.Error
+	}
+	if result.RowsAffected != 1 {
+		return nil, false, ErrReminderState
+	}
+	reminder.Status = ReminderCompleted
+	reminder.CompletedBy = &userID
+	reminder.TaskStatus = "cancelled"
+	if err := syncReminderMemory(tx, &reminder); err != nil {
+		return nil, false, err
+	}
+	return &reminder, true, nil
 }
 
 // RestoreCompletedReminder 只恢复尚未到期的提醒，避免把已触发过的任务再次投递。

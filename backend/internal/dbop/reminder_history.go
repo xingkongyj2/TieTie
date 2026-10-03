@@ -180,6 +180,21 @@ func (db *DB) GetReminderMemory(ctx context.Context, r Reminder) (*MemoryRecord,
 	return db.GetMemoryRecord(ctx, MemoryID(location.SessionID, location.Path()), location.SessionID)
 }
 
+// ReminderMemorySynced checks both the item's history page and the current
+// board before a manual completion is confirmed in chat.
+func (db *DB) ReminderMemorySynced(ctx context.Context, r Reminder) (bool, error) {
+	page, err := db.GetReminderMemory(ctx, r)
+	if err != nil {
+		return false, err
+	}
+	board, err := db.GetMemoryRecord(ctx, MemoryID(r.MemorySession(), memoryspace.TodoPath), r.MemorySession())
+	if err != nil {
+		return false, err
+	}
+	return page != nil && page.State == "synced" && page.Operation == "upsert" &&
+		board != nil && board.State == "synced" && board.Operation == "upsert", nil
+}
+
 // Clock events include just the addressed reminder, not the other items on its
 // archive page. The actual cloud body is verified against the stable reminder ID.
 func ExtractReminderMemory(body, id string) (string, error) {

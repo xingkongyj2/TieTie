@@ -10,3 +10,4 @@
 .care-region-guide p { flex: 1; font-size: 12px; color: #8391a6; line-height: 1.8; min-width: 130px; }
 .care-region-guide button { display: flex; align-items: center; gap: 4px; margin-left: 27px; font-size: 12px; color: #6388bd; background: none; min-height: 35px; }
 .care-status { color: #a38c62; font-size: 11px; margin-top: 10px; line-height: 1.8; }
+.care-retry { margin-left: 8px; padding: 2px 6px; border-radius: 6px; background: #fff; color: #587fc0; }

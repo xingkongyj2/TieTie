@@ -7,9 +7,9 @@
 }
 
 .mine-page .tab-page-scroll.mine-scroll { padding: max(var(--page-title-top), env(safe-area-inset-top)) 24px 18px; }
-.mine-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
-.mine-header h1 { font-size: 24px; }
-.mine-header-sparkle { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 50%; background: #f6f8fb; color: var(--mine-accent); }
+.mine-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
+.mine-header h1 { font-size: 20px; }
+.mine-header-sparkle { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 50%; background: #f6f8fb; color: var(--mine-accent); }
 
 .mine-identity-card { position: relative; isolation: isolate; padding: 24px; overflow: hidden; border: 0; border-radius: 28px; background: #f7f8fa; }
 .mine-buddies { position: absolute; z-index: -1; top: 15px; right: 2px; width: 177px; height: 144px; pointer-events: none; filter: drop-shadow(0 8px 9px #7ba9df17); }
@@ -72,7 +72,7 @@
 
 @media (max-width: 370px) {
   .mine-page .tab-page-scroll.mine-scroll { padding-right: 18px; padding-left: 18px; }
-  .mine-header h1 { font-size: 22px; }
+  .mine-header h1 { font-size: 20px; }
   .mine-identity-card { padding-right: 20px; padding-left: 20px; }
   .mine-buddies { top: 24px; right: -9px; width: 158px; height: 128px; }
   .mine-name h2 { font-size: 24px; }

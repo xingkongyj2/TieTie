@@ -55,18 +55,20 @@ export function CareModes({ sessionId, selfId, onEditRegion, onBind, notify }: {
     finally { mutating.current = false; if (mounted.current) setBusy(null); void reload() }
   }
   if (!sessionId) return <div className="care-region-guide"><MapPin size={18} /><p>绑定两人空间后，就能一起收到早安和晚安提醒。</p><button type="button" onClick={onBind}>去绑定<ArrowUpRight size={14} /></button></div>
-  if (error && !state) return <div className="cloud-error" role="alert">{error}<button type="button" onClick={() => void reload()}>重试</button></div>
-  if (!state) return <p className="empty-note" role="status">正在打开天气关怀…</p>
+  const modes: CareMode[] = state?.modes ?? [
+    { mode: 'morning', enabled: false, time: '08:00', nextDue: '', state: 'off' },
+    { mode: 'night', enabled: false, time: '21:00', nextDue: '', state: 'off' },
+  ]
   return <div className="care-modes">
-    {error && <p className="care-status" role="alert">{error}</p>}
-    {state.modes.map((mode) => {
+    {error && <p className="care-status" role="alert">{error}<button type="button" className="care-retry" onClick={() => void reload()}>重试</button></p>}
+    {modes.map((mode) => {
       const night = mode.mode === 'night'
       const time = mode.time
       const title = night ? '晚安提醒' : '早安提醒'
       return <section className="setting-row care-mode-row" key={mode.mode} aria-label={`${title}设置`}>
         <span className="setting-icon">{night ? <Moon size={18} /> : <Sun size={18} />}</span>
-        <div className="setting-copy"><div className="care-mode-title"><strong>{title}</strong><button type="button" className="care-time" aria-label={`${title}时间 ${time}`} aria-haspopup="dialog" disabled={busy !== null} onClick={() => setEditingTime(mode)}><Clock3 size={10} aria-hidden="true" /><span>{time}</span></button></div><p>{night ? '看明天天气，把穿搭和出门准备好' : '今天的天气，还有要记得的小事'}</p>{mode.lastError && <p className="care-status" role="alert">{mode.lastError}</p>}</div>
-        <button type="button" role="switch" className={`toggle ${mode.enabled ? 'is-on' : ''}`} aria-label={title} aria-checked={mode.enabled} disabled={busy !== null} onClick={() => void save(mode, !mode.enabled)}><span /></button>
+        <div className="setting-copy"><div className="care-mode-title"><strong>{title}</strong><button type="button" className="care-time" aria-label={`${title}时间 ${state ? time : '尚未读取'}`} aria-haspopup="dialog" disabled={!state || busy !== null} onClick={() => setEditingTime(mode)}><Clock3 size={10} aria-hidden="true" /><span>{state ? time : '--:--'}</span></button></div><p>{night ? '看明天天气，把穿搭和出门准备好' : '今天的天气，还有要记得的小事'}</p>{mode.lastError && <p className="care-status" role="alert">{mode.lastError}</p>}</div>
+        <button type="button" role="switch" className={`toggle ${mode.enabled ? 'is-on' : ''}`} aria-label={title} aria-checked={mode.enabled} disabled={!state || busy !== null} onClick={() => void save(mode, !mode.enabled)}><span /></button>
       </section>
     })}
     {editingTime && <TimePicker title={`${editingTime.mode === 'night' ? '晚安' : '早安'}提醒时间`} value={editingTime.time}

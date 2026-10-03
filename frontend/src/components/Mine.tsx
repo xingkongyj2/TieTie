@@ -1,5 +1,5 @@
 import { ArrowUpRight, Check, Copy, LogOut, Pencil, Plus, Sparkle, Unlink } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Member, RelationshipState } from '../types'
 import { Avatar } from './Avatar'
 import { CharacterPicker } from './CharacterPicker'
@@ -29,6 +29,7 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
   const [savingProfile, setSavingProfile] = useState(false)
   const [exiting, setExiting] = useState(false)
   const [copied, setCopied] = useState(false)
+  const codeRef = useRef<HTMLElement>(null)
   const saving = savingAvatar || savingProfile
   const gender = self.gender === 'male' ? '男生' : self.gender === 'female' ? '女生' : '暂不填写'
 
@@ -39,12 +40,37 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
   }, [copied])
 
   const copyCode = async () => {
+    let success = false
     try {
-      await navigator.clipboard.writeText(code)
+      if (navigator.clipboard?.writeText && window.isSecureContext) {
+        await navigator.clipboard.writeText(code)
+        success = true
+      }
+    } catch { /* Some mobile browsers expose Clipboard but reject writes. */ }
+    if (!success) {
+      const input = document.createElement('textarea')
+      input.value = code
+      input.readOnly = true
+      input.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none'
+      document.body.appendChild(input)
+      input.focus()
+      input.select()
+      input.setSelectionRange(0, code.length)
+      try { success = document.execCommand('copy') } catch { /* Fall back to selecting the visible code. */ }
+      input.remove()
+    }
+    if (success) {
       setCopied(true)
       notify('邀请码已复制，分享给想贴贴的人吧')
-    } catch {
-      notify('暂时无法复制，请长按邀请码手动复制')
+    } else {
+      const selection = window.getSelection()
+      if (selection && codeRef.current) {
+        const range = document.createRange()
+        range.selectNodeContents(codeRef.current)
+        selection.removeAllRanges()
+        selection.addRange(range)
+      }
+      notify('已选中邀请码，请在系统菜单中点“复制”')
     }
   }
 
@@ -92,7 +118,7 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
       </section>
 
       <section className="mine-invite" aria-label="我的邀请码">
-        <div className="mine-invite-copy"><span>我的邀请码</span><strong>{code}</strong></div>
+        <div className="mine-invite-copy"><span>我的邀请码</span><strong ref={codeRef}>{code}</strong></div>
         <button type="button" className={`mine-copy-button ${copied ? 'is-copied' : ''}`} aria-label={copied ? '邀请码已复制' : '复制邀请码'} title={copied ? '已复制' : '复制邀请码'} onClick={() => void copyCode()}>
           <span className="mine-copy-mark" aria-hidden="true">{copied ? <Check size={17} strokeWidth={1.7} /> : <Copy size={17} strokeWidth={1.7} />}</span>
         </button>

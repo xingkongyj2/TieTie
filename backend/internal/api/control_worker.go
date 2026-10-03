@@ -154,19 +154,35 @@ func (s *Server) runControl(ctx context.Context, j dbop.ControlJob) (workErr err
 	frame.Results = results
 	if j.NotificationOnly {
 		input, valid := conversation.DecodeInput(j.Origin)
-		if !valid || input.Hidden || input.UserID != j.CreatedBy || len(results) != 1 || results[0].Type != "cancel_reminder" {
-			return errors.New("invalid manual cancellation receipt")
+		if !valid || input.Hidden || input.UserID != j.CreatedBy || len(results) != 1 ||
+			(results[0].Type != "cancel_reminder" && results[0].Type != "complete_reminder") {
+			return errors.New("invalid manual reminder receipt")
 		}
 		reminder, err := s.DB.GetReminder(ctx, j.SessionID, results[0].ReminderID)
 		if err != nil || reminder == nil {
-			return errors.New("manual cancellation reminder not found")
+			return errors.New("manual reminder receipt not found")
 		}
-		if reminder.Status != dbop.ReminderCancelled {
+		if results[0].Type == "complete_reminder" {
+			if reminder.Status != dbop.ReminderCompleted || reminder.CompletedBy == nil || *reminder.CompletedBy != j.CreatedBy {
+				done = true
+				return s.DB.AbandonControl(ctx, j.ID) // The user restored or changed this item before confirmation.
+			}
+			ready, err := s.DB.ReminderMemorySynced(ctx, *reminder)
+			if err != nil {
+				return err
+			}
+			if !ready {
+				return nil // Durable memory and confirmation jobs will retry.
+			}
+			frame.Results[0].MemoryStatus = "synced"
+		} else if reminder.Status != dbop.ReminderCancelled {
 			return errors.New("manual cancellation was not committed")
 		}
 		frame.Reminder = &conversation.Reminder{ID: reminder.ID, Title: reminder.Title, DueAt: reminder.DueAt, Status: reminder.Status, RecipientIDs: reminder.RecipientIDs}
-		if memory, err := s.DB.GetReminderMemory(ctx, *reminder); err == nil && memory != nil && memory.State == "synced" {
-			frame.Results[0].MemoryStatus = "synced"
+		if results[0].Type == "cancel_reminder" {
+			if memory, err := s.DB.GetReminderMemory(ctx, *reminder); err == nil && memory != nil && memory.State == "synced" {
+				frame.Results[0].MemoryStatus = "synced"
+			}
 		}
 	}
 	text, protocolState, err := s.prepareProtocolInput(ctx, frame)

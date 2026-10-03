@@ -149,7 +149,11 @@ export default function App() {
     const reminder = reminders.find((item) => item.id === id);
     if (!reminder) throw new Error('这条共享提醒已变更，请刷新后再试。');
     if (!canToggleReminder(reminder)) throw new Error('这条提醒已结束或正在发送，无法修改完成状态。');
-    await chat.changeReminder(id, reminder.status === 'completed' ? 'scheduled' : 'completed');
+    const completing = reminder.status !== 'completed';
+    await chat.changeReminder(id, completing ? 'completed' : 'scheduled');
+    notify(completing
+      ? `你已手动完成「${reminder.title}」，AI 记忆同步后会在聊天里确认。`
+      : `已把「${reminder.title}」恢复为待完成。`);
   };
   const cancelReminder = (id: string) => chat.changeReminder(id, 'cancelled');
   const addReminder = async (input: Omit<Reminder, 'id' | 'completed'>) => {

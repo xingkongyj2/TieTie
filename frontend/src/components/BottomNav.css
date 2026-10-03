@@ -1,11 +1,11 @@
 .bottom-nav.frost-nav {
-  gap: 20px;
-  padding: 4px 28px max(8px, env(safe-area-inset-bottom));
+  gap: 16px;
+  padding: 0 24px max(3px, env(safe-area-inset-bottom));
   border-top: 0;
   background: transparent;
 }
-.bottom-nav.frost-nav button { min-height: 44px; padding: 0; gap: 0; border-radius: 20px; color: #75859e; background: transparent; }
-.frost-nav .nav-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; transition: background .2s ease, color .2s ease, box-shadow .2s ease; }
+.bottom-nav.frost-nav button { min-height: 40px; padding: 0; gap: 0; border-radius: 20px; color: #75859e; background: transparent; }
+.frost-nav .nav-icon { display: grid; place-items: center; width: 31px; height: 31px; border-radius: 50%; transition: background .2s ease, color .2s ease, box-shadow .2s ease; }
 .bottom-nav.frost-nav button.is-active { color: #2864ef; }
 .frost-nav .is-active .nav-icon { background: #2864ef; color: white; box-shadow: 0 4px 12px #2864ef24; }
 .bottom-nav.frost-nav button.is-active svg { stroke-width: 1.8; }

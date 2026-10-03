@@ -79,7 +79,7 @@ func (s *Server) conversationContext(ctx context.Context, id string, authorID in
 		return out, binding, err
 	}
 	for _, reminder := range reminders {
-		if reminder.Status == dbop.ReminderScheduled || reminder.Status == dbop.ReminderDelivered {
+		if reminder.Status == dbop.ReminderScheduled || reminder.Status == dbop.ReminderDelivered || reminder.Status == dbop.ReminderCompleted {
 			out.Reminders = append(out.Reminders, protocolReminder(reminder))
 		}
 	}
@@ -102,7 +102,7 @@ func (s *Server) conversationContext(ctx context.Context, id string, authorID in
 
 func protocolReminder(reminder dbop.Reminder) conversation.Reminder {
 	return conversation.Reminder{ID: reminder.ID, Title: reminder.Title, DueAt: reminder.DueAt,
-		RecipientIDs: reminder.RecipientIDs, CreatedBy: reminder.CreatedBy}
+		RecipientIDs: reminder.RecipientIDs, CreatedBy: reminder.CreatedBy, Status: reminder.Status}
 }
 
 func eventText(event qoder.Event) string {

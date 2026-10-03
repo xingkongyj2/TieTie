@@ -47,10 +47,10 @@ export function AnniversaryReminders({ sessionId, onBind, notify }: { sessionId?
       if (mounted.current) { setBusy(false); void reload() }
     }
   }
-  return <div>
+  return <div className="anniversary-reminders">
     <div className="setting-row">
       <span className="setting-icon"><Cake size={18} /></span>
-      <div className="setting-copy"><strong>纪念日提醒</strong><p id={descriptionId}>{!sessionId ? '绑定两人空间后，一起收到纪念日提示' : !settings && !error ? '正在同步提醒设置…' : '每年提前 3 天，08:00 提醒我们'}</p>{!sessionId && <button type="button" className="care-time" onClick={onBind}>去绑定</button>}</div>
+      <div className="setting-copy"><strong>纪念日提醒</strong><p id={descriptionId}>{!sessionId ? '绑定两人空间后，一起收到纪念日提示' : '每年提前 3 天，08:00 提醒我们'}</p>{!sessionId && <button type="button" className="care-time" onClick={onBind}>去绑定</button>}</div>
       <button type="button" className={`toggle ${settings?.enabled ? 'is-on' : ''}`} role="switch" aria-checked={settings?.enabled ?? false} aria-label="纪念日提醒" aria-describedby={descriptionId} disabled={!sessionId || !settings || busy} onClick={() => void toggle()}><span /></button>
     </div>
     {error && <div className="cloud-error" role="alert"><span>{error}</span><button type="button" disabled={busy} onClick={() => void reload()}>重试</button></div>}
