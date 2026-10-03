@@ -75,7 +75,7 @@ if [[ "$MYSQL_LOCAL" == "true" ]]; then
     echo "本机 MySQL 120s 内未就绪；请 docker logs $MYSQL_CONTAINER 排查。" >&2
     exit 1
   fi
-  mysql_host_args=(-e MYSQL_HOST="$MYSQL_CONTAINER")
+  mysql_host_args=(-e MYSQL_HOST="$MYSQL_CONTAINER" -e MYSQL_PORT=3306)
 fi
 
 # 私有镜像需要 CNB 访问令牌；已有 docker login 会话可直接复用。
