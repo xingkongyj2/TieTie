@@ -50,6 +50,17 @@ const initialState: CloudState = {
 function mergeMessages(existing: Message[], incoming: Message[]): Message[] {
   const byId = new Map(existing.map((message) => [message.id, message]))
   for (const message of incoming) byId.set(message.id, message)
+  // A local bubble is replaced by the verified cloud event, including when
+  // SSE beats the POST response or a full history refresh finishes first.
+  for (const local of existing.filter((message) => message.localStatus)) {
+    const sentAt = Date.parse(local.createdAt ?? '')
+    const echoed = [...byId.values()].some((message) => message.id !== local.id && !message.localStatus
+      && message.sender === 'self' && message.userId === local.userId && message.text === local.text
+      && (message.visibility ?? 'shared') === (local.visibility ?? 'shared')
+      && (Number.isNaN(sentAt) || Number.isNaN(Date.parse(message.createdAt ?? ''))
+        || Math.abs(Date.parse(message.createdAt!) - sentAt) < 120_000))
+    if (echoed) byId.delete(local.id)
+  }
   // The accepted user event may arrive before an unread earlier reply is polled.
   // Reconcile in timestamp order rather than the order requests completed.
   return [...byId.values()].sort((a, b) => {
@@ -67,7 +78,7 @@ function errorMessage(error: unknown): string {
  * 云端聊天状态机。会话由绑定关系固定（pinnedId），不再列出/切换账号下的全部会话；
  * 未绑定（pinnedId 为 null）时保持空闲，由界面展示绑定引导页。
  */
-export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () => Promise<void>) {
+export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () => Promise<void>, selfUserId?: number) {
   const [state, setState] = useState<CloudState>(initialState)
   const current = useRef(state)
   const mounted = useRef(false)
@@ -75,6 +86,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
   const controller = useRef<AbortController | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const sendLock = useRef(false)
+  const localMessageSequence = useRef(0)
   const pendingTurns = useRef(new Map<string, PendingTurn>())
   const readRef = useRef<(options?: { full?: boolean }) => Promise<void>>(async () => {})
 
@@ -121,7 +133,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     update({
       session: history.session,
       replyMode: history.session.replyMode ?? '',
-      messages: (full ? history.messages : mergeMessages(snapshot.messages, history.messages))
+      messages: mergeMessages(full ? snapshot.messages.filter((message) => !!message.localStatus) : snapshot.messages, history.messages)
         .filter((message) => isVisibleChatMessage(message, history.members ?? snapshot.members)),
       members: history.members ?? snapshot.members,
       reminders: history.reminders ?? snapshot.reminders,
@@ -226,7 +238,17 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       throw new Error('请等待会话同步完成或当前回复结束后再发送。')
     }
     if (draft.length > 2_000) throw new Error('这条消息有点长，请控制在 2000 字以内。')
+    if (!selfUserId) throw new Error('账号信息还未加载，请稍后再发送。')
     const id = snapshot.selectedId
+    const localId = `local_${Date.now()}_${++localMessageSequence.current}`
+    const now = new Date()
+    const optimistic: Message = {
+      id: localId, sender: 'self', userId: selfUserId,
+      displayName: snapshot.members.find((member) => member.userId === selfUserId)?.name,
+      source: 'chat', kind: 'text', text: draft, visibility,
+      files: files.map((file) => file.name), time: now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      createdAt: now.toISOString(), localStatus: 'sending',
+    }
     sendLock.current = true
     cancelRead()
     pendingTurns.current.set(id, {
@@ -235,16 +257,17 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       idleEventId: snapshot.lastIdleEventId,
       silent,
     })
-    update({ submitting: true, pending: true, replyMode: silent ? 'silent' : '', error: '', turnError: '', refreshing: false,
+    update({ messages: mergeMessages(snapshot.messages, [optimistic]), submitting: true, pending: true, replyMode: silent ? 'silent' : '', error: '', turnError: '', refreshing: false,
       replyFeedback: { phase: 'sending' } })
-    let accepted = false
+    let shouldRead = false
     try {
       const result = await qoderApi.sendMessage(id, draft, files, visibility)
-      accepted = true
+      shouldRead = true
       const pendingTurn = pendingTurns.current.get(id)
       if (pendingTurn && result.replyMode === 'silent') pendingTurn.silent = true
       if (mounted.current && current.current.selectedId === id) {
         update({ replyMode: result.replyMode ?? '', messages: mergeMessages(current.current.messages, result.messages)
+          .map((message) => message.id === localId ? { ...message, localStatus: 'sent' as const } : message)
           .filter((message) => isVisibleChatMessage(message, current.current.members)),
         ...(current.current.replyFeedback?.phase === 'sending'
           ? { replyFeedback: silent || result.replyMode === 'silent'
@@ -255,20 +278,29 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       // An accepted POST is success even if the following history read fails.
       return true
     } catch (error) {
-      pendingTurns.current.delete(id)
+      const uncertain = error instanceof ApiError && !!error.code && ['TIMEOUT', 'NETWORK_ERROR', 'upstream_timeout', 'connection_failed'].includes(error.code)
+      if (uncertain) shouldRead = true
+      if (!uncertain) pendingTurns.current.delete(id)
       if (mounted.current && current.current.selectedId === id) {
-        update({ pending: false, error: '', replyFeedback: { phase: 'error', message: errorMessage(error) } })
+        update({
+          messages: current.current.messages.map((message) => message.id === localId
+            ? { ...message, localStatus: uncertain ? 'uncertain' : 'failed' } : message),
+          pending: uncertain, error: '', replyFeedback: uncertain
+            ? { phase: 'delayed', message: '消息发送状态待确认，正在自动检查…' }
+            : null,
+        })
       }
+      if (uncertain) return true
       throw error
     } finally {
       sendLock.current = false
       if (mounted.current && current.current.selectedId === id) {
         update({ submitting: false })
-        if (accepted) void readRef.current()
+        if (shouldRead) void readRef.current()
         else schedule()
       }
     }
-  }, [cancelRead, schedule, update])
+  }, [cancelRead, schedule, selfUserId, update])
 
   useEffect(() => {
     mounted.current = true

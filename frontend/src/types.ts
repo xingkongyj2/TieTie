@@ -83,6 +83,7 @@ export type MessageVisibility = 'shared' | 'private'
 
 export interface Message {
 	weatherCards?: import('./api/care').WeatherCardData[]
+  localStatus?: 'sending' | 'sent' | 'failed' | 'uncertain'
   replyMode?: 'silent'
   visibility?: MessageVisibility
   id: string
