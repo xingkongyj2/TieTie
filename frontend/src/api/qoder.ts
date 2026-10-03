@@ -198,6 +198,9 @@ const sessionPath = (id: string) => `/api/qoder/sessions/${encodeURIComponent(id
 const remindersPath = (id: string) => `/api/qoder/sessions/${encodeURIComponent(id)}/reminders`
 
 export const qoderApi = {
+  getCachedMessages(id: string, signal?: AbortSignal): Promise<{ messages: Message[] }> {
+    return request(`/api/qoder/sessions/${encodeURIComponent(id)}/message-preview`, { signal })
+  },
   getReminders(id: string, signal?: AbortSignal): Promise<{ reminders: CloudReminder[] }> {
     return request(remindersPath(id), { signal })
   },
@@ -209,7 +212,7 @@ export const qoderApi = {
   },
   getMessages(id: string, after?: string | null, signal?: AbortSignal, careAfter?: string): Promise<CloudHistory> {
     const query = after ? `?${new URLSearchParams({ after })}` : ''
-    return request(`${sessionPath(id)}${query}`, { signal, headers: careAfter ? { 'X-Tietie-Care-After': careAfter } : undefined })
+    return request(`${sessionPath(id)}${query}`, { signal, timeoutMs: 120_000, headers: careAfter ? { 'X-Tietie-Care-After': careAfter } : undefined })
   },
   async sendMessage(id: string, text: string, files: File[] = [], visibility: 'shared' | 'private' = 'shared'): Promise<{ messages: Message[]; replyMode?: 'silent' }> {
     // Never tie a submitted turn to the current view's abort signal.

@@ -144,6 +144,15 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     } else {
       update({ loading: !current.current.loaded, refreshing: full && current.current.loaded })
     }
+    if (changed || !current.current.loaded) {
+      // Show verified recent rows while the server replays the complete cloud
+      // history. The full response replaces this preview and unlocks sending.
+      void qoderApi.getCachedMessages(id, abort.signal).then(({ messages }) => {
+        if (isCurrent() && current.current.selectedId === id && !current.current.loaded && messages.length) {
+          update({ messages })
+        }
+      }).catch(() => {})
+    }
     try {
       const lastCare = full || changed ? undefined : current.current.messages.filter((message) => message.id.startsWith('evt_care_')).reduce<Message | undefined>((latest, message) => !latest || (message.createdAt ?? '') > (latest.createdAt ?? '') || message.createdAt === latest.createdAt && message.id > latest.id ? message : latest, undefined);
       const history = await qoderApi.getMessages(id, full || changed ? null : current.current.cursor, abort.signal, lastCare?.id)

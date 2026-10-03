@@ -67,6 +67,29 @@ func (db *DB) ListMessages(ctx context.Context, sessionID string, limit int) ([]
 	return out, err
 }
 
+// ListRecentVisibleMessages serves a quick first paint from already verified
+// history. The private branch is selected by the caller's current binding epoch.
+func (db *DB) ListRecentVisibleMessages(ctx context.Context, spaceID, privateID string, owner int64, limit int) ([]Message, error) {
+	if !db.enabled() {
+		return nil, errNoDB
+	}
+	if limit <= 0 || limit > 500 {
+		limit = 300
+	}
+	query := db.gdb.WithContext(ctx).Where("session_id = ? AND visibility <> ? AND private_owner_id = 0", spaceID, "private")
+	if privateID != "" {
+		query = query.Or("session_id = ? AND visibility = ? AND private_owner_id = ?", privateID, "private", owner)
+	}
+	var rows []Message
+	if err := query.Order("cloud_created_at DESC").Order("id DESC").Limit(limit).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	for left, right := 0, len(rows)-1; left < right; left, right = left+1, right-1 {
+		rows[left], rows[right] = rows[right], rows[left]
+	}
+	return rows, nil
+}
+
 // HasMessage uses the primary key, so repeated history reads do not repeat the
 // same protocol warning in operational logs.
 func (db *DB) HasMessage(ctx context.Context, id string) (bool, error) {

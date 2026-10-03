@@ -39,6 +39,87 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleMessagePreview returns recent, already persisted chat bubbles before
+// the full cloud chronology has finished loading. It never changes the session
+// cursor or readiness state; the normal history response remains authoritative.
+func (s *Server) handleMessagePreview(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !qoder.ValidSessionID(id) {
+		writeRouteNotFound(w)
+		return
+	}
+	viewer := auth.UserIDFrom(r.Context())
+	binding, err := s.DB.GetLatestBindingByUser(r.Context(), viewer)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if binding == nil || binding.SessionID != id {
+		writeError(w, qoder.NewApiError(403, "session_forbidden", "你没有访问此会话的权限。"))
+		return
+	}
+	private, err := s.DB.PrivateChannelForOwner(r.Context(), id, viewer, binding.CreatedAt)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	privateID := ""
+	if private != nil {
+		privateID = private.SessionID
+	}
+	rows, err := s.DB.ListRecentVisibleMessages(r.Context(), id, privateID, viewer, 300)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	messages := make([]qoder.PublicMessage, 0, len(rows))
+	for _, row := range rows {
+		if message, ok := cachedPublicMessage(row, binding, viewer); ok {
+			messages = append(messages, message)
+		}
+	}
+	w.Header().Set("Cache-Control", "private, no-store")
+	writeJSON(w, http.StatusOK, struct {
+		Messages []qoder.PublicMessage `json:"messages"`
+	}{messages})
+}
+
+func cachedPublicMessage(row dbop.Message, binding *dbop.Binding, viewer int64) (qoder.PublicMessage, bool) {
+	if row.Sender != "ai" && row.Sender != "user" {
+		return qoder.PublicMessage{}, false
+	}
+	if row.Source != "chat" && row.Source != "reminder" {
+		return qoder.PublicMessage{}, false
+	}
+	if row.Text == "" && len(row.Files) == 0 {
+		return qoder.PublicMessage{}, false
+	}
+	sender := "ai"
+	if row.Sender != "ai" {
+		if row.UserID == 0 || row.UserID != binding.UserA && row.UserID != binding.UserB {
+			return qoder.PublicMessage{}, false
+		}
+		sender = "partner"
+		if row.UserID == viewer {
+			sender = "self"
+		}
+	}
+	createdAt, err := time.Parse(time.RFC3339Nano, row.CloudCreatedAt)
+	if err != nil {
+		return qoder.PublicMessage{}, false
+	}
+	visibility := row.Visibility
+	if visibility == "" {
+		visibility = "shared"
+	}
+	return qoder.PublicMessage{
+		ID: row.ID, Sender: sender, UserID: row.UserID, DisplayName: row.DisplayName,
+		Text: row.Text, Files: row.Files, Source: row.Source, Visibility: visibility,
+		RecipientIDs: row.RecipientIDs, Kind: "text", CreatedAt: row.CloudCreatedAt,
+		Time: createdAt.In(time.FixedZone("Asia/Shanghai", 8*60*60)).Format("15:04"),
+	}, true
+}
+
 // getMessages 拉取会话消息（支持 after 游标增量）。
 func (s *Server) getMessages(w http.ResponseWriter, r *http.Request, id string) {
 	if careAfter := r.Header.Get("X-Tietie-Care-After"); careAfter != "" && !qoder.ValidEventID(careAfter) {
