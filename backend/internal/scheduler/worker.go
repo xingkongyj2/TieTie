@@ -40,14 +40,25 @@ type Worker[T any] struct {
 	OnError func(error)
 }
 
+// maxIdleBackoff 是空转时轮询间隔最多放宽到几倍。
+const maxIdleBackoff = 2
+
 func (worker Worker[T]) Run(ctx context.Context) {
 	options := worker.Options.Normalized()
+	idle := 0
 	for ctx.Err() == nil {
 		count := worker.RunOnce(ctx, time.Now())
 		if count == options.BatchSize {
 			continue
 		} // Drain a due backlog promptly.
-		timer := time.NewTimer(options.PollInterval)
+		if count > 0 {
+			idle = 0
+		} else if idle < maxIdleBackoff {
+			idle++
+		}
+		// 连续空转就逐步放宽间隔：远端数据库一次往返要上百毫秒，多条队列按固定秒数
+		// 轮询会把链路占满，真正到点的任务反而排在后面。最坏延迟 = 间隔 × 2^上限。
+		timer := time.NewTimer(options.PollInterval << idle)
 		select {
 		case <-ctx.Done():
 			timer.Stop()

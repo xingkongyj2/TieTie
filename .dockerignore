@@ -1,0 +1,15 @@
+.git
+.idea
+.DS_Store
+**/.DS_Store
+**/.env
+**/.env.*
+**/node_modules
+**/dist
+**/bin
+**/logs
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/*.tsbuildinfo
+docs

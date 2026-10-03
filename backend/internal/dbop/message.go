@@ -27,15 +27,27 @@ type Message struct {
 // TableName 指定表名。
 func (Message) TableName() string { return "messages" }
 
+// messageHistoryColumns 是按云端 ID 去重时需要刷新的列。
+var messageHistoryColumns = []string{"sender", "user_id", "display_name", "recipient_ids", "source", "text", "files", "visibility", "private_owner_id"}
+
 // SaveMessage 按云端 ID 去重，并补充可信身份和接收对象等元数据。
 func (db *DB) SaveMessage(ctx context.Context, m *Message) error {
+	return db.SaveMessages(ctx, []*Message{m})
+}
+
+// SaveMessages 一次批量 upsert 整页历史：读历史的路径每次都会重放全部消息，
+// 逐条写入在远端 MySQL 上会把一次页面加载拖到几十秒。
+func (db *DB) SaveMessages(ctx context.Context, records []*Message) error {
+	if len(records) == 0 {
+		return nil
+	}
 	if !db.enabled() {
 		return errNoDB
 	}
 	return db.gdb.WithContext(ctx).
 		Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "id"}},
-			DoUpdates: clause.AssignmentColumns([]string{"sender", "user_id", "display_name", "recipient_ids", "source", "text", "files", "visibility", "private_owner_id"})}).
-		Create(m).Error
+			DoUpdates: clause.AssignmentColumns(messageHistoryColumns)}).
+		Create(&records).Error
 }
 
 // ListMessages 按写入顺序返回会话的本地消息（用于离线查看/审计）。

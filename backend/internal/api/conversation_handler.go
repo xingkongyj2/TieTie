@@ -158,6 +158,20 @@ func (s *Server) processConversationFrom(ctx context.Context, id string, result 
 	for index, message := range result.Messages {
 		byID[message.ID] = index
 	}
+	// 一次历史重放里同一轮对话会被反复问到控制任务是否存在；远端数据库一个往返要上百毫秒，
+	// 这里在单次请求内按 requestID 记忆查询结果。
+	controlCache := map[string]*dbop.ControlJob{}
+	getControl := func(requestID string) (*dbop.ControlJob, error) {
+		if job, seen := controlCache[requestID]; seen {
+			return job, nil
+		}
+		job, err := s.DB.GetControl(ctx, id, requestID)
+		if err != nil {
+			return nil, err
+		}
+		controlCache[requestID] = job
+		return job, nil
+	}
 	origin, hasOrigin := conversation.DecodeInput(priorInput)
 	if hasOrigin && origin.Context.SessionID != id {
 		hasOrigin = false
@@ -241,7 +255,7 @@ func (s *Server) processConversationFrom(ctx context.Context, id string, result 
 		if hasOrigin && origin.Version == 2 {
 			if !origin.Hidden {
 				messageTurns[event.ID] = origin.RequestID
-				if existing, err := s.DB.GetControl(ctx, id, origin.RequestID); err != nil {
+				if existing, err := getControl(origin.RequestID); err != nil {
 					return space, "", err
 				} else if existing != nil {
 					hiddenTurns[origin.RequestID] = true

@@ -1,0 +1,11 @@
+main:
+  push:
+    - services:
+        - docker
+      stages:
+        - name: docker login
+          script: printf '%s' "$CNB_TOKEN" | docker login "$CNB_DOCKER_REGISTRY" -u "${CNB_TOKEN_USER_NAME:-cnb}" --password-stdin
+        - name: build and push TieTie
+          script: |
+            docker build -f ./deploy/dockerfile -t ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}/tietie:1 .
+            docker push ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}/tietie:1

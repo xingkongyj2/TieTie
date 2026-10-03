@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"sync"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -60,6 +61,26 @@ func (c MySQLConfig) dsn(database string) string {
 	return cfg.FormatDSN()
 }
 
+// warmPool 提前把若干条连接建好放进空闲池：这台实例握手要 1–2 秒，
+// 冷启动后第一个页面请求会串行付出好几次握手，预热后只剩查询本身的时间。
+func warmPool(sqlDB *sql.DB, size int) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	var group sync.WaitGroup
+	for i := 0; i < size; i++ {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			conn, err := sqlDB.Conn(ctx)
+			if err != nil {
+				return
+			}
+			_ = conn.Close() // 归还到空闲池，不是关掉物理连接
+		}()
+	}
+	group.Wait()
+}
+
 // ensureDatabase 建库（幂等），字符集与排序规则在建库时定死，后续建表继承库默认值。
 func ensureDatabase(cfg MySQLConfig) error {
 	db, err := sql.Open("mysql", cfg.dsn(""))
@@ -106,11 +127,12 @@ func Open(cfg MySQLConfig) (*DB, error) {
 		return nil, err
 	}
 	// 队列 worker 与 HTTP 处理共用连接池；上限压到 16，避免挤占同一实例上的其他库。
-	// 空闲连接 30 秒就丢弃：远端实例（含中间的端口代理）会掐掉长时间不动的连接，留着会被下一个请求撞上。
+	// 这台远端实例新建一条连接要 1–2 秒，所以空闲连接一律留着复用：
+	// 驱动默认开启的探活会在使用前发现被中间层掐掉的连接并自动重建，不需要靠主动丢弃来规避。
 	sqlDB.SetMaxOpenConns(16)
-	sqlDB.SetMaxIdleConns(4)
-	sqlDB.SetConnMaxLifetime(30 * time.Minute)
-	sqlDB.SetConnMaxIdleTime(30 * time.Second)
+	sqlDB.SetMaxIdleConns(16)
+	sqlDB.SetConnMaxLifetime(time.Hour)
+	warmPool(sqlDB, 8)
 
 	if err := gdb.AutoMigrate(
 		&User{},

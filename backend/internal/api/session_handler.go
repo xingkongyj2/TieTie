@@ -385,18 +385,19 @@ func (s *Server) recordMessages(ctx context.Context, sessionID string, messages 
 	if s.DB == nil {
 		return
 	}
+	records := make([]*dbop.Message, 0, len(messages))
 	for _, msg := range messages {
 		sender := "user"
 		if msg.Sender == "ai" {
 			sender = "ai"
 		}
-		record := &dbop.Message{
+		records = append(records, &dbop.Message{
 			ID: msg.ID, SessionID: sessionID, Sender: sender,
 			UserID: msg.UserID, DisplayName: msg.DisplayName, Visibility: msg.Visibility, PrivateOwnerID: msg.PrivateOwnerID, RecipientIDs: msg.RecipientIDs, Source: msg.Source,
 			Text: msg.Text, Files: msg.Files, CloudCreatedAt: msg.CreatedAt,
-		}
-		if err := s.DB.SaveMessage(ctx, record); err != nil {
-			log.Printf("消息落库失败 %s: %v", msg.ID, err)
-		}
+		})
+	}
+	if err := s.DB.SaveMessages(ctx, records); err != nil {
+		log.Printf("消息落库失败 %s 共 %d 条: %v", sessionID, len(records), err)
 	}
 }
