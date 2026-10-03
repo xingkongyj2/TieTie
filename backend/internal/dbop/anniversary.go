@@ -14,34 +14,34 @@ import (
 )
 
 type Anniversary struct {
-	ID               string    `json:"id" gorm:"primaryKey"`
-	SessionID        string    `json:"-" gorm:"not null;uniqueIndex:idx_anniversary_identity,priority:1;index:idx_anniversary_list,priority:1;index:idx_anniversary_featured,priority:1"`
-	Title            string    `json:"title" gorm:"not null;uniqueIndex:idx_anniversary_identity,priority:2"`
-	Date             string    `json:"date" gorm:"not null;uniqueIndex:idx_anniversary_identity,priority:3"`
-	Kind             string    `json:"kind"`
+	ID               string    `json:"id" gorm:"primaryKey;size:64"`
+	SessionID        string    `json:"-" gorm:"not null;uniqueIndex:idx_anniversary_identity,priority:1;index:idx_anniversary_list,priority:1;index:idx_anniversary_featured,priority:1;size:160"`
+	Title            string    `json:"title" gorm:"not null;uniqueIndex:idx_anniversary_identity,priority:2;size:191"`
+	Date             string    `json:"date" gorm:"not null;uniqueIndex:idx_anniversary_identity,priority:3;size:32"`
+	Kind             string    `json:"kind" gorm:"size:32"`
 	Pinned           bool      `json:"pinned" gorm:"not null;default:false;index:idx_anniversary_featured,priority:2,sort:desc"`
 	CreatedBy        int64     `json:"createdBy"`
 	UpdatedBy        int64     `json:"updatedBy"`
-	BindingCreatedAt time.Time `json:"-"`
-	CreatedAt        time.Time `json:"createdAt" gorm:"index:idx_anniversary_list,priority:2;index:idx_anniversary_featured,priority:3"`
-	UpdatedAt        time.Time `json:"updatedAt"`
+	BindingCreatedAt time.Time `json:"-" gorm:"type:datetime(6)"`
+	CreatedAt        time.Time `json:"createdAt" gorm:"index:idx_anniversary_list,priority:2;index:idx_anniversary_featured,priority:3;type:datetime(6)"`
+	UpdatedAt        time.Time `json:"updatedAt" gorm:"type:datetime(6)"`
 }
 
 type AnniversaryActionReceipt struct {
-	ID            string `gorm:"primaryKey"`
-	AnniversaryID string
-	CreatedAt     time.Time
+	ID            string    `gorm:"primaryKey;size:64"`
+	AnniversaryID string    `gorm:"size:64"`
+	CreatedAt     time.Time `gorm:"type:datetime(6)"`
 }
 
 // Retains the deleted record and a monotonic cursor for clients' loaded pages.
 type AnniversaryDeletionReceipt struct {
 	ID            uint64 `gorm:"primaryKey;autoIncrement;index:idx_anniversary_deletions,priority:2"`
-	RequestKey    string `gorm:"uniqueIndex"`
-	SessionID     string `gorm:"index:idx_anniversary_deletions,priority:1"`
-	AnniversaryID string `gorm:"index"`
-	Snapshot      string
+	RequestKey    string `gorm:"uniqueIndex;size:64"`
+	SessionID     string `gorm:"index:idx_anniversary_deletions,priority:1;size:160"`
+	AnniversaryID string `gorm:"index;size:64"`
+	Snapshot      string `gorm:"type:mediumtext"`
 	DeletedBy     int64
-	CreatedAt     time.Time
+	CreatedAt     time.Time `gorm:"type:datetime(6)"`
 }
 
 var ErrAnniversaryInvalid = errors.New("invalid anniversary")
@@ -143,7 +143,7 @@ func (db *DB) AnniversaryDeletionChanges(ctx context.Context, session, after str
 func reconcileDeletedAnniversaries(gdb *gorm.DB) error {
 	for {
 		var rows []Anniversary
-		if err := gdb.Table("anniversaries a").Select("a.*").Joins("JOIN memory_records m ON m.session_id=a.session_id AND m.path=? || a.id", AnniversaryMemoryPath("")).Where("m.kind='fact' AND m.operation='delete' AND m.binding_created_at=a.binding_created_at").Limit(200).Find(&rows).Error; err != nil {
+		if err := gdb.Table("anniversaries a").Select("a.*").Joins("JOIN memory_records m ON m.session_id=a.session_id AND m.path=CONCAT(?, a.id)", AnniversaryMemoryPath("")).Where("m.kind='fact' AND m.operation='delete' AND m.binding_created_at=a.binding_created_at").Limit(200).Find(&rows).Error; err != nil {
 			return err
 		}
 		if len(rows) == 0 {

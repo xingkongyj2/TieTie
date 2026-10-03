@@ -5,6 +5,8 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"tietie/backend/internal/dbop"
 )
 
 // Config 是一份只读的运行配置快照。
@@ -16,26 +18,26 @@ type Config struct {
 	QWeatherProjectID      string
 	QWeatherPrivateKeyFile string
 
-	Host                        string        // 监听地址，默认 127.0.0.1
-	Port                        int           // 监听端口，默认 4173（与 Node 版一致）
-	StaticDir                   string        // 前端构建产物目录，默认 ../frontend/dist
-	Upstream                    string        // Qoder 云端地址
-	Token                       string        // QODER_ACCESS_TOKEN
-	DefaultSessionID            string        // QODER_DEFAULT_SESSION_ID
-	Timeout                     time.Duration // 上游普通请求超时
-	UploadTimeout               time.Duration // 上游文件上传超时
-	DBDSN                       string        // SQLite 数据库文件路径，默认 tietie.db
-	AgentID                     string        // QODER_AGENT_ID，绑定时新建会话用的 agent；留空自动探测
-	EnvironmentID               string        // QODER_ENVIRONMENT_ID，留空自动探测
-	JWTSecret                   string        // JWT 签名密钥；生产环境必须通过 JWT_SECRET 设置
-	JWTTTL                      time.Duration // 令牌有效期，默认 30 天
-	SchedulerPollInterval       time.Duration // 到期队列检查间隔，默认 1s
-	SchedulerBatchSize          int           // 每次原子领取数量，默认 64
-	ConversationProtocolVersion int           // 新会话协议为2；旧历史仍可读取
-	CloudMemoryEnabled          bool          // 默认开启 Qoder 云端记忆同步
-	LogDir                      string        // 系统与定时任务日志目录
-	LogLevel                    string        // info / debug / warn / error
-	SchedulerConcurrency        int           // 并发云端请求上限，默认 4
+	Host                        string           // 监听地址，默认 127.0.0.1
+	Port                        int              // 监听端口，默认 4173（与 Node 版一致）
+	StaticDir                   string           // 前端构建产物目录，默认 ../frontend/dist
+	Upstream                    string           // Qoder 云端地址
+	Token                       string           // QODER_ACCESS_TOKEN
+	DefaultSessionID            string           // QODER_DEFAULT_SESSION_ID
+	Timeout                     time.Duration    // 上游普通请求超时
+	UploadTimeout               time.Duration    // 上游文件上传超时
+	DB                          dbop.MySQLConfig // MySQL 连接参数（MYSQL_* 环境变量）
+	AgentID                     string           // QODER_AGENT_ID，绑定时新建会话用的 agent；留空自动探测
+	EnvironmentID               string           // QODER_ENVIRONMENT_ID，留空自动探测
+	JWTSecret                   string           // JWT 签名密钥；生产环境必须通过 JWT_SECRET 设置
+	JWTTTL                      time.Duration    // 令牌有效期，默认 30 天
+	SchedulerPollInterval       time.Duration    // 到期队列检查间隔，默认 1s
+	SchedulerBatchSize          int              // 每次原子领取数量，默认 64
+	ConversationProtocolVersion int              // 新会话协议为2；旧历史仍可读取
+	CloudMemoryEnabled          bool             // 默认开启 Qoder 云端记忆同步
+	LogDir                      string           // 系统与定时任务日志目录
+	LogLevel                    string           // info / debug / warn / error
+	SchedulerConcurrency        int              // 并发云端请求上限，默认 4
 }
 
 // Load 从环境变量读取配置，缺省值与 server/index.mjs、server/qoder.mjs 保持一致。
@@ -73,14 +75,20 @@ func Load() Config {
 		DefaultSessionID:            os.Getenv("QODER_DEFAULT_SESSION_ID"),
 		Timeout:                     timeout,
 		UploadTimeout:               60 * time.Second,
-		DBDSN:                       envOr("DB_DSN", "tietie.db"),
-		AgentID:                     os.Getenv("QODER_AGENT_ID"),
-		EnvironmentID:               os.Getenv("QODER_ENVIRONMENT_ID"),
-		JWTSecret:                   envOr("JWT_SECRET", "tietie-dev-secret-change-me"),
-		JWTTTL:                      jwtTTL(),
-		SchedulerPollInterval:       time.Duration(envInt("SCHEDULER_POLL_SECONDS", 1, 60)) * time.Second,
-		SchedulerBatchSize:          envInt("SCHEDULER_BATCH_SIZE", 64, 512),
-		SchedulerConcurrency:        envInt("SCHEDULER_CONCURRENCY", 4, 32),
+		DB: dbop.MySQLConfig{
+			Host:     os.Getenv("MYSQL_HOST"),
+			Port:     envInt("MYSQL_PORT", 3306, 65535),
+			User:     envOr("MYSQL_USER", "root"),
+			Password: os.Getenv("MYSQL_PASSWORD"),
+			Database: envOr("MYSQL_DATABASE", "tietie"),
+		},
+		AgentID:               os.Getenv("QODER_AGENT_ID"),
+		EnvironmentID:         os.Getenv("QODER_ENVIRONMENT_ID"),
+		JWTSecret:             envOr("JWT_SECRET", "tietie-dev-secret-change-me"),
+		JWTTTL:                jwtTTL(),
+		SchedulerPollInterval: time.Duration(envInt("SCHEDULER_POLL_SECONDS", 1, 60)) * time.Second,
+		SchedulerBatchSize:    envInt("SCHEDULER_BATCH_SIZE", 64, 512),
+		SchedulerConcurrency:  envInt("SCHEDULER_CONCURRENCY", 4, 32),
 	}
 }
 

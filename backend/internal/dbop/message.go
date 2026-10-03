@@ -16,12 +16,12 @@ type Message struct {
 	Sender         string    `json:"sender"         gorm:"column:sender;size:8;not null"`
 	UserID         int64     `json:"userId,omitempty"`
 	DisplayName    string    `json:"displayName,omitempty"`
-	RecipientIDs   []int64   `json:"recipientIds,omitempty" gorm:"serializer:json"`
+	RecipientIDs   []int64   `json:"recipientIds,omitempty" gorm:"serializer:json;type:mediumtext"`
 	Source         string    `json:"source,omitempty"`
-	Text           string    `json:"text"           gorm:"column:text;not null;default:''"`
-	Files          []string  `json:"files,omitempty" gorm:"serializer:json"`
+	Text           string    `json:"text"           gorm:"column:text;type:mediumtext;not null"`
+	Files          []string  `json:"files,omitempty" gorm:"serializer:json;type:mediumtext"`
 	CloudCreatedAt string    `json:"cloudCreatedAt" gorm:"column:cloud_created_at;size:64;not null;default:''"`
-	SavedAt        time.Time `json:"savedAt"        gorm:"column:saved_at;autoCreateTime;index:idx_messages_session,priority:2"`
+	SavedAt        time.Time `json:"savedAt"        gorm:"column:saved_at;autoCreateTime;index:idx_messages_session,priority:2;type:datetime(6)"`
 }
 
 // TableName 指定表名。
@@ -61,7 +61,7 @@ func (db *DB) HasMessage(ctx context.Context, id string) (bool, error) {
 	if !db.enabled() {
 		return false, errNoDB
 	}
-	var exists bool
-	err := db.gdb.WithContext(ctx).Raw("SELECT EXISTS(SELECT 1 FROM messages WHERE id = ?)", id).Scan(&exists).Error
-	return exists, err
+	var count int64
+	err := db.gdb.WithContext(ctx).Raw("SELECT COUNT(*) FROM messages WHERE id = ?", id).Scan(&count).Error
+	return count > 0, err
 }

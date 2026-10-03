@@ -14,13 +14,13 @@ type Session struct {
 	Status              string    `json:"status"         gorm:"column:status;size:32;not null;default:''"`
 	CloudCreatedAt      string    `json:"cloudCreatedAt" gorm:"column:cloud_created_at;size:64;not null;default:''"`
 	CloudUpdatedAt      string    `json:"cloudUpdatedAt" gorm:"column:cloud_updated_at;size:64;not null;default:''"`
-	SyncedAt            time.Time `json:"syncedAt"       gorm:"column:synced_at;autoCreateTime;autoUpdateTime"`
+	SyncedAt            time.Time `json:"syncedAt"       gorm:"column:synced_at;autoCreateTime;autoUpdateTime;type:datetime(6)"`
 	ConversationPending bool      `json:"-" gorm:"column:conversation_pending;index:idx_sessions_sync,priority:1"`
-	NextSyncAt          time.Time `json:"-" gorm:"index:idx_sessions_sync,priority:2"`
-	PendingSince        time.Time `json:"-"`
+	NextSyncAt          time.Time `json:"-" gorm:"index:idx_sessions_sync,priority:2;type:datetime(6)"`
+	PendingSince        time.Time `json:"-" gorm:"type:datetime(6)"`
 	ConversationVersion int64     `json:"-"`
 	SyncCursor          string    `json:"-"`
-	SyncOrigin          string    `json:"-"`
+	SyncOrigin          string    `json:"-" gorm:"type:mediumtext"`
 }
 
 // TableName 指定表名。
@@ -30,6 +30,13 @@ func (Session) TableName() string { return "sessions" }
 func (db *DB) UpsertSession(ctx context.Context, s *Session) error {
 	if !db.enabled() {
 		return errNoDB
+	}
+	// 快照行没有同步队列语义，但两列不能留 Go 零值，MySQL 的 DATETIME 不接受。
+	if s.NextSyncAt.IsZero() {
+		s.NextSyncAt = epochTime
+	}
+	if s.PendingSince.IsZero() {
+		s.PendingSince = epochTime
 	}
 	return db.gdb.WithContext(ctx).
 		Clauses(clause.OnConflict{

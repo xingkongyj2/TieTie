@@ -1,14 +1,19 @@
-// Package dbop 是数据访问层：日常读写基于 GORM，旧表结构迁移使用 SQL。
+// Package dbop 是数据访问层：日常读写基于 GORM，建库建表与索引补齐在 Open 里完成。
 // 每张表一个文件，模型对象与它的增删改查放在一起；
 // 跨多张表的查询逻辑放公共文件（db.go / 需要时另建 query.go）。
 package dbop
 
 import (
+	"context"
+	"database/sql"
 	"errors"
+	"fmt"
 	"log"
+	"regexp"
 	"time"
 
-	"github.com/glebarez/sqlite"
+	"github.com/go-sql-driver/mysql"
+	gormmysql "gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -18,11 +23,70 @@ type DB struct {
 	gdb *gorm.DB
 }
 
-// Open 打开 SQLite 数据库并自动迁移全部表结构。
-// dsn 形如 "tietie.db"（相对运行目录）或绝对路径。
-func Open(dsn string) (*DB, error) {
+// MySQLConfig 是一组 MySQL 连接参数。
+type MySQLConfig struct {
+	Host     string
+	Port     int
+	User     string
+	Password string
+	Database string
+}
+
+// Addr 返回 host:port，仅用于连接与日志。
+func (c MySQLConfig) Addr() string { return fmt.Sprintf("%s:%d", c.Host, c.Port) }
+
+// databasePattern 限制库名字符，DDL 里直接拼库名才是安全的。
+var databasePattern = regexp.MustCompile(`^[A-Za-z0-9_]{1,64}$`)
+
+// dsn 组装连接串；database 传空串表示只连服务器，用于建库。
+// parseTime 让 DATETIME 还原成 time.Time，loc=UTC 与写入侧保持一致，
+// 排序规则固定 utf8mb4_bin，保持原来 SQLite 的大小写敏感与二进制序比较。
+func (c MySQLConfig) dsn(database string) string {
+	cfg := mysql.NewConfig()
+	cfg.Net = "tcp"
+	cfg.Addr = c.Addr()
+	cfg.User = c.User
+	cfg.Passwd = c.Password
+	cfg.DBName = database
+	cfg.ParseTime = true
+	cfg.Loc = time.UTC
+	cfg.Collation = "utf8mb4_bin" // 连接侧也走二进制序，LIKE 与范围比较才和 SQLite 一致
+	cfg.Timeout = 10 * time.Second
+	cfg.ReadTimeout = 30 * time.Second
+	cfg.WriteTimeout = 30 * time.Second
+	// 参数由驱动自己按 utf8mb4 转义后内联，省掉 PREPARE/EXECUTE/CLOSE 三次服务端往返。
+	// 这台实例单条语句就要几百毫秒，省下往返直接缩短领取事务持锁的时间。
+	cfg.InterpolateParams = true
+	return cfg.FormatDSN()
+}
+
+// ensureDatabase 建库（幂等），字符集与排序规则在建库时定死，后续建表继承库默认值。
+func ensureDatabase(cfg MySQLConfig) error {
+	db, err := sql.Open("mysql", cfg.dsn(""))
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS `" + cfg.Database + "` CHARACTER SET utf8mb4 COLLATE utf8mb4_bin"); err != nil {
+		return fmt.Errorf("创建数据库 %s: %w", cfg.Database, err)
+	}
+	return nil
+}
+
+// Open 连接 MySQL，建库建表并补齐 AutoMigrate 表达不了的约束。
+func Open(cfg MySQLConfig) (*DB, error) {
+	if cfg.Host == "" {
+		return nil, errors.New("未配置 MYSQL_HOST")
+	}
+	if !databasePattern.MatchString(cfg.Database) {
+		return nil, fmt.Errorf("数据库名 %q 只能包含字母、数字和下划线", cfg.Database)
+	}
+	if err := ensureDatabase(cfg); err != nil {
+		return nil, err
+	}
+
 	gdb, err := gorm.Open(
-		sqlite.Open("file:"+dsn+"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"),
+		gormmysql.Open(cfg.dsn(cfg.Database)),
 		&gorm.Config{Logger: logger.New(
 			log.Default(),
 			logger.Config{
@@ -41,19 +105,13 @@ func Open(dsn string) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	// SQLite 单写者：限制单连接，避免 SQLITE_BUSY。
-	sqlDB.SetMaxOpenConns(1)
+	// 队列 worker 与 HTTP 处理共用连接池；上限压到 16，避免挤占同一实例上的其他库。
+	// 空闲连接 30 秒就丢弃：远端实例（含中间的端口代理）会掐掉长时间不动的连接，留着会被下一个请求撞上。
+	sqlDB.SetMaxOpenConns(16)
+	sqlDB.SetMaxIdleConns(4)
+	sqlDB.SetConnMaxLifetime(30 * time.Minute)
+	sqlDB.SetConnMaxIdleTime(30 * time.Second)
 
-	if err := migrateLegacyUsers(gdb); err != nil {
-		return nil, err
-	}
-	if err := migrateLegacyPasswords(gdb); err != nil {
-		return nil, err
-	}
-	needsTaskBackfill := !gdb.Migrator().HasColumn(&Reminder{}, "task_status")
-	needsMemoryKindBackfill := !gdb.Migrator().HasColumn(&MemoryRecord{}, "kind")
-	needsCloudMemoryBackfill := !gdb.Migrator().HasTable(&MemoryRecord{})
-	needsMemoryBackfill := !gdb.Migrator().HasTable(&ReminderMemory{})
 	if err := gdb.AutoMigrate(
 		&User{},
 		&UserProfile{},
@@ -68,6 +126,7 @@ func Open(dsn string) (*DB, error) {
 		&AnniversaryActionReceipt{},
 		&AnniversaryDeletionReceipt{},
 		&Binding{},
+		&ArchivedBinding{},
 		&Session{},
 		&ConversationProtocol{},
 		&Message{},
@@ -89,60 +148,7 @@ func Open(dsn string) (*DB, error) {
 	); err != nil {
 		return nil, err
 	}
-	if err := gdb.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_anniversary_one_pin ON anniversaries(session_id) WHERE pinned=1").Error; err != nil {
-		return nil, err
-	}
-	if err := gdb.Exec("CREATE INDEX IF NOT EXISTS idx_reminders_daily ON reminders(session_id, status, due_at)").Error; err != nil {
-		return nil, err
-	}
-	if needsMemoryKindBackfill {
-		if err := gdb.Exec("UPDATE memory_records SET kind='reminder' WHERE path LIKE 'shared/reminders/%'").Error; err != nil {
-			return nil, err
-		}
-	}
-	if err := enforceUniqueBindings(gdb); err != nil {
-		return nil, err
-	}
-	// Backfill a previous reminder schema without changing original due times.
-	if err := gdb.Exec(`UPDATE reminders SET run_at = CASE WHEN next_attempt_at > due_at THEN next_attempt_at ELSE due_at END
-WHERE run_at IS NULL OR run_at = '' OR run_at < '0002-01-01'`).Error; err != nil {
-		return nil, err
-	}
-	if err := gdb.Exec(`UPDATE sessions SET next_sync_at = ? WHERE conversation_pending = 1 AND next_sync_at IS NULL`, time.Now().UTC()).Error; err != nil {
-		return nil, err
-	}
-	if err := gdb.Exec(`UPDATE sessions SET conversation_version = 0 WHERE conversation_version IS NULL`).Error; err != nil {
-		return nil, err
-	}
-	// Backfill task state and factual memory for existing reminder installations.
-	if err := gdb.Transaction(func(tx *gorm.DB) error {
-		if needsTaskBackfill {
-			if err := tx.Exec(`UPDATE reminders SET task_status = CASE status WHEN 'delivered' THEN 'completed' WHEN 'dispatching' THEN 'running' WHEN 'completed' THEN CASE WHEN delivered_at IS NULL THEN 'cancelled' ELSE 'completed' END WHEN 'cancelled' THEN CASE WHEN delivered_at IS NULL THEN 'cancelled' ELSE 'completed' END WHEN 'failed' THEN 'failed' WHEN 'uncertain' THEN 'uncertain' ELSE 'pending' END, task_completed_at = delivered_at`).Error; err != nil {
-				return err
-			}
-		}
-		if !needsMemoryBackfill && !needsCloudMemoryBackfill {
-			return nil
-		}
-		var rows []Reminder
-		// Only missing memories require migration; ordinary startups do not rewrite history.
-		query := tx.Model(&Reminder{})
-		if !needsCloudMemoryBackfill {
-			query = query.Where("id NOT IN (SELECT reminder_id FROM reminder_memories)")
-		}
-		if err := query.Find(&rows).Error; err != nil {
-			return err
-		}
-		for _, r := range rows {
-			if err := syncReminderMemory(tx, &r); err != nil {
-				return err
-			}
-		}
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	if err := migrateReminderHistory(gdb); err != nil {
+	if err := ensureSchemaExtras(gdb); err != nil {
 		return nil, err
 	}
 	if err := migrateTemplateSchemas(gdb); err != nil {
@@ -152,6 +158,98 @@ WHERE run_at IS NULL OR run_at = '' OR run_at < '0002-01-01'`).Error; err != nil
 		return nil, err
 	}
 	return &DB{gdb: gdb}, nil
+}
+
+// ensureSchemaExtras 补 AutoMigrate 表达不了的约束：
+// 每日提醒的扫描索引，以及"每个空间最多一个置顶纪念日"。
+// MySQL 没有部分索引，置顶唯一性用 stored 生成列 + 唯一索引实现：未置顶时生成为 NULL，NULL 不参与唯一约束。
+func ensureSchemaExtras(gdb *gorm.DB) error {
+	if err := ensureColumn(gdb, "anniversaries", "pinned_session_id",
+		"ALTER TABLE anniversaries ADD COLUMN pinned_session_id VARCHAR(160) GENERATED ALWAYS AS (IF(pinned = 1, session_id, NULL)) STORED"); err != nil {
+		return err
+	}
+	if err := ensureIndex(gdb, "anniversaries", "idx_anniversary_one_pin",
+		"CREATE UNIQUE INDEX idx_anniversary_one_pin ON anniversaries (pinned_session_id)"); err != nil {
+		return err
+	}
+	return ensureIndex(gdb, "reminders", "idx_reminders_daily",
+		"CREATE INDEX idx_reminders_daily ON reminders (session_id, status, due_at)")
+}
+
+// ensureColumn 列不存在时执行 DDL。
+func ensureColumn(gdb *gorm.DB, table, column, ddl string) error {
+	var count int64
+	err := gdb.Raw(`SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`, table, column).Scan(&count).Error
+	if err != nil || count > 0 {
+		return err
+	}
+	return gdb.Exec(ddl).Error
+}
+
+// ensureIndex 索引不存在时执行 DDL。
+func ensureIndex(gdb *gorm.DB, table, index, ddl string) error {
+	var count int64
+	err := gdb.Raw(`SELECT COUNT(*) FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ?`, table, index).Scan(&count).Error
+	if err != nil || count > 0 {
+		return err
+	}
+	return gdb.Exec(ddl).Error
+}
+
+// 各类后台队列的领取锁名。MySQL 的 advisory lock 是连接级的，名字只要全局唯一即可。
+const (
+	claimLockReminders            = "tietie_claim_reminders"
+	claimLockControls             = "tietie_claim_controls"
+	claimLockSessionSync          = "tietie_claim_session_sync"
+	claimLockMemorySync           = "tietie_claim_memory_sync"
+	claimLockImpressions          = "tietie_claim_impressions"
+	claimLockCareModes            = "tietie_claim_care_modes"
+	claimLockAnniversaryReminders = "tietie_claim_anniversary_reminders"
+)
+
+// claimWithLock 串行化"挑候选 + 改状态"这段领取动作。
+// SQLite 时代靠单连接让每条 UPDATE...RETURNING 天然原子；换成连接池后，
+// 领取条件往往依赖同空间其他行的状态（例如一个空间最多一条投递中），
+// 两个并发领取各自只看到已提交的旧状态，就会同时领走同一空间的两条任务。
+// advisory lock 是连接级的，所以另借一条连接当门闩：领取事务提交之后再释放，
+// 否则下一个持有者会读到提交前的状态，等于没锁。领取完立刻提交，投递与云端调用都在锁外并发执行。
+func claimWithLock(ctx context.Context, gdb *gorm.DB, lock string, claim func(tx *gorm.DB) error) error {
+	sqlDB, err := gdb.DB()
+	if err != nil {
+		return err
+	}
+	gate, err := sqlDB.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer gate.Close()
+	var granted int
+	if err := gate.QueryRowContext(ctx, "SELECT GET_LOCK(?, 10)", lock).Scan(&granted); err != nil {
+		return err
+	}
+	if granted != 1 {
+		return fmt.Errorf("等待领取锁 %s 超时", lock)
+	}
+	defer func() {
+		var released int
+		_ = gate.QueryRowContext(ctx, "SELECT RELEASE_LOCK(?)", lock).Scan(&released)
+	}()
+	// 领取的 UPDATE 会与业务侧的记忆写入争锁，InnoDB 选中一方回滚是常态，错误信息本身就是"try restarting"。
+	for attempt := 1; ; attempt++ {
+		err := gdb.WithContext(ctx).Transaction(claim)
+		if err == nil {
+			return nil
+		}
+		var myErr *mysql.MySQLError
+		if attempt >= 3 || !errors.As(err, &myErr) || (myErr.Number != 1213 && myErr.Number != 1205) {
+			return err
+		}
+		select {
+		case <-time.After(200 * time.Millisecond):
+		case <-ctx.Done():
+			return err
+		}
+	}
 }
 
 // Close 关闭数据库。
@@ -165,6 +263,10 @@ func (db *DB) Close() error {
 	}
 	return sqlDB.Close()
 }
+
+// epochTime 表示"还没排定下一次"。MySQL 的 DATETIME 下限是 1000-01-01，
+// Go 零值 time.Time（0001-01-01）在严格模式下会被直接拒收，所以关闭态统一落这个值。
+var epochTime = time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC)
 
 // enabled 报告数据库是否可用（nil 安全）。
 func (db *DB) enabled() bool { return db != nil && db.gdb != nil }

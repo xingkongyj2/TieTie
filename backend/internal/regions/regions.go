@@ -30,9 +30,9 @@ type Province struct {
 type Location struct {
 	ProvinceCode string `json:"provinceCode"`
 	Province     string `json:"province"`
-	CityCode     string `json:"cityCode" gorm:"index:idx_user_profile_region_city"`
+	CityCode     string `json:"cityCode" gorm:"index:idx_user_profile_region_city;size:32"`
 	City         string `json:"city"`
-	DistrictCode string `json:"districtCode" gorm:"index:idx_user_profile_region_district"`
+	DistrictCode string `json:"districtCode" gorm:"index:idx_user_profile_region_district;size:32"`
 	District     string `json:"district"`
 	CodeSystem   string `json:"codeSystem"`
 }

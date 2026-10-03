@@ -1,6 +1,6 @@
 # TieTie 后端（Go）
 
-替代 `server/` 下 Node 脚本的 Go 后端：代理 Qoder 云端会话、校验上传附件、服务前端静态文件，SQLite 持久化与按时间调度共享提醒。
+替代 `server/` 下 Node 脚本的 Go 后端：代理 Qoder 云端会话、校验上传附件、服务前端静态文件，MySQL 持久化与按时间调度共享提醒。
 
 ## 目录结构
 
@@ -58,7 +58,11 @@ go run ./cmd/server           # 或 make dev
 
 | 变量 | 说明 |
 |---|---|
-| `DB_DSN` | SQLite 数据库文件路径，默认 `tietie.db`（GORM AutoMigrate 自动建表） |
+| `MYSQL_HOST` | MySQL 地址，必填（留空服务拒绝启动，避免误跑成无数据库模式） |
+| `MYSQL_PORT` | 端口，默认 `3306` |
+| `MYSQL_USER` | 用户名，默认 `root` |
+| `MYSQL_PASSWORD` | 密码 |
+| `MYSQL_DATABASE` | 库名，默认 `tietie`；启动时 `CREATE DATABASE IF NOT EXISTS`（utf8mb4 / utf8mb4_bin）并 AutoMigrate 建表 |
 | `STATIC_DIR` | 前端产物目录，默认 `../frontend/dist` |
 | `QODER_TIMEOUT_SECONDS` | 上游请求超时，默认 15s |
 | `QODER_MEMORY_ENABLED` | 云端长期记忆默认开启；设为 `false` 暂停同步，待同步数据保留，新建空间返回 memory_required |
@@ -123,7 +127,7 @@ docker build -t tietie-backend .      # 镜像只含后端，静态文件用卷�
 - `PATCH .../reminders/:reminderId` 接收 `{status:"completed"|"scheduled"|"cancelled"}`。完成/恢复仅接收者可操作，已到期或已投递的任务不能撤销完成。
 - 消息历史额外包含 `members`、`reminders`、`remindersError`；消息包含 `userId`、`displayName`、`recipientIds`、`source`、提醒回执 ID/错误。原始云端 Events 与提醒操作 JSON 不对外公开。
 
-当前只支持一次性提醒，默认用 Asia/Shanghai 解释相对时间。服务需常驻，页面关闭不影响保存与唤醒；离线手机/微信推送尚未接入。SQLite 单实例方案含跨连接原子领取验证，但多副本运行仍需分布式租约与跨实例空间锁，不能直接运行多个进程各自在启动时恢复相同队列。
+当前只支持一次性提醒，默认用 Asia/Shanghai 解释相对时间。服务需常驻，页面关闭不影响保存与唤醒；离线手机/微信推送尚未接入。MySQL 下每类队列的「挑候选 + 改状态」由一把 advisory lock 串起来，跨连接不会重复领取；但多副本运行仍需分布式租约与跨实例空间锁，会话内的串行也还依赖进程内互斥，不能直接运行多个进程各自在启动时恢复相同队列。
 
 ## 提醒落库、记忆与运行日志
 

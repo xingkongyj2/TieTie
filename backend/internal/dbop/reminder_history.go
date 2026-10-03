@@ -22,14 +22,14 @@ const (
 // Positions are append-only. Completing/cancelling an old reminder never moves
 // other rows or rewrites the rest of a month's archive.
 type ReminderHistoryLocation struct {
-	SessionID   string    `gorm:"primaryKey;index:idx_history_page,priority:1;index:idx_history_board,priority:1;index:idx_history_recent,priority:1"`
-	ReminderID  string    `gorm:"primaryKey;index:idx_history_board,priority:4;index:idx_history_recent,priority:3"`
-	Month       string    `gorm:"index:idx_history_page,priority:2"`
+	SessionID   string    `gorm:"primaryKey;index:idx_history_page,priority:1;index:idx_history_board,priority:1;index:idx_history_recent,priority:1;size:160"`
+	ReminderID  string    `gorm:"primaryKey;index:idx_history_board,priority:4;index:idx_history_recent,priority:3;size:64"`
+	Month       string    `gorm:"index:idx_history_page,priority:2;size:32"`
 	Page        int       `gorm:"index:idx_history_page,priority:3"`
 	Position    int64     `gorm:"index:idx_history_page,priority:4"`
-	BoardStatus string    `gorm:"index:idx_history_board,priority:2"`
-	DueAt       time.Time `gorm:"index:idx_history_board,priority:3"`
-	CreatedAt   time.Time `gorm:"index:idx_history_recent,priority:2"`
+	BoardStatus string    `gorm:"index:idx_history_board,priority:2;size:32"`
+	DueAt       time.Time `gorm:"index:idx_history_board,priority:3;type:datetime(6)"`
+	CreatedAt   time.Time `gorm:"index:idx_history_recent,priority:2;type:datetime(6)"`
 }
 
 func (ReminderHistoryLocation) TableName() string { return "reminder_history_locations" }
@@ -38,8 +38,8 @@ func (l ReminderHistoryLocation) Path() string {
 }
 
 type ReminderHistoryMonth struct {
-	SessionID   string `gorm:"primaryKey"`
-	Month       string `gorm:"primaryKey"`
+	SessionID   string `gorm:"primaryKey;size:160"`
+	Month       string `gorm:"primaryKey;size:32"`
 	RecordCount int64
 }
 
@@ -201,4 +201,31 @@ func ExtractReminderMemory(body, id string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("reminder %s missing from cloud history page", id)
+}
+
+// ReminderHistoryReady 报告该空间的历史页与任务板投影是否都已同步到云端；
+// 没同步完时，归档文档的退役会被领取条件挡住。
+func (db *DB) ReminderHistoryReady(ctx context.Context, session string) (bool, error) {
+	var row MemoryRecord
+	err := db.gdb.WithContext(ctx).Select("id").Where("session_id=? AND (kind='template' OR (path >= 'tasks/todo-board/' AND path < 'tasks/todo-board0')) AND operation='upsert' AND state!='synced'", session).Take(&row).Error
+	if err == gorm.ErrRecordNotFound {
+		return true, nil
+	}
+	return false, err
+}
+
+// RecoverReminderArchiveStore 把失活的归档空间换到新仓库并重排其本地页；
+// 挂载中的空间不走这条路径。换仓与重排在一个事务里提交。
+func (db *DB) RecoverReminderArchiveStore(ctx context.Context, previous SpaceMemoryStore, replacement string) error {
+	return db.gdb.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&SpaceMemoryStore{}).Where("session_id=? AND store_id=?", previous.SessionID, previous.StoreID).Updates(map[string]any{"store_id": replacement, "native_mounted": false})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		now := time.Now().UTC()
+		return tx.Model(&MemoryRecord{}).Where("session_id=? AND operation='upsert' AND content!='' AND (path >= 'tasks/todo-board/' AND path < 'tasks/todo-board0' OR path='tasks/todo-board.json' OR path='rules/memory-policy.json')", previous.SessionID).Updates(map[string]any{"store_id": replacement, "entry_id": "", "pending_content": gorm.Expr("content"), "state": "pending", "allow_unbound": true, "revision": gorm.Expr("revision+1"), "run_at": now, "updated_at": now}).Error
+	})
 }

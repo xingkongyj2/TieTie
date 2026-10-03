@@ -18,7 +18,7 @@ type File struct {
 	MIME        string    `json:"mime"        gorm:"column:mime;size:128;not null;default:''"`
 	Size        int       `json:"size"        gorm:"column:size;not null;default:0"`
 	SHA256      string    `json:"sha256"      gorm:"column:sha256;size:64;not null;default:'';index"`
-	CreatedAt   time.Time `json:"createdAt"   gorm:"column:created_at;autoCreateTime"`
+	CreatedAt   time.Time `json:"createdAt"   gorm:"column:created_at;autoCreateTime;type:datetime(6)"`
 }
 
 // TableName 指定表名。

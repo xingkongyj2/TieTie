@@ -7,21 +7,22 @@ import (
 	"encoding/json"
 	"time"
 
+	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
 // Impression is a derived view, never evidence for a new memory. Each target
 // belongs to one shared session; private branches are excluded from its sources.
 type Impression struct {
-	SessionID   string     `json:"-" gorm:"primaryKey;index:idx_impression_ready,priority:3"`
+	SessionID   string     `json:"-" gorm:"primaryKey;index:idx_impression_ready,priority:3;size:160"`
 	TargetID    int64      `json:"targetId" gorm:"primaryKey"`
-	SourceHash  string     `json:"-"`
+	SourceHash  string     `json:"-" gorm:"size:64"`
 	Summary     string     `json:"summary"`
-	Status      string     `json:"status" gorm:"index:idx_impression_ready,priority:1"`
-	Error       string     `json:"error,omitempty"`
-	RunAt       time.Time  `json:"-" gorm:"index:idx_impression_ready,priority:2"`
-	GeneratedAt *time.Time `json:"generatedAt,omitempty"`
-	UpdatedAt   time.Time  `json:"-"`
+	Status      string     `json:"status" gorm:"index:idx_impression_ready,priority:1;size:32"`
+	Error       string     `json:"error,omitempty" gorm:"size:255"`
+	RunAt       time.Time  `json:"-" gorm:"index:idx_impression_ready,priority:2;type:datetime(6)"`
+	GeneratedAt *time.Time `json:"generatedAt,omitempty" gorm:"type:datetime(6)"`
+	UpdatedAt   time.Time  `json:"-" gorm:"type:datetime(6)"`
 }
 
 func (Impression) TableName() string { return "impressions" }
@@ -79,13 +80,36 @@ func (db *DB) EnsureImpression(ctx context.Context, session string, target int64
 	}
 	return db.GetImpression(ctx, session, target)
 }
+
+// dueImpressions 挑出已到期的画像生成任务；原语句按 run_at 排序没有决胜列，这里补上主键保证领取顺序稳定。
+const dueImpressions = `SELECT i.* FROM impressions i WHERE i.status='pending' AND i.run_at<=? AND EXISTS(SELECT 1 FROM bindings b WHERE b.session_id=i.session_id AND (b.user_a=i.target_id OR b.user_b=i.target_id)) ORDER BY i.run_at, i.session_id, i.target_id LIMIT ?`
+
 func (db *DB) ClaimImpressions(ctx context.Context, now time.Time, limit int) ([]Impression, error) {
 	if limit <= 0 || limit > 8 {
 		limit = 8
 	}
+	lease := now.Add(3 * time.Minute).UTC()
 	var rows []Impression
-	err := db.gdb.WithContext(ctx).Raw(`UPDATE impressions SET status='generating',run_at=? WHERE rowid IN (
- SELECT i.rowid FROM impressions i WHERE i.status='pending' AND i.run_at<=? AND EXISTS(SELECT 1 FROM bindings b WHERE b.session_id=i.session_id AND (b.user_a=i.target_id OR b.user_b=i.target_id)) ORDER BY i.run_at LIMIT ?) RETURNING *`, now.Add(3*time.Minute).UTC(), now.UTC(), limit).Scan(&rows).Error
+	err := claimWithLock(ctx, db.gdb, claimLockImpressions, func(tx *gorm.DB) error {
+		var due []Impression
+		if err := tx.Raw(dueImpressions, now.UTC(), limit).Scan(&due).Error; err != nil {
+			return err
+		}
+		// 主键是 (session_id,target_id) 复合键，只能逐行带状态守卫领取：RowsAffected==1 才说明这条归本次领取。
+		for _, row := range due {
+			res := tx.Exec(`UPDATE impressions SET status='generating',run_at=? WHERE session_id=? AND target_id=? AND status='pending'`,
+				lease, row.SessionID, row.TargetID)
+			if res.Error != nil {
+				return res.Error
+			}
+			if res.RowsAffected != 1 {
+				continue
+			}
+			row.Status, row.RunAt = "generating", lease
+			rows = append(rows, row)
+		}
+		return nil
+	})
 	return rows, err
 }
 func (db *DB) FinishImpression(ctx context.Context, job Impression, summary, problem string) error {

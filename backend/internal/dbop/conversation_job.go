@@ -56,6 +56,12 @@ type ConversationJob struct {
 
 // ClaimConversationSync leases only indexed due sessions, with a bounded batch.
 // A new message advances the version and schedules its own immediate sync.
+// dueSessionIDs 挑出已建索引的待同步会话；领取写入保持原 RETURNING 语句的列集合。
+const dueSessionIDs = `SELECT s.id FROM sessions s FORCE INDEX (idx_sessions_sync)
+WHERE s.conversation_pending = 1 AND s.next_sync_at <= ?
+AND (EXISTS (SELECT 1 FROM bindings b WHERE b.session_id=s.id) OR EXISTS(SELECT 1 FROM private_channels p JOIN bindings b ON b.session_id=p.space_id AND b.created_at=p.binding_created_at WHERE p.session_id=s.id))
+ORDER BY s.next_sync_at ASC, s.id ASC LIMIT ?`
+
 func (db *DB) ClaimConversationSync(ctx context.Context, now time.Time, limit int) ([]ConversationJob, error) {
 	if !db.enabled() {
 		return nil, errNoDB
@@ -64,12 +70,20 @@ func (db *DB) ClaimConversationSync(ctx context.Context, now time.Time, limit in
 		limit = 64
 	}
 	var jobs []ConversationJob
-	err := db.gdb.WithContext(ctx).Raw(`UPDATE sessions SET next_sync_at = ? WHERE id IN (
-SELECT s.id FROM sessions s INDEXED BY idx_sessions_sync
-WHERE s.conversation_pending = ? AND s.next_sync_at <= ?
-AND (EXISTS (SELECT 1 FROM bindings b WHERE b.session_id=s.id) OR EXISTS(SELECT 1 FROM private_channels p JOIN bindings b ON b.session_id=p.space_id AND b.created_at=p.binding_created_at WHERE p.session_id=s.id))
-ORDER BY s.next_sync_at ASC, s.id ASC LIMIT ?) RETURNING id, conversation_version, pending_since, sync_cursor, sync_origin`,
-		now.Add(2*time.Minute).UTC(), true, now.UTC(), limit).Scan(&jobs).Error
+	err := claimWithLock(ctx, db.gdb, claimLockSessionSync, func(tx *gorm.DB) error {
+		var ids []string
+		if err := tx.Raw(dueSessionIDs, now.UTC(), limit).Scan(&ids).Error; err != nil {
+			return err
+		}
+		if len(ids) == 0 {
+			return nil
+		}
+		if err := tx.Exec(`UPDATE sessions SET next_sync_at = ? WHERE id IN (?) AND conversation_pending = 1`, now.Add(2*time.Minute).UTC(), ids).Error; err != nil {
+			return err
+		}
+		return tx.Model(&Session{}).Where("id IN ? AND conversation_pending = 1", ids).
+			Select("id, conversation_version, pending_since, sync_cursor, sync_origin").Scan(&jobs).Error
+	})
 	return jobs, err
 }
 

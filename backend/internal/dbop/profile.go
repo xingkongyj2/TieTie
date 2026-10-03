@@ -20,12 +20,12 @@ type UserProfile struct {
 	UserID             int64            `json:"userId" gorm:"primaryKey"`
 	Gender             string           `json:"gender"`
 	Birthday           string           `json:"birthday"`
-	Hobbies            []string         `json:"hobbies" gorm:"serializer:json"`
+	Hobbies            []string         `json:"hobbies" gorm:"serializer:json;type:mediumtext"`
 	Bio                string           `json:"bio"`
 	Avatar             string           `json:"avatar"`
 	Region             regions.Location `json:"region" gorm:"embedded;embeddedPrefix:region_"`
 	RegionSourceUserID int64            `json:"regionSourceUserId,omitempty"`
-	UpdatedAt          time.Time        `json:"updatedAt"`
+	UpdatedAt          time.Time        `json:"updatedAt" gorm:"type:datetime(6)"`
 }
 
 func (p UserProfile) Fields() map[string]any {

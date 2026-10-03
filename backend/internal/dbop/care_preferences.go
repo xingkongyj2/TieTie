@@ -14,17 +14,17 @@ import (
 )
 
 type CarePreference struct {
-	SessionID        string    `json:"-" gorm:"primaryKey"`
+	SessionID        string    `json:"-" gorm:"primaryKey;size:160"`
 	UserID           int64     `json:"userId" gorm:"primaryKey"`
-	Metrics          []string  `json:"metrics" gorm:"serializer:json"`
+	Metrics          []string  `json:"metrics" gorm:"serializer:json;type:mediumtext"`
 	UpdatedBy        int64     `json:"updatedBy"`
-	UpdatedAt        time.Time `json:"updatedAt"`
-	BindingCreatedAt time.Time `json:"-"`
+	UpdatedAt        time.Time `json:"updatedAt" gorm:"type:datetime(6)"`
+	BindingCreatedAt time.Time `json:"-" gorm:"type:datetime(6)"`
 }
 type ProfileActionReceipt struct {
-	ID        string `gorm:"primaryKey"`
-	Snapshot  string
-	CreatedAt time.Time
+	ID        string    `gorm:"primaryKey;size:64"`
+	Snapshot  string    `gorm:"type:mediumtext"`
+	CreatedAt time.Time `gorm:"type:datetime(6)"`
 }
 
 func profileActorBinding(tx *gorm.DB, session string, actor, target int64, epoch time.Time) (*Binding, error) {

@@ -37,30 +37,30 @@ var (
 
 // Reminder 是可恢复的提醒队列。绑定创建时间隔离解绑后重新使用同一云会话的旧任务。
 type Reminder struct {
-	DeliverySessionID string     `json:"-"`
-	MemorySessionID   string     `json:"-"`
-	Visibility        string     `json:"visibility,omitempty"`
-	MemoryBucket      string     `json:"-" gorm:"index:idx_reminders_board,priority:2"`
+	DeliverySessionID string     `json:"-" gorm:"size:160"`
+	MemorySessionID   string     `json:"-" gorm:"size:160"`
+	Visibility        string     `json:"visibility,omitempty" gorm:"size:32"`
+	MemoryBucket      string     `json:"-" gorm:"index:idx_reminders_board,priority:2;size:160"`
 	ID                string     `json:"id" gorm:"primaryKey;size:64;index:idx_reminders_board,priority:3;index:idx_reminders_created,priority:3;index:idx_reminders_space_status,priority:4;index:idx_reminders_ready,priority:3"`
-	SessionID         string     `json:"sessionId" gorm:"not null;index:idx_reminders_session;index:idx_reminders_space_status,priority:1;index:idx_reminders_board,priority:1;index:idx_reminders_created,priority:1"`
-	Title             string     `json:"title" gorm:"not null"`
-	DueAt             time.Time  `json:"dueAt" gorm:"not null"`
-	RunAt             time.Time  `json:"-" gorm:"index:idx_reminders_ready,priority:2;index:idx_reminders_space_status,priority:3"`
-	RecipientIDs      []int64    `json:"recipientIds" gorm:"serializer:json;not null"`
+	SessionID         string     `json:"sessionId" gorm:"not null;index:idx_reminders_session;index:idx_reminders_space_status,priority:1;index:idx_reminders_board,priority:1;index:idx_reminders_created,priority:1;size:160"`
+	Title             string     `json:"title" gorm:"not null;size:500"`
+	DueAt             time.Time  `json:"dueAt" gorm:"not null;type:datetime(6)"`
+	RunAt             time.Time  `json:"-" gorm:"index:idx_reminders_ready,priority:2;index:idx_reminders_space_status,priority:3;type:datetime(6)"`
+	RecipientIDs      []int64    `json:"recipientIds" gorm:"serializer:json;not null;type:mediumtext"`
 	CreatedBy         int64      `json:"createdBy"`
-	SourceEventID     string     `json:"sourceEventId" gorm:"not null"`
-	Status            string     `json:"status" gorm:"not null;index:idx_reminders_ready,priority:1;index:idx_reminders_space_status,priority:2"`
-	TaskStatus        string     `json:"taskStatus" gorm:"not null;default:pending"`
-	TaskCompletedAt   *time.Time `json:"taskCompletedAt,omitempty"`
-	DeliveredAt       *time.Time `json:"deliveredAt,omitempty"`
+	SourceEventID     string     `json:"sourceEventId" gorm:"not null;size:160"`
+	Status            string     `json:"status" gorm:"not null;index:idx_reminders_ready,priority:1;index:idx_reminders_space_status,priority:2;size:32"`
+	TaskStatus        string     `json:"taskStatus" gorm:"not null;default:pending;size:32"`
+	TaskCompletedAt   *time.Time `json:"taskCompletedAt,omitempty" gorm:"type:datetime(6)"`
+	DeliveredAt       *time.Time `json:"deliveredAt,omitempty" gorm:"type:datetime(6)"`
 	CompletedBy       *int64     `json:"completedBy,omitempty"`
-	CreatedAt         time.Time  `json:"createdAt" gorm:"autoCreateTime;index:idx_reminders_created,priority:2"`
-	UpdatedAt         time.Time  `json:"updatedAt" gorm:"autoUpdateTime"`
-	BindingCreatedAt  time.Time  `json:"-" gorm:"not null"`
+	CreatedAt         time.Time  `json:"createdAt" gorm:"autoCreateTime;index:idx_reminders_created,priority:2;type:datetime(6)"`
+	UpdatedAt         time.Time  `json:"updatedAt" gorm:"autoUpdateTime;type:datetime(6)"`
+	BindingCreatedAt  time.Time  `json:"-" gorm:"not null;type:datetime(6)"`
 	ActionIndex       int        `json:"-"`
 	Attempts          int        `json:"-"`
-	NextAttemptAt     *time.Time `json:"-"`
-	DispatchEventIDs  []string   `json:"-" gorm:"serializer:json"`
+	NextAttemptAt     *time.Time `json:"-" gorm:"type:datetime(6)"`
+	DispatchEventIDs  []string   `json:"-" gorm:"serializer:json;type:mediumtext"`
 }
 
 func (Reminder) TableName() string { return "reminders" }
@@ -71,13 +71,13 @@ func (r Reminder) hasCompletedDelivery() bool {
 
 // ReminderActionReceipt 与提醒的修改在同一事务提交，重放云端历史不会重复建任务。
 type ReminderActionReceipt struct {
-	SessionID     string    `gorm:"primaryKey;uniqueIndex:idx_reminder_request,priority:1"`
-	RequestKey    *string   `gorm:"uniqueIndex:idx_reminder_request,priority:2"`
-	SourceEventID string    `gorm:"primaryKey"`
+	SessionID     string    `gorm:"primaryKey;uniqueIndex:idx_reminder_request,priority:1;size:160"`
+	RequestKey    *string   `gorm:"uniqueIndex:idx_reminder_request,priority:2;size:255"`
+	SourceEventID string    `gorm:"primaryKey;size:160"`
 	ActionIndex   int       `gorm:"primaryKey;autoIncrement:false"`
-	ActionType    string    `gorm:"not null"`
-	ReminderID    string    `gorm:"not null"`
-	CreatedAt     time.Time `gorm:"autoCreateTime"`
+	ActionType    string    `gorm:"not null;size:32"`
+	ReminderID    string    `gorm:"not null;size:64"`
+	CreatedAt     time.Time `gorm:"autoCreateTime;type:datetime(6)"`
 }
 
 func (ReminderActionReceipt) TableName() string { return "reminder_action_receipts" }
@@ -391,7 +391,7 @@ func (db *DB) CancelSessionReminders(ctx context.Context, sessionID string) erro
 	})
 }
 
-// ClaimDueReminder 用单条 SQLite UPDATE/RETURNING 保证多个工作线程只领到一次任务，且每个空间最多一个投递。
+// ClaimDueReminder 领取一条到期提醒；领取逻辑与批量一致，见 ClaimDueReminders。
 func (db *DB) ClaimDueReminder(ctx context.Context, now time.Time) (*Reminder, error) {
 	reminders, err := db.ClaimDueReminders(ctx, now, 1)
 	if err != nil || len(reminders) == 0 {
@@ -400,9 +400,9 @@ func (db *DB) ClaimDueReminder(ctx context.Context, now time.Time) (*Reminder, e
 	return &reminders[0], nil
 }
 
-// ClaimDueReminders selects only indexed due jobs, at most one per space. A
-// single UPDATE/RETURNING atomically reserves the batch across DB connections.
-const dueReminderSelection = `SELECT r.id FROM reminders r INDEXED BY idx_reminders_ready
+// ClaimDueReminders 只领已建索引的到期任务，且每个空间最多一条。
+// 候选判断和状态改写放在同一把领取锁里，避免两个 worker 同时看到"该空间没有投递中的任务"。
+const dueReminderIDs = `SELECT r.id FROM reminders r FORCE INDEX (idx_reminders_ready)
 WHERE r.status = ? AND r.run_at <= ?
 AND (EXISTS(SELECT 1 FROM bindings b WHERE b.session_id=r.session_id AND b.created_at=r.binding_created_at) OR EXISTS(SELECT 1 FROM private_channels p JOIN bindings b ON b.session_id=p.space_id AND b.created_at=p.binding_created_at WHERE p.session_id=r.session_id AND b.created_at=r.binding_created_at))
 AND NOT EXISTS (SELECT 1 FROM reminders pending WHERE pending.session_id = r.session_id AND pending.status = ?)
@@ -419,9 +419,22 @@ func (db *DB) ClaimDueReminders(ctx context.Context, now time.Time, limit int) (
 		limit = 64
 	}
 	var reminders []Reminder
-	err := db.gdb.WithContext(ctx).Raw(`UPDATE reminders SET status = ?, task_status = 'running', attempts = attempts + 1, updated_at = ?
-WHERE id IN (`+dueReminderSelection+`) AND status = ? RETURNING *`,
-		ReminderDispatching, now.UTC(), ReminderScheduled, now.UTC(), ReminderDispatching, ReminderScheduled, limit, ReminderScheduled).Scan(&reminders).Error
+	err := claimWithLock(ctx, db.gdb, claimLockReminders, func(tx *gorm.DB) error {
+		var ids []string
+		if err := tx.Raw(dueReminderIDs, ReminderScheduled, now.UTC(), ReminderDispatching, ReminderScheduled, limit).Scan(&ids).Error; err != nil {
+			return err
+		}
+		if len(ids) == 0 {
+			return nil
+		}
+		// 领取写入保持原 RETURNING 语句的列集合：走 GORM 的 Updates 会顺带刷新自动更新时间列。
+		if err := tx.Exec(`UPDATE reminders SET status = ?, task_status = 'running', attempts = attempts + 1, updated_at = ?
+WHERE id IN (?) AND status = ?`, ReminderDispatching, now.UTC(), ids, ReminderScheduled).Error; err != nil {
+			return err
+		}
+		// 只回读本事务真正改成投递中的行，避免把领取间隙里被改走状态的提醒也交给 worker。
+		return tx.Where("id IN ? AND status = ?", ids, ReminderDispatching).Find(&reminders).Error
+	})
 	return reminders, err
 }
 

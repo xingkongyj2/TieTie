@@ -20,28 +20,28 @@ var ErrCareRegion = errors.New("both members must set a region")
 var ErrCareStale = errors.New("care settings, binding or member regions changed")
 
 type CareMode struct {
-	SessionID        string     `json:"-" gorm:"primaryKey"`
-	Mode             string     `json:"mode" gorm:"primaryKey"`
+	SessionID        string     `json:"-" gorm:"primaryKey;size:160"`
+	Mode             string     `json:"mode" gorm:"primaryKey;size:32"`
 	Enabled          bool       `json:"enabled" gorm:"index:idx_care_due,priority:1"`
-	Time             string     `json:"time"`
-	NextDue          time.Time  `json:"nextDue"`
-	RunAt            time.Time  `json:"-" gorm:"index:idx_care_due,priority:2"`
-	State            string     `json:"state"`
-	LastError        string     `json:"lastError,omitempty"`
-	LastDeliveredAt  *time.Time `json:"lastDeliveredAt,omitempty"`
-	BindingCreatedAt time.Time  `json:"-"`
-	Token            string     `json:"-"`
+	Time             string     `json:"time" gorm:"size:32"`
+	NextDue          time.Time  `json:"nextDue" gorm:"type:datetime(6)"`
+	RunAt            time.Time  `json:"-" gorm:"index:idx_care_due,priority:2;type:datetime(6)"`
+	State            string     `json:"state" gorm:"size:32"`
+	LastError        string     `json:"lastError,omitempty" gorm:"size:255"`
+	LastDeliveredAt  *time.Time `json:"lastDeliveredAt,omitempty" gorm:"type:datetime(6)"`
+	BindingCreatedAt time.Time  `json:"-" gorm:"type:datetime(6)"`
+	Token            string     `json:"-" gorm:"size:64"`
 	Revision         int64      `json:"-"`
 }
 type CareReport struct {
-	ID               string         `json:"id" gorm:"primaryKey"`
-	SessionID        string         `json:"-" gorm:"index:idx_care_reports,priority:1"`
-	Mode             string         `json:"mode"`
-	Date             string         `json:"date"`
+	ID               string         `json:"id" gorm:"primaryKey;size:64"`
+	SessionID        string         `json:"-" gorm:"index:idx_care_reports,priority:1;size:160"`
+	Mode             string         `json:"mode" gorm:"size:32"`
+	Date             string         `json:"date" gorm:"size:32"`
 	Text             string         `json:"text"`
-	Cards            []weather.Card `json:"cards" gorm:"serializer:json"`
-	CreatedAt        time.Time      `json:"createdAt" gorm:"index:idx_care_reports,priority:2"`
-	BindingCreatedAt time.Time      `json:"-"`
+	Cards            []weather.Card `json:"cards" gorm:"serializer:json;type:mediumtext"`
+	CreatedAt        time.Time      `json:"createdAt" gorm:"index:idx_care_reports,priority:2;type:datetime(6)"`
+	BindingCreatedAt time.Time      `json:"-" gorm:"type:datetime(6)"`
 }
 type CareMember struct {
 	UserID        int64            `json:"userId"`
@@ -144,7 +144,7 @@ func (db *DB) SaveCareMode(ctx context.Context, session string, actor int64, kin
 		if err == nil && previous.BindingCreatedAt.Equal(b.CreatedAt) && previous.Enabled == enabled && previous.Time == clock {
 			return nil
 		}
-		mode := CareMode{SessionID: session, Mode: kind, Time: clock, Enabled: enabled, BindingCreatedAt: b.CreatedAt, Revision: previous.Revision + 1, State: "off"}
+		mode := CareMode{SessionID: session, Mode: kind, Time: clock, Enabled: enabled, BindingCreatedAt: b.CreatedAt, Revision: previous.Revision + 1, State: "off", NextDue: epochTime, RunAt: epochTime}
 		if enabled {
 			mode.State = "scheduled"
 			mode.NextDue = NextCareTime(now, clock)
@@ -214,7 +214,7 @@ func (db *DB) ClaimCareModes(ctx context.Context, now time.Time, limit int) ([]C
 		limit = 8
 	}
 	out := []CareMode{}
-	err := db.gdb.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := claimWithLock(ctx, db.gdb, claimLockCareModes, func(tx *gorm.DB) error {
 		var due []CareMode
 		if err := tx.Where("enabled=1 AND run_at<=? AND EXISTS (SELECT 1 FROM bindings b WHERE b.session_id=care_modes.session_id AND b.created_at=care_modes.binding_created_at)", now.UTC()).Order("run_at ASC").Limit(limit).Find(&due).Error; err != nil {
 			return err

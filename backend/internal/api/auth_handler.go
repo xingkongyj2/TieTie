@@ -10,7 +10,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"tietie/backend/internal/auth"
 	"tietie/backend/internal/dbop"
 	"tietie/backend/internal/qoder"
 )
@@ -72,25 +71,9 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	valid := user != nil && user.Password != "" && user.Password == body.Password
-	legacyLogin := false
-	if user != nil && user.Password == "" {
-		hash, err := s.DB.GetLegacyPasswordHash(r.Context(), user.ID)
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		legacyLogin = hash != "" && auth.VerifyPassword(hash, body.Password)
-		valid = legacyLogin
-	}
 	if !valid {
 		writeError(w, invalid)
 		return
-	}
-	if legacyLogin {
-		if err := s.DB.SetPassword(r.Context(), user.ID, body.Password); err != nil {
-			writeError(w, err)
-			return
-		}
 	}
 	s.respondAuthed(w, r, user, true)
 }

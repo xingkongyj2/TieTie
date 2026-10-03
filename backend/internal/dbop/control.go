@@ -12,21 +12,21 @@ import (
 )
 
 type ControlJob struct {
-	ID               string `gorm:"primaryKey;index:idx_controls_ready,priority:3"`
-	SessionID        string `gorm:"not null;index:idx_controls_session;index:idx_controls_space_status,priority:1"`
-	RequestID        string `gorm:"not null"`
-	Origin           string `gorm:"not null"`
-	SourceEventID    string
-	Actions          string
-	Results          string
-	NotificationOnly bool `gorm:"not null;default:false"`
+	ID               string `gorm:"primaryKey;index:idx_controls_ready,priority:3;size:64"`
+	SessionID        string `gorm:"not null;index:idx_controls_session;index:idx_controls_space_status,priority:1;size:160"`
+	RequestID        string `gorm:"not null;size:160"`
+	Origin           string `gorm:"not null;type:mediumtext"`
+	SourceEventID    string `gorm:"size:160"`
+	Actions          string `gorm:"type:mediumtext"`
+	Results          string `gorm:"type:mediumtext"`
+	NotificationOnly bool   `gorm:"not null;default:false"`
 	CreatedBy        int64
-	BindingCreatedAt time.Time
-	Status           string    `gorm:"index:idx_controls_ready,priority:1;index:idx_controls_space_status,priority:2"`
-	RunAt            time.Time `gorm:"index:idx_controls_ready,priority:2"`
-	ReceiptEventIDs  []string  `gorm:"serializer:json"`
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	BindingCreatedAt time.Time `gorm:"type:datetime(6)"`
+	Status           string    `gorm:"index:idx_controls_ready,priority:1;index:idx_controls_space_status,priority:2;size:32"`
+	RunAt            time.Time `gorm:"index:idx_controls_ready,priority:2;type:datetime(6)"`
+	ReceiptEventIDs  []string  `gorm:"serializer:json;type:mediumtext"`
+	CreatedAt        time.Time `gorm:"type:datetime(6)"`
+	UpdatedAt        time.Time `gorm:"type:datetime(6)"`
 }
 
 func (ControlJob) TableName() string { return "control_jobs" }
@@ -47,15 +47,33 @@ func (db *DB) GetControl(ctx context.Context, id, request string) (*ControlJob, 
 	err := db.gdb.WithContext(ctx).Where("id = ?", ControlID(id, request)).First(&j).Error
 	return firstOrNil(&j, err)
 }
+
+// dueControlIDs 挑出已建索引的到期控制任务；改写状态与它同在一把领取锁内，见 db.go 的 claimWithLock。
+const dueControlIDs = `SELECT c.id FROM control_jobs c FORCE INDEX (idx_controls_ready)
+ WHERE c.status='pending' AND c.run_at<=? AND (EXISTS (SELECT 1 FROM bindings b WHERE b.session_id=c.session_id AND b.created_at=c.binding_created_at) OR EXISTS(SELECT 1 FROM private_channels p JOIN bindings b ON b.session_id=p.space_id AND b.created_at=p.binding_created_at WHERE p.session_id=c.session_id AND b.created_at=c.binding_created_at))
+ ORDER BY c.run_at,c.id LIMIT ?`
+
 func (db *DB) ClaimControls(ctx context.Context, now time.Time, limit int) ([]ControlJob, error) {
 	if limit <= 0 || limit > 512 {
 		limit = 64
 	}
+	lease := now.Add(2 * time.Minute).UTC()
 	var jobs []ControlJob
-	err := db.gdb.WithContext(ctx).Raw(`UPDATE control_jobs SET status='executing', run_at=? WHERE id IN (
- SELECT c.id FROM control_jobs c INDEXED BY idx_controls_ready
- WHERE c.status='pending' AND c.run_at<=? AND (EXISTS (SELECT 1 FROM bindings b WHERE b.session_id=c.session_id AND b.created_at=c.binding_created_at) OR EXISTS(SELECT 1 FROM private_channels p JOIN bindings b ON b.session_id=p.space_id AND b.created_at=p.binding_created_at WHERE p.session_id=c.session_id AND b.created_at=c.binding_created_at))
- ORDER BY c.run_at,c.id LIMIT ?) RETURNING *`, now.Add(2*time.Minute).UTC(), now.UTC(), limit).Scan(&jobs).Error
+	err := claimWithLock(ctx, db.gdb, claimLockControls, func(tx *gorm.DB) error {
+		var ids []string
+		if err := tx.Raw(dueControlIDs, now.UTC(), limit).Scan(&ids).Error; err != nil {
+			return err
+		}
+		if len(ids) == 0 {
+			return nil
+		}
+		// 领取写入保持原 RETURNING 语句的列集合：走 GORM 的 Updates 会顺带刷新自动更新时间列。
+		if err := tx.Exec(`UPDATE control_jobs SET status='executing', run_at=? WHERE id IN (?) AND status='pending'`, lease, ids).Error; err != nil {
+			return err
+		}
+		// 只回读本事务真正改成 executing 的行，避免把领取间隙里被改走状态的任务也交给 worker。
+		return tx.Where("id IN ? AND status = 'executing'", ids).Find(&jobs).Error
+	})
 	return jobs, err
 }
 func (db *DB) SaveControlResults(ctx context.Context, j ControlJob, results []conversation.ActionResult) error {

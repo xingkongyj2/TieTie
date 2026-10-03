@@ -14,17 +14,17 @@ import (
 // updated in the same transaction as the reminder; it never claims the activity
 // itself is done just because a notification was delivered.
 type ReminderMemory struct {
-	ReminderID   string     `json:"reminderId" gorm:"primaryKey"`
-	SessionID    string     `json:"-" gorm:"not null;index:idx_reminder_memory_space,priority:1"`
+	ReminderID   string     `json:"reminderId" gorm:"primaryKey;size:64"`
+	SessionID    string     `json:"-" gorm:"not null;index:idx_reminder_memory_space,priority:1;size:160"`
 	Title        string     `json:"title"`
-	DueAt        time.Time  `json:"dueAt"`
-	RecipientIDs []int64    `json:"recipientIds" gorm:"serializer:json"`
+	DueAt        time.Time  `json:"dueAt" gorm:"type:datetime(6)"`
+	RecipientIDs []int64    `json:"recipientIds" gorm:"serializer:json;type:mediumtext"`
 	CreatedBy    int64      `json:"createdBy"`
 	Status       string     `json:"status"`
 	TaskStatus   string     `json:"taskStatus"`
-	DeliveredAt  *time.Time `json:"deliveredAt,omitempty"`
+	DeliveredAt  *time.Time `json:"deliveredAt,omitempty" gorm:"type:datetime(6)"`
 	CompletedBy  *int64     `json:"completedBy,omitempty"`
-	UpdatedAt    time.Time  `json:"updatedAt" gorm:"index:idx_reminder_memory_space,priority:2"`
+	UpdatedAt    time.Time  `json:"updatedAt" gorm:"index:idx_reminder_memory_space,priority:2;type:datetime(6)"`
 }
 
 func (ReminderMemory) TableName() string { return "reminder_memories" }

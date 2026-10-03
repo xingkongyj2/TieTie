@@ -38,14 +38,13 @@ func main() {
 	logDir, _ := filepath.Abs(cfg.LogDir)
 	logging.System().Info("后端启动，日志模块已就绪", "event", "server.starting", "pid", os.Getpid(), "system_log", filepath.Join(logDir, "system.log"), "scheduler_log", filepath.Join(logDir, "scheduler.log"), "log_level", level.String())
 
-	// SQLite 数据库：默认 tietie.db（backend/ 运行目录下），启动时自动建表。
-	db, err := dbop.Open(cfg.DBDSN)
+	// MySQL：MYSQL_HOST 等连接参数来自环境变量，启动时建库建表。
+	db, err := dbop.Open(cfg.DB)
 	if err != nil {
 		log.Fatalf("数据库打开失败: %v", err)
 	}
 	defer db.Close()
-	dbPath, _ := filepath.Abs(cfg.DBDSN)
-	logging.System().Info("数据库迁移完成，提醒队列和记忆表已就绪", "event", "database.ready", "database", dbPath)
+	logging.System().Info("数据库迁移完成，提醒队列和记忆表已就绪", "event", "database.ready", "address", cfg.DB.Addr(), "database", cfg.DB.Database)
 	options := scheduler.Options{PollInterval: cfg.SchedulerPollInterval, BatchSize: cfg.SchedulerBatchSize, Concurrency: cfg.SchedulerConcurrency}.Normalized()
 	logging.System().Info("Qoder 云端助手连接配置已加载，沿用云端角色和系统提示词", "event", "qoder.configured", "configured", cfg.Token != "", "timeout", cfg.Timeout, "conversation_protocol", cfg.ConversationProtocolVersion, "cloud_memory_enabled", cfg.CloudMemoryEnabled)
 	logging.System().Info("后台服务配置就绪", "event", "scheduler.configured", "poll_interval", options.PollInterval, "batch_size", options.BatchSize, "concurrency", options.Concurrency)

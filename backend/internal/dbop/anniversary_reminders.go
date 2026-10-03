@@ -19,13 +19,13 @@ import (
 // One shared preference and an indexed daily queue per binding. Delivery is a
 // local transaction, so a restart cannot duplicate a notice or lose its history.
 type AnniversaryReminderSettings struct {
-	SessionID        string    `json:"-" gorm:"primaryKey"`
+	SessionID        string    `json:"-" gorm:"primaryKey;size:160"`
 	Enabled          bool      `json:"enabled" gorm:"index:idx_anniversary_reminder_due,priority:1"`
-	NextDue          time.Time `json:"nextDue"`
-	RunAt            time.Time `json:"-" gorm:"index:idx_anniversary_reminder_due,priority:2"`
-	BindingCreatedAt time.Time `json:"-"`
+	NextDue          time.Time `json:"nextDue" gorm:"type:datetime(6)"`
+	RunAt            time.Time `json:"-" gorm:"index:idx_anniversary_reminder_due,priority:2;type:datetime(6)"`
+	BindingCreatedAt time.Time `json:"-" gorm:"type:datetime(6)"`
 	Revision         int64     `json:"-"`
-	Token            string    `json:"-"`
+	Token            string    `json:"-" gorm:"size:64"`
 }
 
 func anniversaryReminderTime(now time.Time) time.Time {
@@ -72,7 +72,7 @@ func (db *DB) SaveAnniversaryReminderSettings(ctx context.Context, session strin
 		if err == nil && previous.BindingCreatedAt.Equal(b.CreatedAt) && previous.Enabled == enabled {
 			return nil
 		}
-		row := AnniversaryReminderSettings{SessionID: session, Enabled: enabled, BindingCreatedAt: b.CreatedAt, Revision: previous.Revision + 1}
+		row := AnniversaryReminderSettings{SessionID: session, Enabled: enabled, NextDue: epochTime, RunAt: epochTime, BindingCreatedAt: b.CreatedAt, Revision: previous.Revision + 1}
 		if enabled {
 			row.NextDue = anniversaryReminderTime(now)
 			row.RunAt = row.NextDue
@@ -90,7 +90,7 @@ func (db *DB) ClaimAnniversaryReminders(ctx context.Context, now time.Time, limi
 		limit = 8
 	}
 	jobs := []AnniversaryReminderSettings{}
-	err := db.gdb.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := claimWithLock(ctx, db.gdb, claimLockAnniversaryReminders, func(tx *gorm.DB) error {
 		var rows []AnniversaryReminderSettings
 		if err := tx.Where("enabled=1 AND run_at<=? AND EXISTS (SELECT 1 FROM bindings b WHERE b.session_id=anniversary_reminder_settings.session_id AND b.created_at=anniversary_reminder_settings.binding_created_at)", now.UTC()).Order("run_at ASC").Limit(limit).Find(&rows).Error; err != nil {
 			return err

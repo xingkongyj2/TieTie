@@ -1,7 +1,7 @@
 # 构建: 在 backend/ 目录下 docker build -t tietie-backend .
 # 说明: 前端产物 dist/ 不在构建上下文内，镜像只含后端二进制；
 #       部署时通过卷或独立镜像提供静态文件，并设置 STATIC_DIR。
-FROM golang:1.23-alpine AS build
+FROM golang:1.25-alpine AS build
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -22,11 +21,24 @@ type Binding struct {
 	UserA     int64     `json:"userA"     gorm:"column:user_a;primaryKey"`
 	UserB     int64     `json:"userB"     gorm:"column:user_b;primaryKey"`
 	SessionID string    `json:"sessionId" gorm:"column:session_id;size:160;not null;index:idx_bindings_session"`
-	CreatedAt time.Time `json:"createdAt" gorm:"column:created_at;autoCreateTime"`
+	CreatedAt time.Time `json:"createdAt" gorm:"column:created_at;autoCreateTime;type:datetime(6)"`
 }
 
 // TableName 指定表名。
 func (Binding) TableName() string { return "bindings" }
+
+// ArchivedBinding 是解绑后的历史绑定（archived_bindings 表）。
+// 一对用户只保留一行，重复归档时按主键忽略。
+type ArchivedBinding struct {
+	UserA      int64     `gorm:"column:user_a;primaryKey"`
+	UserB      int64     `gorm:"column:user_b;primaryKey"`
+	SessionID  string    `gorm:"column:session_id;size:160;not null"`
+	CreatedAt  time.Time `gorm:"column:created_at;type:datetime(6)"`
+	ArchivedAt time.Time `gorm:"column:archived_at;autoCreateTime;type:datetime(6)"`
+}
+
+// TableName 指定表名。
+func (ArchivedBinding) TableName() string { return "archived_bindings" }
 
 // PairKey 把两个用户 ID 归一化成有序键（a < b），保证 (u1,u2) 与 (u2,u1) 是同一行。
 func PairKey(id1, id2 int64) (a, b int64) {
@@ -88,23 +100,47 @@ func (db *DB) CreateBinding(ctx context.Context, id1, id2 int64, sessionID strin
 		return false, errNoDB
 	}
 	a, b := PairKey(id1, id2)
-	res := db.gdb.WithContext(ctx).
-		Clauses(clause.OnConflict{DoNothing: true}).
-		Create(&Binding{UserA: a, UserB: b, SessionID: sessionID})
-	if res.Error != nil {
-		if strings.Contains(res.Error.Error(), "binding_user_already_bound") {
-			existing, err := db.GetBindingByPair(ctx, a, b)
-			if err != nil {
-				return false, err
-			}
-			if existing != nil {
-				return false, nil
-			}
-			return false, ErrAlreadyBound
+	created := false
+	err := db.gdb.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		existing, boundElsewhere, err := lockPairForBinding(tx, a, b)
+		if err != nil {
+			return err
 		}
-		return false, res.Error
+		if existing != nil {
+			return nil
+		}
+		if boundElsewhere {
+			return ErrAlreadyBound
+		}
+		if err := tx.Create(&Binding{UserA: a, UserB: b, SessionID: sessionID}).Error; err != nil {
+			return err
+		}
+		created = true
+		return nil
+	})
+	return created, err
+}
+
+// lockPairForBinding 先锁住两个用户行，再查这两个用户的现有绑定。
+// 行锁让并发绑定同一用户的请求在数据库里串行化，等到锁的一方一定能读到对方刚提交的 bindings 行，
+// 因此不再需要 SQLite 那种建表触发器来兜住"一人一绑定"。
+func lockPairForBinding(tx *gorm.DB, a, b int64) (*Binding, bool, error) {
+	var locked []int64
+	if err := tx.Raw("SELECT id FROM users WHERE id IN (?) FOR UPDATE", []int64{a, b}).Scan(&locked).Error; err != nil {
+		return nil, false, err
 	}
-	return res.RowsAffected > 0, nil
+	var existing []Binding
+	if err := tx.Where("user_a IN ? OR user_b IN ?", []int64{a, b}, []int64{a, b}).Find(&existing).Error; err != nil {
+		return nil, false, err
+	}
+	boundElsewhere := false
+	for i := range existing {
+		if existing[i].UserA == a && existing[i].UserB == b {
+			return &existing[i], false, nil
+		}
+		boundElsewhere = true
+	}
+	return nil, boundElsewhere, nil
 }
 
 // Unbind 解除用户当前生效的绑定：原记录归档进 archived_bindings 后从 bindings 删除。
@@ -125,8 +161,9 @@ func (db *DB) Unbind(ctx context.Context, userID int64) (*Binding, error) {
 		if err := tx.Model(&AnniversaryReminderSettings{}).Where("session_id=? AND binding_created_at=?", binding.SessionID, binding.CreatedAt).Updates(map[string]any{"enabled": false, "token": ""}).Error; err != nil {
 			return err
 		}
-		if err := tx.Exec(`INSERT OR IGNORE INTO archived_bindings (user_a, user_b, session_id, created_at) VALUES (?, ?, ?, ?)`,
-			binding.UserA, binding.UserB, binding.SessionID, binding.CreatedAt).Error; err != nil {
+		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&ArchivedBinding{
+			UserA: binding.UserA, UserB: binding.UserB, SessionID: binding.SessionID, CreatedAt: binding.CreatedAt,
+		}).Error; err != nil {
 			return err
 		}
 		return tx.Where("user_a = ? AND user_b = ?", binding.UserA, binding.UserB).Delete(&Binding{}).Error
@@ -146,13 +183,19 @@ func (db *DB) CreateInitializedBinding(ctx context.Context, id1, id2 int64, sess
 	a, b := PairKey(id1, id2)
 	created := false
 	err := db.gdb.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		binding := Binding{UserA: a, UserB: b, SessionID: session}
-		result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&binding)
-		if result.Error != nil {
-			return result.Error
+		existing, boundElsewhere, err := lockPairForBinding(tx, a, b)
+		if err != nil {
+			return err
 		}
-		if result.RowsAffected == 0 {
+		if existing != nil {
 			return nil
+		}
+		if boundElsewhere {
+			return ErrAlreadyBound
+		}
+		binding := Binding{UserA: a, UserB: b, SessionID: session}
+		if err := tx.Create(&binding).Error; err != nil {
+			return err
 		}
 		if err := tx.Create(&store).Error; err != nil {
 			return err
@@ -169,13 +212,5 @@ func (db *DB) CreateInitializedBinding(ctx context.Context, id1, id2 int64, sess
 		created = true
 		return nil
 	})
-	if err != nil && strings.Contains(err.Error(), "binding_user_already_bound") {
-		if existing, lookupErr := db.GetBindingByPair(ctx, a, b); lookupErr != nil {
-			return false, lookupErr
-		} else if existing != nil {
-			return false, nil
-		}
-		return false, ErrAlreadyBound
-	}
 	return created, err
 }

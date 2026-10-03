@@ -13,29 +13,29 @@ import (
 )
 
 type Countdown struct {
-	ID               string    `json:"id" gorm:"primaryKey"`
-	SessionID        string    `json:"-" gorm:"index:idx_countdowns,priority:1"`
+	ID               string    `json:"id" gorm:"primaryKey;size:64"`
+	SessionID        string    `json:"-" gorm:"index:idx_countdowns,priority:1;size:160"`
 	Title            string    `json:"title"`
 	Date             string    `json:"date"`
 	Repeat           string    `json:"repeat"`
 	Kind             string    `json:"kind"`
 	CreatedBy        int64     `json:"createdBy"`
 	UpdatedBy        int64     `json:"updatedBy"`
-	BindingCreatedAt time.Time `json:"-"`
-	CreatedAt        time.Time `json:"createdAt" gorm:"index:idx_countdowns,priority:2,sort:desc"`
-	UpdatedAt        time.Time `json:"updatedAt"`
+	BindingCreatedAt time.Time `json:"-" gorm:"type:datetime(6)"`
+	CreatedAt        time.Time `json:"createdAt" gorm:"index:idx_countdowns,priority:2,sort:desc;type:datetime(6)"`
+	UpdatedAt        time.Time `json:"updatedAt" gorm:"type:datetime(6)"`
 	DaysRemaining    int       `json:"daysRemaining" gorm:"-"`
 	NextDate         string    `json:"nextDate" gorm:"-"`
 	Expired          bool      `json:"expired" gorm:"-"`
 	LeapAdjusted     bool      `json:"leapAdjusted" gorm:"-"`
 }
 type CountdownReceipt struct {
-	ID          string `gorm:"primaryKey"`
-	SessionID   string `gorm:"index"`
-	CountdownID string `gorm:"index"`
+	ID          string `gorm:"primaryKey;size:64"`
+	SessionID   string `gorm:"index;size:160"`
+	CountdownID string `gorm:"index;size:64"`
 	Operation   string
-	Snapshot    string
-	CreatedAt   time.Time
+	Snapshot    string    `gorm:"type:mediumtext"`
+	CreatedAt   time.Time `gorm:"type:datetime(6)"`
 }
 
 var ErrCountdownInvalid = errors.New("请填写倒计时名称、有效日期和重复方式")

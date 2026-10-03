@@ -128,7 +128,7 @@ AI 在回答与建议前主动检索相关偏好和习惯；本人日常聊天�
 - `GET /api/qoder/sessions/{id}/memories?category=habit&after=<memoryKey>` 返回当前有效空间的元数据，每页最多 100 条及 `nextCursor`，正文不随列表下发。游标按 ID 排序，避免大 OFFSET。客户端未来可据此实现管理页面；本次未新增记忆管理 UI。
 - 本地索引覆盖 session/kind/update、session/category/id、session/id、expiresAt；事实页面位置覆盖 session/category/month/page；提醒位置覆盖 session/month/page/position、session/status/dueAt/id、session/createdAt/id。
 - 定时、控制、同步沿用有界批次和可恢复 outbox。云端记忆成功后才确认成功，失败回执说明云端待重试。
-- SQLite 当前适用于单实例，分页和索引避免无限上下文与大文件；这不是多副本或线上大规模吞吐量保证。
+- MySQL 当前适用于单实例，分页和索引避免无限上下文与大文件；这不是多副本或线上大规模吞吐量保证。
 
 ## 验证
 

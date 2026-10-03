@@ -9,11 +9,11 @@ import (
 // One durable accepted transport cursor per cloud session and binding epoch.
 // Shared and private channels have distinct session IDs and never share state.
 type ConversationProtocol struct {
-	SessionID        string `gorm:"primaryKey"`
-	BindingCreatedAt time.Time
+	SessionID        string    `gorm:"primaryKey;size:160"`
+	BindingCreatedAt time.Time `gorm:"type:datetime(6)"`
 	ContractHash     string
-	StateJSON        string
-	UpdatedAt        time.Time
+	StateJSON        string    `gorm:"type:mediumtext"`
+	UpdatedAt        time.Time `gorm:"type:datetime(6)"`
 }
 
 func (ConversationProtocol) TableName() string { return "conversation_protocols" }

@@ -15,10 +15,10 @@ import (
 const memoryPageBudget = 80 * 1024
 
 type MemoryPageLocation struct {
-	MemoryID      string `gorm:"primaryKey"`
-	SessionID     string `gorm:"index:idx_fact_page,priority:1"`
-	Category      string `gorm:"index:idx_fact_page,priority:2"`
-	Month         string `gorm:"index:idx_fact_page,priority:3"`
+	MemoryID      string `gorm:"primaryKey;size:64"`
+	SessionID     string `gorm:"index:idx_fact_page,priority:1;size:160"`
+	Category      string `gorm:"index:idx_fact_page,priority:2;size:64"`
+	Month         string `gorm:"index:idx_fact_page,priority:3;size:32"`
 	Page          int    `gorm:"index:idx_fact_page,priority:4"`
 	ReservedBytes int
 }
@@ -29,9 +29,9 @@ func (l MemoryPageLocation) Path() string {
 }
 
 type MemoryPage struct {
-	SessionID     string `gorm:"primaryKey"`
-	Category      string `gorm:"primaryKey"`
-	Month         string `gorm:"primaryKey"`
+	SessionID     string `gorm:"primaryKey;size:160"`
+	Category      string `gorm:"primaryKey;size:64"`
+	Month         string `gorm:"primaryKey;size:32"`
 	Page          int    `gorm:"primaryKey"`
 	RecordCount   int
 	ReservedBytes int
@@ -41,12 +41,12 @@ func (MemoryPage) TableName() string { return "memory_pages" }
 
 // Revisions preserve corrections and pending work, independently of cloud pages.
 type MemoryRevision struct {
-	MemoryID  string `gorm:"primaryKey"`
-	Revision  int64  `gorm:"primaryKey"`
-	SessionID string `gorm:"index:idx_fact_versions,priority:1"`
-	Content   string
-	Operation string
-	CreatedAt time.Time
+	MemoryID  string    `gorm:"primaryKey;size:64"`
+	Revision  int64     `gorm:"primaryKey"`
+	SessionID string    `gorm:"index:idx_fact_versions,priority:1;size:160"`
+	Content   string    `gorm:"type:mediumtext"`
+	Operation string    `gorm:"size:32"`
+	CreatedAt time.Time `gorm:"type:datetime(6)"`
 }
 
 func (MemoryRevision) TableName() string { return "memory_revisions" }
@@ -242,7 +242,9 @@ func (db *DB) HydrateMemoryFact(ctx context.Context, r MemoryRecord, body string
 			return err
 		}
 		r.Content, r.PendingContent = body, body
-		if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "memory_id"}, {Name: "revision"}}, DoUpdates: clause.Assignments(map[string]any{"content": gorm.Expr("CASE WHEN memory_revisions.content='' THEN excluded.content ELSE memory_revisions.content END")})}).Create(&MemoryRevision{MemoryID: r.ID, Revision: r.Revision, SessionID: r.SessionID, Content: body, Operation: r.Operation}).Error; err != nil {
+		// 版本行可能已由占位写入过；只有空内容才被回填，重复历史不覆盖已定稿的正文。
+		// MySQL 的 ON DUPLICATE KEY UPDATE 里裸列名指现有行，插入侧要取 VALUES(列名)。
+		if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "memory_id"}, {Name: "revision"}}, DoUpdates: clause.Assignments(map[string]any{"content": gorm.Expr("CASE WHEN memory_revisions.content IS NULL OR memory_revisions.content = '' THEN VALUES(content) ELSE memory_revisions.content END")})}).Create(&MemoryRevision{MemoryID: r.ID, Revision: r.Revision, SessionID: r.SessionID, Content: body, Operation: r.Operation}).Error; err != nil {
 			return err
 		}
 		return materializeFact(tx, r)

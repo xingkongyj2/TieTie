@@ -9,11 +9,11 @@ import (
 // Each binding epoch has independent cloud history and memory per private owner.
 // No private data is ever sent to the shared agent before an explicit due event.
 type PrivateChannel struct {
-	SessionID        string    `gorm:"primaryKey"`
-	SpaceID          string    `gorm:"not null;uniqueIndex:idx_private_owner,priority:1"`
+	SessionID        string    `gorm:"primaryKey;size:160"`
+	SpaceID          string    `gorm:"not null;uniqueIndex:idx_private_owner,priority:1;size:160"`
 	OwnerID          int64     `gorm:"not null;uniqueIndex:idx_private_owner,priority:2"`
-	BindingCreatedAt time.Time `gorm:"not null;uniqueIndex:idx_private_owner,priority:3"`
-	CreatedAt        time.Time
+	BindingCreatedAt time.Time `gorm:"not null;uniqueIndex:idx_private_owner,priority:3;type:datetime(6)"`
+	CreatedAt        time.Time `gorm:"type:datetime(6)"`
 }
 
 func (PrivateChannel) TableName() string { return "private_channels" }
