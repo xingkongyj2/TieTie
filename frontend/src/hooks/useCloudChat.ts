@@ -26,12 +26,16 @@ interface CloudState {
   thinking: boolean
   streaming: boolean
   turnError: string
+  replyFeedback: ReplyFeedback | null
 }
 
+type ReplyPhase = 'sending' | 'waiting' | 'thinking' | 'replying' | 'syncing' | 'delayed' | 'sent' | 'error' | 'complete'
+interface ReplyFeedback { phase: ReplyPhase; message?: string }
+
 interface PendingTurn {
-  status: string
   messageIds: Set<string>
   idleEventId: string | null
+  silent: boolean
 }
 
 const initialState: CloudState = {
@@ -39,7 +43,7 @@ const initialState: CloudState = {
   selectedId: null, session: null, messages: [], members: [], reminders: [], remindersError: '', cursor: null, lastIdleEventId: null,
   loaded: false, loading: true, refreshing: false, error: '', submitting: false, pending: false,
   thinking: false, streaming: false,
-  turnError: '',
+  turnError: '', replyFeedback: null,
 }
 
 function mergeMessages(existing: Message[], incoming: Message[]): Message[] {
@@ -96,13 +100,21 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
 
   const applyHistory = useCallback((id: string, history: CloudHistory, full = false) => {
     const pending = pendingTurns.current.get(id)
-    if (pending && (history.session.status.toLowerCase() !== pending.status
-      || (history.session.status.toLowerCase() === 'idle' && history.idleEventId !== null
-        && history.idleEventId !== pending.idleEventId)
-      || history.messages.some((message) => message.sender === 'ai' && !message.id.startsWith('evt_care_') && !pending.messageIds.has(message.id)))) {
-      pendingTurns.current.delete(id)
-    }
     const snapshot = current.current
+    let replyFeedback = snapshot.replyFeedback?.phase === 'complete' && history.session.status.toLowerCase() === 'idle'
+      ? null : snapshot.replyFeedback
+    if (pending) {
+      const replied = history.messages.some((message) => message.sender === 'ai' && message.source === 'chat'
+        && !pending.messageIds.has(message.id))
+      const turnEnded = history.session.status.toLowerCase() === 'idle' && history.idleEventId !== null
+        && history.idleEventId !== pending.idleEventId
+      if (replied || turnEnded) {
+        pendingTurns.current.delete(id)
+        replyFeedback = replied ? { phase: 'complete' }
+          : pending.silent ? { phase: 'sent', message: '消息已发给对方' }
+            : { phase: 'error', message: history.turnError || '这次没有收到 AI 回复，请稍后重试。' }
+      }
+    }
     update({
       session: history.session,
       replyMode: history.session.replyMode ?? '',
@@ -115,6 +127,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       lastIdleEventId: history.idleEventId ?? snapshot.lastIdleEventId,
       loaded: true, loading: false, refreshing: false, error: '',
       pending: pendingTurns.current.has(id),
+      replyFeedback,
       ...(history.session.status.toLowerCase() === 'idle' ? { thinking: false } : {}),
       ...(history.turnError !== null ? { turnError: history.turnError } : {}),
     })
@@ -138,7 +151,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     if (changed) {
       update({
         selectedId: id, session: null, messages: [], members: [], reminders: [], remindersError: '', cursor: null, lastIdleEventId: null,
-        loaded: false, loading: true, refreshing: false, error: '', thinking: false, turnError: '',
+        loaded: false, loading: true, refreshing: false, error: '', thinking: false, turnError: '', replyFeedback: null,
         pending: pendingTurns.current.has(id),
       })
     } else {
@@ -162,7 +175,10 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       if (error instanceof ApiError && error.code === 'session_forbidden') {
         void onSessionForbidden?.()
       }
-      if (isCurrent()) update({ error: errorMessage(error), loading: false, refreshing: false })
+      if (isCurrent()) update({
+        error: errorMessage(error), loading: false, refreshing: false,
+        ...(pendingTurns.current.has(id) ? { replyFeedback: { phase: 'delayed', message: '回复还在同步，正在自动重试…' } as ReplyFeedback } : {}),
+      })
     } finally {
       if (isCurrent()) {
         controller.current = null
@@ -207,25 +223,33 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     sendLock.current = true
     cancelRead()
     pendingTurns.current.set(id, {
-      status: snapshot.session.status.toLowerCase(),
       messageIds: new Set(snapshot.messages.map((message) => message.id)),
       idleEventId: snapshot.lastIdleEventId,
+      silent,
     })
-    update({ submitting: true, pending: true, replyMode: silent ? 'silent' : '', error: '', turnError: '', refreshing: false })
+    update({ submitting: true, pending: true, replyMode: silent ? 'silent' : '', error: '', turnError: '', refreshing: false,
+      replyFeedback: { phase: 'sending' } })
     let accepted = false
     try {
       const result = await qoderApi.sendMessage(id, draft, files, visibility)
       accepted = true
+      const pendingTurn = pendingTurns.current.get(id)
+      if (pendingTurn && result.replyMode === 'silent') pendingTurn.silent = true
       if (mounted.current && current.current.selectedId === id) {
         update({ replyMode: result.replyMode ?? '', messages: mergeMessages(current.current.messages, result.messages)
-          .filter((message) => isVisibleChatMessage(message, current.current.members)) })
+          .filter((message) => isVisibleChatMessage(message, current.current.members)),
+        ...(current.current.replyFeedback?.phase === 'sending'
+          ? { replyFeedback: silent || result.replyMode === 'silent'
+            ? { phase: 'sent', message: '消息已发给对方' } as ReplyFeedback
+            : { phase: 'waiting' } as ReplyFeedback }
+          : {}) })
       }
       // An accepted POST is success even if the following history read fails.
       return true
     } catch (error) {
       pendingTurns.current.delete(id)
       if (mounted.current && current.current.selectedId === id) {
-        update({ pending: false, error: errorMessage(error) })
+        update({ pending: false, error: errorMessage(error), replyFeedback: { phase: 'error', message: errorMessage(error) } })
       }
       throw error
     } finally {
@@ -259,21 +283,22 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     sendLock.current = true
     cancelRead()
     pendingTurns.current.set(id, {
-      status: (snapshot.session?.status ?? 'idle').toLowerCase(),
       messageIds: new Set(snapshot.messages.map((message) => message.id)),
       idleEventId: snapshot.lastIdleEventId,
+      silent: false,
     })
-    update({ submitting: true, pending: true, error: '' })
+    update({ submitting: true, pending: true, error: '', replyFeedback: { phase: 'sending' } })
     try {
       await qoderApi.sendToolResult(id, toolUseId, text)
       if (mounted.current && current.current.selectedId === id) {
         // 增量刷新取不到更早的 ask 事件，先本地标记已回答，免得卡片还能再点一次。
-        update({ messages: current.current.messages.map((message) => (message.id === toolUseId ? { ...message, answered: true } : message)) })
+        update({ messages: current.current.messages.map((message) => (message.id === toolUseId ? { ...message, answered: true } : message)),
+          ...(current.current.replyFeedback?.phase === 'sending' ? { replyFeedback: { phase: 'waiting' } as ReplyFeedback } : {}) })
       }
       return true
     } catch (error) {
       pendingTurns.current.delete(id)
-      if (mounted.current && current.current.selectedId === id) update({ pending: false, error: errorMessage(error) })
+      if (mounted.current && current.current.selectedId === id) update({ pending: false, error: errorMessage(error), replyFeedback: { phase: 'error', message: errorMessage(error) } })
       throw error
     } finally {
       sendLock.current = false
@@ -299,31 +324,46 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       const snapshot = current.current
       if (item.private && item.type === 'status') { void readRef.current({ full: true }); return }
       const nextCursor = item.private ? snapshot.cursor : item.id
+      const pendingTurn = pendingTurns.current.get(id)
       if (item.type === 'start') {
-        if (item.kind === 'thinking') update({ thinking: true })
-        else update({ thinking: false })
+        if (item.kind === 'thinking') update({ thinking: true, ...(pendingTurn && !pendingTurn.silent ? { replyFeedback: { phase: 'thinking' } as ReplyFeedback } : {}) })
+        else update({ thinking: false, ...(pendingTurn && !pendingTurn.silent ? { replyFeedback: { phase: 'replying' } as ReplyFeedback } : {}) })
       } else if (item.type === 'delta') {
         // The assistant streams a structured envelope. Only server-parsed final
         // messages are safe to display; keep the thinking indicator until then.
-        update({ thinking: true })
+        update({ thinking: true, ...(pendingTurn && !pendingTurn.silent ? { replyFeedback: { phase: 'replying' } as ReplyFeedback } : {}) })
       } else if (item.type === 'message') {
         if (item.message && item.message.sender !== 'ai') update({ replyMode: item.message.replyMode ?? '' })
-        if (item.message && isVisibleChatMessage(item.message, snapshot.members)) update({ messages: mergeMessages(snapshot.messages, [item.message]), cursor: nextCursor, thinking: false, ...(item.message.sender === 'ai' ? { turnError: '' } : {}) })
+        if (item.message && isVisibleChatMessage(item.message, snapshot.members)) {
+          const replied = !!pendingTurn && item.message.sender === 'ai' && item.message.source === 'chat'
+            && !pendingTurn.messageIds.has(item.message.id)
+          if (replied) pendingTurns.current.delete(id)
+          update({ messages: mergeMessages(current.current.messages, [item.message]), cursor: nextCursor, thinking: false,
+            pending: pendingTurns.current.has(id), ...(item.message.sender === 'ai' ? { turnError: '' } : {}),
+            ...(replied ? { replyFeedback: { phase: 'complete' } as ReplyFeedback } : {}) })
+        }
         else update({ cursor: nextCursor })
       } else if (item.type === 'thinking_end') {
-        update({ thinking: false, cursor: nextCursor })
+        update({ thinking: false, cursor: nextCursor,
+          ...(pendingTurn && !pendingTurn.silent ? { replyFeedback: { phase: 'syncing' } as ReplyFeedback } : {}) })
       } else if (item.type === 'status') {
         const status = item.status
-        if (status === 'idle' || status === 'terminated') pendingTurns.current.delete(id)
+        if (status === 'terminated') pendingTurns.current.delete(id)
         update({
           session: snapshot.session ? { ...snapshot.session, status } : null,
           cursor: nextCursor, pending: pendingTurns.current.has(id),
           thinking: status === 'idle' || status === 'terminated' ? false : snapshot.thinking,
           ...(status === 'idle' ? { lastIdleEventId: item.id } : {}),
+          ...(pendingTurn && !pendingTurn.silent && status === 'idle' ? { replyFeedback: { phase: 'syncing' } as ReplyFeedback } : {}),
+          ...(!pendingTurn && status === 'idle' && snapshot.replyFeedback?.phase === 'complete' ? { replyFeedback: null } : {}),
+          ...(pendingTurn && status === 'terminated' ? { replyFeedback: { phase: 'error', message: 'AI 会话已中断，请重试。' } as ReplyFeedback } : {}),
         })
         if (status === 'idle' || status === 'terminated') void readRef.current({ full: true })
       } else if (item.type === 'session_error') {
-        update({ turnError: snapshot.replyMode === 'silent' ? '' : item.message, cursor: nextCursor, thinking: false })
+        if (pendingTurn) pendingTurns.current.delete(id)
+        update({ turnError: snapshot.replyMode === 'silent' ? '' : item.message, cursor: nextCursor, thinking: false,
+          pending: pendingTurns.current.has(id),
+          ...(pendingTurn ? { replyFeedback: { phase: 'error', message: item.message || 'AI 回复失败，请重试。' } as ReplyFeedback } : {}) })
       }
     }
     const privateSource = hasPrivateChannel ? qoderApi.privateStream(id) : null
@@ -332,6 +372,8 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
   }, [state.selectedId, state.loaded, hasPrivateChannel, update])
 
   const busy = state.pending || isRemoteBusy(state.session)
+  const replyFeedback = state.replyFeedback?.phase === 'complete' ? null : state.replyFeedback
+    ?? (busy || state.thinking ? { phase: 'waiting' } as ReplyFeedback : null)
   // 云端在等待工具应答时状态仍是 idle，但此时发消息会被上游拒 409，所以按忙处理。
   const awaitingAsk = state.messages.some((message) => message.kind === 'ask' && !message.answered)
   const canSend = state.loaded && !!state.selectedId && !state.error && !state.submitting
@@ -341,7 +383,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     messages: state.messages, loading: state.loading, refreshing: state.refreshing,
     members: state.members, reminders: state.reminders, remindersError: state.remindersError,
     error: state.error, submitting: state.submitting, busy, awaitingAsk, canSend,
-    thinking: state.thinking, streaming: state.streaming,
+    thinking: state.thinking, streaming: state.streaming, replyFeedback,
     silent: state.replyMode === 'silent',
     turnError: state.turnError,
     reload, sendMessage, answerAsk, saveReminder, changeReminder,

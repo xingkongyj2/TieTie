@@ -225,7 +225,10 @@ h1, h2, h3, p { margin: 0; }
 .reminder-check:disabled { opacity: .45; cursor: default; }
 .mini-avatars { display: flex; flex-shrink: 0; }
 .mini-avatars .avatar + .avatar { margin-left: -5px; }
-.typing-indicator { display: flex; align-items: center; gap: 9px; color: #929aac; font-size: 10px; margin-top: 22px; }
+.assistant-feedback { display: flex; align-items: flex-start; gap: 9px; min-height: 40px; margin-top: 18px; color: #61728f; }
+.assistant-feedback-bubble { display: inline-flex; align-items: center; gap: 8px; min-width: min(205px, calc(100vw - 95px)); min-height: 36px; max-width: calc(100% - 48px); padding: 8px 12px; border-radius: 0 14px 14px 14px; background: #fff; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.assistant-feedback.is-error .assistant-feedback-bubble { color: #a35143; background: #fff1ed; }
+.assistant-feedback.is-terminal .typing-dots { visibility: hidden; }
 .typing-dots { display: inline-flex; gap: 3px; margin-left: 3px; }
 .typing-dots i { width: 3px; height: 3px; background: var(--blue); border-radius: 100%; animation: typing 1s infinite; }
 .typing-dots i:nth-child(2) { animation-delay: .15s; }

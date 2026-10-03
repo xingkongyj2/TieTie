@@ -94,6 +94,14 @@ export default function App() {
   if (!state) return <div className="app-shell loading-screen"><div className="brand-mark"><img src="/brand-notes.png" alt="" /></div><h1>贴贴清单</h1><p>{error || '正在打开贴贴清单…'}</p>{error && <button className="primary-button" onClick={() => void reload()}>再试一次</button>}</div>;
 
   const ai = state.members.find((m) => m.id === 'ai')!;
+  const feedback = chat.replyFeedback;
+  const feedbackText = feedback?.message || (feedback?.phase === 'sending' ? '消息正在发送…'
+    : feedback?.phase === 'thinking' ? `${ai.name}正在思考…`
+      : feedback?.phase === 'replying' ? `${ai.name}正在回复…`
+        : feedback?.phase === 'syncing' ? `${ai.name}正在整理回复…`
+          : feedback?.phase === 'sent' ? '消息已发给对方'
+            : feedback?.phase === 'error' ? '这次回复遇到问题，请重试。'
+              : `${ai.name}已收到，正在准备回复…`);
   const selfId = account.account.user.userId;
   const partnerId = account.account.binding?.partnerId;
   const sharedMembers = state.members.map((member) => {
@@ -144,8 +152,8 @@ export default function App() {
           <ChatMessage message={message} members={sharedMembers} onError={notify} onOpenImage={(src, alt) => setPreviewImage({ src, alt })} onAnswer={chat.answerAsk} />
         </Fragment>)}</div>
         {chat.loading && chat.messages.length > 0 && <div className="chat-syncing" role="status"><span className="spinner" />正在同步完整历史…</div>}
-        {!chat.silent && (chat.busy || chat.submitting || chat.thinking) && <div className="typing-indicator" role="status"><Avatar member={ai} /><span>{chat.submitting || chat.thinking ? `${ai.name}正在思考` : `${ai.name}正在回复`}</span><span className="typing-dots"><i /><i /><i /></span></div>}
-        {chat.turnError && <div className="turn-error" role="alert">{chat.turnError}</div>}
+        {feedback && <div className={`assistant-feedback${feedback.phase === 'error' ? ' is-error' : ''}${feedback.phase === 'sent' || feedback.phase === 'error' ? ' is-terminal' : ''}`} role={feedback.phase === 'error' ? 'alert' : 'status'} aria-live="polite"><Avatar member={ai} /><div className="assistant-feedback-bubble"><span>{feedbackText}</span><span className="typing-dots" aria-hidden="true"><i /><i /><i /></span></div></div>}
+        {chat.turnError && feedback?.phase !== 'error' && <div className="turn-error" role="alert">{chat.turnError}</div>}
         {chat.remindersError && <div className="turn-error" role="alert">{chat.remindersError}</div>}
       </main>
       <Composer members={sharedMembers} key={chat.selectedId ?? 'no-session'} sending={chat.submitting} disabled={!chat.canSend} placeholder={chat.awaitingAsk ? '先回答上面那道选择题…' : chat.busy ? (chat.silent ? '消息已发给对方，可以先写下一句…' : '伙伴正在回复，可以先写下一句…') : '记下一个共同提醒…'} onSend={sendMessage} onTool={setTool} onError={notify} />
