@@ -1,5 +1,5 @@
-import { ArrowUp, AtSign, Bell, CalendarDays, CloudSun, FileSpreadsheet, FileText, LockKeyhole, Mic, Paperclip, X } from 'lucide-react';
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { ArrowUp, AtSign, Bell, CalendarDays, CloudSun, EyeOff, FileSpreadsheet, FileText, Mic, Paperclip, X } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { MentionText } from './MentionText';
 import type { Member } from '../types';
 import { atomicMentionEdit, completePartnerMention, deleteMention, expandMentionSelection, mentionRanges } from '../lib/mentions';
@@ -27,7 +27,6 @@ type SpeechWindow = Window & { SpeechRecognition?: new () => SpeechRecognitionLi
 export function Composer({ members, sending, disabled = false, placeholder = '说点什么，让我们更近一点…', onSend, onTool, onError }: Props) {
   const [text, setText] = useState('');
   const [visibility, setVisibility] = useState<'shared' | 'private'>('shared');
-  const privacyHintId = useId();
   const partner = members.find((m) => m.id === 'partner' && m.userId && m.name !== '另一位成员');
   const names = partner ? [partner.name] : [];
   const toPartner = mentionRanges(text, names).length > 0;
@@ -138,9 +137,24 @@ export function Composer({ members, sending, disabled = false, placeholder = '�
     const draft = text.trim();
     if ((!draft && !files.length) || sending || disabled) return;
     speechRef.current?.abort();
+    const submittedFiles = files;
+    const submittedVisibility = toPartner ? 'shared' : visibility;
+    const pending = onSend(draft, submittedFiles, submittedVisibility);
     try {
-      if (await onSend(draft, files, toPartner ? 'shared' : visibility)) { setText(''); setFiles([]); setVisibility('shared'); }
-    } catch (error) { onError(error instanceof Error ? error.message : '消息还没发出去，草稿帮你留着啦。'); }
+      const success = await pending;
+      if (success) {
+        setText(''); setFiles([]); setVisibility('shared');
+      } else {
+        setText((current) => current || draft);
+        setFiles((current) => current.length ? current : submittedFiles);
+        setVisibility(submittedVisibility);
+      }
+    } catch (error) {
+      setText((current) => current || draft);
+      setFiles((current) => current.length ? current : submittedFiles);
+      setVisibility(submittedVisibility);
+      onError(error instanceof Error ? error.message : '消息还没发出去，草稿帮你留着啦。');
+    }
   };
   const queryWeather = async () => {
     if (queryingWeather || sending || disabled) return;
@@ -183,14 +197,13 @@ export function Composer({ members, sending, disabled = false, placeholder = '�
       }} onPaste={(event) => { const pasted = Array.from(event.clipboardData.files); if (pasted.length) { event.preventDefault(); addFiles(pasted); } }} />
       </div>
       <div className="composer-toolbar">
-      <button type="button" className="attachment-button" aria-label="添加附件或图片" title="添加附件或图片" disabled={sending} onClick={() => fileRef.current?.click()}><Paperclip size={19} strokeWidth={2} /></button>
       <div className="composer-private-control">
-        <button type="button" className={`composer-private-button ${!toPartner && visibility === 'private' ? 'is-selected' : ''}`} disabled={sending || toPartner} aria-pressed={!toPartner && visibility === 'private'} aria-describedby={privacyHintId} onClick={() => setVisibility((current) => current === 'private' ? 'shared' : 'private')}><LockKeyhole size={13} /><span>仅自己可见</span></button>
-        <span id={privacyHintId} role="tooltip" className="composer-private-tooltip">{toPartner ? '发给对方的消息双方可见。' : '消息仅自己和 AI 可见，提醒仍会提醒双方。'}</span>
+        <button type="button" className={`composer-private-button ${!toPartner && visibility === 'private' ? 'is-selected' : ''}`} disabled={sending || toPartner} aria-pressed={!toPartner && visibility === 'private'} onClick={() => setVisibility((current) => current === 'private' ? 'shared' : 'private')}><EyeOff size={13} /><span>消息TA不可见</span></button>
       </div>
       <div className="voice-control">
         <button type="button" className={`voice-button ${listening ? 'is-listening' : ''}`} aria-label={listening ? '停止语音输入' : '语音输入'} aria-pressed={listening} title={listening ? undefined : '语音转文字'} disabled={sending} onClick={toggleVoice}><Mic size={19} strokeWidth={2} aria-hidden="true" /></button>
       </div>
+      <button type="button" className="attachment-button" aria-label="添加附件或图片" title="添加附件或图片" disabled={sending} onClick={() => fileRef.current?.click()}><Paperclip size={19} strokeWidth={2} /></button>
       <button type="submit" className="send-button" aria-label="发送消息" disabled={(!text.trim() && !files.length) || sending || disabled}>{sending ? <span className="spinner" /> : <ArrowUp size={22} strokeWidth={2.2} />}</button>
       </div>
     </form>

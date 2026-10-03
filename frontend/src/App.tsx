@@ -5,6 +5,7 @@ import { BindPage } from './components/BindPage';
 import { BottomNav } from './components/BottomNav';
 import { ChatMessage } from './components/ChatMessage';
 import { Composer } from './components/Composer';
+import { TabLoading } from './components/TabLoading';
 import { mentionRanges } from './lib/mentions';
 import { canToggleReminder, reminderPhase } from './lib/reminders';
 import { Details } from './components/Details';
@@ -42,7 +43,7 @@ export default function App() {
   useViewportHeight();
   const account = useAccount();
   const { state, error, reload, saveMember, saveSettings } = useRelationship(account.account?.user.userId, account.account?.binding?.partnerId, account.account?.binding?.sessionId);
-  const chat = useCloudChat(account.account?.binding?.sessionId ?? null, account.reload);
+  const chat = useCloudChat(account.account?.binding?.sessionId ?? null, account.reload, account.account?.user.userId);
   const anniversaries = useAnniversaries(account.account?.binding?.sessionId);
   const reloadAnniversaries = useRef(anniversaries.reload); reloadAnniversaries.current = anniversaries.reload;
   const [view, setView] = useState<'we' | 'things' | 'mine' | 'details'>('we');
@@ -177,7 +178,7 @@ export default function App() {
       <header className="chat-header"><div className="chat-heading"><h1>我们</h1></div><button className="icon-button details-button" aria-label="查看角色信息" onClick={() => setView('details')}><Ellipsis size={18} /></button></header>
       {chat.error && !feedback && <div className="cloud-error" role="alert"><span>{chat.error}</span><button disabled={chat.loading || chat.refreshing || chat.submitting} onClick={() => void chat.reload()}>重试</button></div>}
       <main className={`chat-scroll ${!chat.messages.length && !feedback ? 'is-empty' : ''}`} ref={chatRef} aria-label="云端聊天记录" aria-busy={chat.loading && !chat.messages.length} onScroll={() => { const el = chatRef.current; if (el && !chat.loading) nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100; }}>
-        {chat.loading && !chat.messages.length && !feedback ? <div className="cloud-empty" role="status"><span className="spinner" /><p>正在找回我们聊过的话…</p></div> : !chat.messages.length && !chat.error && !feedback ? <div className="cloud-empty chat-welcome"><span className="welcome-eyebrow"><Sparkles size={13} />我们的共享空间</span><SpaceBuddy variant="blue" className="chat-welcome-buddy" /><h2>共同的提醒，日常的分享</h2>{!chat.session && <p>正在准备我们的共享空间…</p>}</div> : null}
+        {chat.loading && !chat.messages.length && !feedback ? <TabLoading inline /> : !chat.messages.length && !chat.error && !feedback ? <div className="cloud-empty chat-welcome"><span className="welcome-eyebrow"><Sparkles size={13} />我们的共享空间</span><SpaceBuddy variant="blue" className="chat-welcome-buddy" /><h2>共同的提醒，日常的分享</h2>{!chat.session && <p>正在准备我们的共享空间…</p>}</div> : null}
         <div className="messages" ref={messagesRef}>{chat.messages.map((message, index) => <Fragment key={message.id}>
           {(index === 0 || messageDay(chat.messages[index - 1].createdAt) !== messageDay(message.createdAt)) && <div className="chat-date"><span /><strong>{messageDayLabel(message.createdAt)}</strong><span /></div>}
           <ChatMessage message={message} members={sharedMembers} onError={notify} onOpenImage={(src, alt) => setPreviewImage({ src, alt })} onAnswer={chat.answerAsk} />

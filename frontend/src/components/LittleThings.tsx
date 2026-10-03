@@ -6,8 +6,8 @@ import type { AnniversaryState } from '../hooks/useAnniversaries'
 import { SpaceBuddy } from './SpaceBuddies'
 import { reminderPhase } from '../lib/reminders'
 import { Countdowns } from './Countdowns'
-import { CareModes } from './CareModes'
-import { AnniversaryReminders } from './AnniversaryReminders'
+import { CareWithAnniversary } from './CareModes'
+import { TabLoading } from './TabLoading'
 import './LittleThings.css'
 
 interface Props {
@@ -88,17 +88,14 @@ export function LittleThings({ sessionId, selfId, onEditRegion, onBind, state, a
         </div>
         <div className="things-section-heading"><h2><span className="reminder-title-lettering">待完成</span></h2></div>
         {reminderNotice && <div className="cloud-error" role="alert"><span>{reminderNotice}</span>{onReloadReminders && <button disabled={remindersLoading} onClick={() => void onReloadReminders()}>刷新</button>}</div>}
-        {remindersLoading && !reminderState.reminders.length ? <p className="empty-note" role="status">正在同步共享提醒…</p> : <ReminderBoard state={reminderState} pendingAssignee={activeFilter} onToggle={onToggle} onCancel={onCancel} notify={notify} />}
+        {remindersLoading && !reminderState.reminders.length ? <TabLoading inline /> : <ReminderBoard state={reminderState} pendingAssignee={activeFilter} onToggle={onToggle} onCancel={onCancel} notify={notify} />}
       </section>
       <section role="tabpanel" id="things-countdown-panel" aria-labelledby="things-countdown-tab" className="things-tab-panel" hidden={activeTab !== 'countdown'}>{activeTab === 'countdown' && <Countdowns sessionId={sessionId} />}</section>
       <section role="tabpanel" id="things-anniversary-panel" aria-labelledby="things-anniversary-tab" className="things-tab-panel" hidden={activeTab !== 'anniversary'}>
         <Anniversaries state={anniversaries} notify={notify} />
       </section>
       <section role="tabpanel" id="things-care-panel" aria-labelledby="things-care-tab" className="things-tab-panel" hidden={activeTab !== 'care'}>
-        <div className="form-card settings-card" aria-label="提醒偏好">
-          {activeTab === 'care' && <CareModes key={sessionId} sessionId={sessionId} selfId={selfId} onEditRegion={onEditRegion} onBind={onBind} notify={notify} />}
-          {activeTab === 'care' && <AnniversaryReminders key={`anniversary:${sessionId}`} sessionId={sessionId} onBind={onBind} notify={notify} />}
-        </div>
+        {activeTab === 'care' && <CareWithAnniversary sessionId={sessionId} selfId={selfId} onEditRegion={onEditRegion} onBind={onBind} notify={notify} />}
       </section>
     </div>
   </section>

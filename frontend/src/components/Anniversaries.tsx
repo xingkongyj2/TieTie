@@ -3,6 +3,7 @@ import { useState, type CSSProperties } from 'react'
 import type { Anniversary } from '../api/anniversaries'
 import type { AnniversaryState } from '../hooks/useAnniversaries'
 import { recordCardStyle, recordCardStyles } from '../lib/cardAppearance'
+import { TabLoading } from './TabLoading'
 import './Anniversaries.css'
 
 const kindLabels: Record<Anniversary['kind'], string> = { together: '在一起', birthday: '生日', wedding: '结婚', first_meet: '初次相遇', other: '纪念日' }
@@ -73,9 +74,10 @@ export function Anniversaries({ state, compact = false, notify }: { state: Anniv
   const styles = recordCardStyles(items, ['blue'])
   const originCard = <Hero key="origin" item={null} spaceCreatedAt={state.spaceCreatedAt} originPinned={!state.featured} onPin={() => void pinOrigin()} pinDisabled={busy !== null} pinning={busy === 'origin'} />
   const cards = items.map(item => <Hero key={item.id} item={item} style={styles.get(item.id)} spaceCreatedAt={state.spaceCreatedAt} onPin={() => void pin(item)} pinDisabled={busy !== null} pinning={busy === item.id} />)
+  if (!compact && state.loading && !state.spaceCreatedAt) return <TabLoading />
   return <div className={`anniversaries ${compact ? 'is-compact' : ''}`}>
     {state.error && <div className="anniversary-error" role="alert"><span>{state.error}</span><button type="button" disabled={state.loading} onClick={() => void state.reload()} aria-label="刷新纪念日"><RefreshCw size={15} /></button></div>}
-    {state.loading && !state.spaceCreatedAt ? <p className="anniversary-empty" role="status">正在找回纪念日…</p> : compact ? <Hero item={state.featured} style={state.featured ? styles.get(state.featured.id) : undefined} spaceCreatedAt={state.spaceCreatedAt} /> : <div className="anniversary-list">
+    {compact ? <Hero item={state.featured} style={state.featured ? styles.get(state.featured.id) : undefined} spaceCreatedAt={state.spaceCreatedAt} /> : <div className="anniversary-list">
       {state.featured ? [...cards, originCard] : [originCard, ...cards]}
     </div>}
     {!compact && state.nextCursor && <button className="anniversary-more" disabled={state.loading} onClick={() => void state.loadMore()}>{state.loading ? '正在加载…' : '查看更多纪念日'}</button>}

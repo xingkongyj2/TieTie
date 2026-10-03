@@ -3,11 +3,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError } from '../api/client'
 import { careApi, type CareState, type CareMode } from '../api/care'
 import { TimePicker } from './TimePicker'
+import { AnniversaryReminders } from './AnniversaryReminders'
+import { TabLoading } from './TabLoading'
 import './CareModes.css'
 
-export function CareModes({ sessionId, selfId, onEditRegion, onBind, notify }: {
+export function CareWithAnniversary({ sessionId, selfId, onEditRegion, onBind, notify }: {
   sessionId?: string; selfId?: number; onEditRegion: () => void; onBind: () => void; notify: (text: string) => void
 }) {
+  const [loading, setLoading] = useState(true)
   const [state, setState] = useState<CareState | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
@@ -22,9 +25,11 @@ export function CareModes({ sessionId, selfId, onEditRegion, onBind, notify }: {
       const result = await careApi.get(sessionId)
       if (mounted.current && seq === sequence.current) { setState(result); setError('') }
     } catch (e) { if (mounted.current && seq === sequence.current) setError(e instanceof Error ? e.message : '天气关怀暂时没加载出来。') }
+    finally { if (mounted.current && seq === sequence.current) setLoading(false) }
   }, [sessionId])
   useEffect(() => {
     mounted.current = true
+    setLoading(true)
     void reload()
     const timer = setInterval(() => { void reload() }, 30_000)
     const focus = () => { void reload() }
@@ -55,23 +60,27 @@ export function CareModes({ sessionId, selfId, onEditRegion, onBind, notify }: {
     finally { mutating.current = false; if (mounted.current) setBusy(null); void reload() }
   }
   if (!sessionId) return <div className="care-region-guide"><MapPin size={18} /><p>绑定两人空间后，就能一起收到早安和晚安提醒。</p><button type="button" onClick={onBind}>去绑定<ArrowUpRight size={14} /></button></div>
+  if (loading) return <TabLoading />
   const modes: CareMode[] = state?.modes ?? [
     { mode: 'morning', enabled: false, time: '08:00', nextDue: '', state: 'off' },
     { mode: 'night', enabled: false, time: '21:00', nextDue: '', state: 'off' },
   ]
-  return <div className="care-modes">
-    {error && <p className="care-status" role="alert">{error}<button type="button" className="care-retry" onClick={() => void reload()}>重试</button></p>}
-    {modes.map((mode) => {
-      const night = mode.mode === 'night'
-      const time = mode.time
-      const title = night ? '晚安提醒' : '早安提醒'
-      return <section className="setting-row care-mode-row" key={mode.mode} aria-label={`${title}设置`}>
-        <span className="setting-icon">{night ? <Moon size={18} /> : <Sun size={18} />}</span>
-        <div className="setting-copy"><div className="care-mode-title"><strong>{title}</strong><button type="button" className="care-time" aria-label={`${title}时间 ${state ? time : '尚未读取'}`} aria-haspopup="dialog" disabled={!state || busy !== null} onClick={() => setEditingTime(mode)}><Clock3 size={10} aria-hidden="true" /><span>{state ? time : '--:--'}</span></button></div><p>{night ? '看明天天气，把穿搭和出门准备好' : '今天的天气，还有要记得的小事'}</p>{mode.lastError && <p className="care-status" role="alert">{mode.lastError}</p>}</div>
-        <button type="button" role="switch" className={`toggle ${mode.enabled ? 'is-on' : ''}`} aria-label={title} aria-checked={mode.enabled} disabled={!state || busy !== null} onClick={() => void save(mode, !mode.enabled)}><span /></button>
-      </section>
-    })}
-    {editingTime && <TimePicker title={`${editingTime.mode === 'night' ? '晚安' : '早安'}提醒时间`} value={editingTime.time}
-      onClose={() => setEditingTime(null)} onConfirm={(time) => time === editingTime.time ? Promise.resolve(true) : save(editingTime, editingTime.enabled, time, true)} />}
+  return <div className="form-card settings-card" aria-label="提醒偏好">
+    <div className="care-modes">
+      {error && <p className="care-status" role="alert">{error}<button type="button" className="care-retry" onClick={() => void reload()}>重试</button></p>}
+      {modes.map((mode) => {
+        const night = mode.mode === 'night'
+        const time = mode.time
+        const title = night ? '晚安提醒' : '早安提醒'
+        return <section className="setting-row care-mode-row" key={mode.mode} aria-label={`${title}设置`}>
+          <span className="setting-icon">{night ? <Moon size={18} /> : <Sun size={18} />}</span>
+          <div className="setting-copy"><div className="care-mode-title"><strong>{title}</strong><button type="button" className="care-time" aria-label={`${title}时间 ${state ? time : '尚未读取'}`} aria-haspopup="dialog" disabled={!state || busy !== null} onClick={() => setEditingTime(mode)}><Clock3 size={10} aria-hidden="true" /><span>{state ? time : '--:--'}</span></button></div><p>{night ? '看明天天气，把穿搭和出门准备好' : '今天的天气，还有要记得的小事'}</p>{mode.lastError && <p className="care-status" role="alert">{mode.lastError}</p>}</div>
+          <button type="button" role="switch" className={`toggle ${mode.enabled ? 'is-on' : ''}`} aria-label={title} aria-checked={mode.enabled} disabled={!state || busy !== null} onClick={() => void save(mode, !mode.enabled)}><span /></button>
+        </section>
+      })}
+      {editingTime && <TimePicker title={`${editingTime.mode === 'night' ? '晚安' : '早安'}提醒时间`} value={editingTime.time}
+        onClose={() => setEditingTime(null)} onConfirm={(time) => time === editingTime.time ? Promise.resolve(true) : save(editingTime, editingTime.enabled, time, true)} />}
+    </div>
+    <AnniversaryReminders key={`anniversary:${sessionId}`} sessionId={sessionId} onBind={onBind} notify={notify} />
   </div>
 }
