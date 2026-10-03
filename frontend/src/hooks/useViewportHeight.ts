@@ -1,21 +1,40 @@
 import { useEffect } from 'react';
 
-/**
- * iOS 的软键盘不会始终改变 CSS 布局视口。按可视视口收缩聊天容器，
- * 让输入栏留在键盘上方；此 H5 专用适配可在迁移 Taro 时移除。
- */
+/** Keep the app aligned with the visible viewport while mobile keyboards animate. */
 export function useViewportHeight() {
   useEffect(() => {
     const viewport = window.visualViewport;
     if (!viewport) return;
+    const root = document.documentElement;
+    let frame = 0;
+    let fullHeight = Math.max(window.innerHeight, viewport.height);
     const update = () => {
-      document.documentElement.style.setProperty('--app-height', `${viewport.height}px`);
+      frame = 0;
+      const height = Math.round(viewport.height);
+      const focused = document.activeElement;
+      const editable = focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement;
+      if (!editable || height > fullHeight - 80) fullHeight = Math.max(fullHeight, height);
+      root.style.setProperty('--app-height', `${height}px`);
+      root.style.setProperty('--app-top', `${Math.round(viewport.offsetTop)}px`);
+      root.classList.toggle('keyboard-open', editable && fullHeight - height > 120);
     };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
     update();
-    viewport.addEventListener('resize', update);
+    viewport.addEventListener('resize', schedule);
+    viewport.addEventListener('scroll', schedule);
+    window.addEventListener('resize', schedule);
+    document.addEventListener('focusin', schedule);
+    document.addEventListener('focusout', schedule);
     return () => {
-      viewport.removeEventListener('resize', update);
-      document.documentElement.style.removeProperty('--app-height');
+      if (frame) cancelAnimationFrame(frame);
+      viewport.removeEventListener('resize', schedule);
+      viewport.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+      document.removeEventListener('focusin', schedule);
+      document.removeEventListener('focusout', schedule);
+      root.style.removeProperty('--app-height');
+      root.style.removeProperty('--app-top');
+      root.classList.remove('keyboard-open');
     };
   }, []);
 }
