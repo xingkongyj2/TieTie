@@ -1,5 +1,5 @@
 import { Ellipsis, Sparkles } from 'lucide-react';
-import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Avatar } from './components/Avatar';
 import { BindPage } from './components/BindPage';
 import { BottomNav } from './components/BottomNav';
@@ -51,7 +51,8 @@ export default function App() {
   const [toast, setToast] = useState('');
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const chatRef = useRef<HTMLDivElement>(null);
-  const lastChat = useRef({ id: '', count: 0 });
+  const messagesRef = useRef<HTMLDivElement>(null);
+  const lastChat = useRef({ id: '', view: '' });
   const nearBottom = useRef(true);
   const seenReminders = useRef<{ sessionId: string; ids: Set<string> }>({ sessionId: '', ids: new Set() });
   const notify = useCallback((message: string) => {
@@ -64,14 +65,40 @@ export default function App() {
   useEffect(() => {
     if (account.account?.binding && !chat.loading && !chat.busy) void reloadAnniversaries.current();
   }, [account.account?.binding?.sessionId, chat.messages.at(-1)?.id, chat.loading, chat.busy, view, tool]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const changedSession = lastChat.current.id !== chat.selectedId;
-    if (changedSession) nearBottom.current = true;
-    if ((chat.messages.length || chat.replyFeedback) && (nearBottom.current || chat.submitting)) {
-      chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: changedSession || !lastChat.current.count ? 'instant' : 'smooth' });
+    const openedChat = view === 'we' && lastChat.current.view !== 'we';
+    if (changedSession || openedChat) nearBottom.current = true;
+    if (view === 'we' && (chat.messages.length || chat.replyFeedback) && (nearBottom.current || chat.submitting)) {
+      const scroller = chatRef.current;
+      if (scroller) scroller.scrollTop = scroller.scrollHeight;
     }
-    lastChat.current = { id: chat.selectedId ?? '', count: chat.messages.length };
-  }, [chat.selectedId, chat.messages.length, chat.messages.at(-1)?.text.length, chat.replyFeedback?.phase, chat.replyFeedback?.message, chat.submitting, view, !!state]);
+    lastChat.current = { id: chat.selectedId ?? '', view };
+  }, [chat.selectedId, chat.messages, chat.replyFeedback?.phase, chat.replyFeedback?.message, chat.submitting, view, !!state]);
+  useLayoutEffect(() => {
+    const scroller = chatRef.current;
+    const messages = messagesRef.current;
+    if (view !== 'we' || !scroller || !messages || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      if (nearBottom.current) scroller.scrollTop = scroller.scrollHeight;
+    });
+    observer.observe(messages);
+    return () => observer.disconnect();
+  }, [chat.selectedId, view, !!state]);
+  useEffect(() => {
+    const showLatest = () => {
+      if (view !== 'we' || document.visibilityState !== 'visible') return;
+      nearBottom.current = true;
+      const scroller = chatRef.current;
+      if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    };
+    window.addEventListener('focus', showLatest);
+    document.addEventListener('visibilitychange', showLatest);
+    return () => {
+      window.removeEventListener('focus', showLatest);
+      document.removeEventListener('visibilitychange', showLatest);
+    };
+  }, [view]);
   useEffect(() => {
     if (!chat.selectedId || chat.loading) return;
     const seen = seenReminders.current;
@@ -145,13 +172,12 @@ export default function App() {
       {account.account.binding ? <>
       <header className="chat-header"><div className="chat-heading"><h1>我们</h1></div><button className="icon-button details-button" aria-label="查看角色信息" onClick={() => setView('details')}><Ellipsis size={18} /></button></header>
       {chat.error && !feedback && <div className="cloud-error" role="alert"><span>{chat.error}</span><button disabled={chat.loading || chat.refreshing || chat.submitting} onClick={() => void chat.reload()}>重试</button></div>}
-      <main className={`chat-scroll ${!chat.messages.length && !feedback ? 'is-empty' : ''}`} ref={chatRef} aria-label="云端聊天记录" aria-busy={chat.loading} onScroll={() => { const el = chatRef.current; if (el) nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100; }}>
+      <main className={`chat-scroll ${!chat.messages.length && !feedback ? 'is-empty' : ''}`} ref={chatRef} aria-label="云端聊天记录" aria-busy={chat.loading && !chat.messages.length} onScroll={() => { const el = chatRef.current; if (el && !chat.loading) nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100; }}>
         {chat.loading && !chat.messages.length && !feedback ? <div className="cloud-empty" role="status"><span className="spinner" /><p>正在找回我们聊过的话…</p></div> : !chat.messages.length && !chat.error && !feedback ? <div className="cloud-empty chat-welcome"><span className="welcome-eyebrow"><Sparkles size={13} />我们的共享空间</span><SpaceBuddy variant="blue" className="chat-welcome-buddy" /><h2>共同的提醒，日常的分享</h2>{!chat.session && <p>正在准备我们的共享空间…</p>}</div> : null}
-        <div className="messages">{chat.messages.map((message, index) => <Fragment key={message.id}>
+        <div className="messages" ref={messagesRef}>{chat.messages.map((message, index) => <Fragment key={message.id}>
           {(index === 0 || messageDay(chat.messages[index - 1].createdAt) !== messageDay(message.createdAt)) && <div className="chat-date"><span /><strong>{messageDayLabel(message.createdAt)}</strong><span /></div>}
           <ChatMessage message={message} members={sharedMembers} onError={notify} onOpenImage={(src, alt) => setPreviewImage({ src, alt })} onAnswer={chat.answerAsk} />
         </Fragment>)}</div>
-        {chat.loading && chat.messages.length > 0 && !feedback && <div className="chat-syncing" role="status"><span className="spinner" />正在同步完整历史…</div>}
         {feedback && <div className={`assistant-feedback${feedback.phase === 'error' ? ' is-error' : ''}${feedback.phase === 'sent' || feedback.phase === 'error' ? ' is-terminal' : ''}`} role={feedback.phase === 'error' ? 'alert' : 'status'} aria-live="polite"><Avatar member={ai} /><div className="assistant-feedback-bubble"><span>{feedbackText}</span><span className="typing-dots" aria-hidden="true"><i /><i /><i /></span>{chat.error && <button className="assistant-feedback-retry" disabled={chat.loading || chat.refreshing || chat.submitting} onClick={() => void chat.reload()}>重新同步</button>}</div></div>}
         {chat.turnError && !feedback && <div className="turn-error" role="alert">{chat.turnError}</div>}
         {chat.remindersError && <div className="turn-error" role="alert">{chat.remindersError}</div>}
