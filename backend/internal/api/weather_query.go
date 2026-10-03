@@ -49,7 +49,18 @@ func (s *Server) executeWeatherQuery(ctx context.Context, job dbop.ControlJob, i
 	if action.Region != nil {
 		resolved, err := regions.ResolveNames(action.Region.Province, action.Region.City, action.Region.District)
 		if err != nil {
-			return fail("这个地区没有匹配到，请说明省份和城市。")
+			candidates := regions.MatchNames("", action.Region.City, action.Region.District)
+			if len(candidates) == 1 {
+				return fail("查到" + candidates[0].Province + candidates[0].City + "，你指的是这里吗？")
+			}
+			if len(candidates) > 1 {
+				names := make([]string, 0, min(3, len(candidates)))
+				for _, candidate := range candidates[:min(3, len(candidates))] {
+					names = append(names, candidate.Province+candidate.City)
+				}
+				return fail("找到了多个同名地区，可能是" + strings.Join(names, "、") + "。请问你指哪一个？")
+			}
+			return fail("这个地区没有匹配到，请补充省份和城市。")
 		}
 		location = &resolved
 	}

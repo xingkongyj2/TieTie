@@ -107,7 +107,10 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
   const schedule = useCallback(() => {
     if (!mounted.current || sendLock.current || !current.current.selectedId) return
     if (timer.current !== null) clearTimeout(timer.current)
-    const delay = current.current.pending || isRemoteBusy(current.current.session) ? 3_000 : 15_000
+    // The live stream delivers new events; polling the entire cloud history
+    // every three seconds contends with the reminder/control worker's lock.
+    const active = current.current.pending || isRemoteBusy(current.current.session)
+    const delay = active ? current.current.streaming ? 12_000 : 5_000 : 15_000
     timer.current = setTimeout(() => { void readRef.current() }, delay)
   }, [])
 
@@ -121,11 +124,18 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
         && !pending.messageIds.has(message.id))
       const turnEnded = history.session.status.toLowerCase() === 'idle' && history.idleEventId !== null
         && history.idleEventId !== pending.idleEventId
-      if (replied || turnEnded) {
+      const failed = history.session.status.toLowerCase() === 'terminated'
+        || turnEnded && Date.now() - pending.startedAt > 120_000
+      const silentDone = pending.silent && turnEnded
+      if (replied || failed || silentDone) {
         pendingTurns.current.delete(id)
         replyFeedback = replied ? { phase: 'complete' }
-          : pending.silent ? { phase: 'sent', message: '消息已发给对方' }
+          : silentDone ? { phase: 'sent', message: '消息已发给对方' }
             : { phase: 'error', message: history.turnError || '这次没有收到 AI 回复，请稍后重试。' }
+      } else if (turnEnded && !pending.silent) {
+        // A tool/control turn becomes idle before its hidden action result and
+        // final user-facing reply. Keep the same visible feedback until then.
+        replyFeedback = { phase: 'syncing', message: '正在处理并准备回复…' }
       } else if (!pending.silent && Date.now() - pending.startedAt > 30_000) {
         replyFeedback = { phase: 'delayed', message: '回复时间较长，仍在等待并自动检查…' }
       }
@@ -278,7 +288,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       // An accepted POST is success even if the following history read fails.
       return true
     } catch (error) {
-      const uncertain = error instanceof ApiError && !!error.code && ['TIMEOUT', 'NETWORK_ERROR', 'upstream_timeout', 'connection_failed'].includes(error.code)
+      const uncertain = error instanceof ApiError && (error.status >= 500 || !!error.code && ['TIMEOUT', 'NETWORK_ERROR', 'upstream_timeout', 'connection_failed'].includes(error.code))
       if (uncertain) shouldRead = true
       if (!uncertain) pendingTurns.current.delete(id)
       if (mounted.current && current.current.selectedId === id) {

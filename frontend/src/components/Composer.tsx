@@ -140,11 +140,10 @@ export function Composer({ members, sending, disabled = false, placeholder = 'è¯
     const submittedFiles = files;
     const submittedVisibility = toPartner ? 'shared' : visibility;
     const pending = onSend(draft, submittedFiles, submittedVisibility);
+    setText(''); setFiles([]); setVisibility('shared');
     try {
       const success = await pending;
-      if (success) {
-        setText(''); setFiles([]); setVisibility('shared');
-      } else {
+      if (!success) {
         setText((current) => current || draft);
         setFiles((current) => current.length ? current : submittedFiles);
         setVisibility(submittedVisibility);

@@ -53,11 +53,11 @@ func init() {
 
 func Catalog() any { return catalog }
 
-// ResolveNames accepts colloquial names but never picks one of several matches.
-func ResolveNames(province, city, district string) (Location, error) {
+// MatchNames searches the local catalog without guessing between namesakes.
+func MatchNames(province, city, district string) []Location {
 	province, city, district = strings.TrimSpace(province), strings.TrimSpace(city), strings.TrimSpace(district)
 	if city == "" {
-		return Location{}, errors.New("请补充城市名称")
+		return nil
 	}
 	alias := func(a, b string) bool {
 		if a == b {
@@ -92,6 +92,15 @@ func ResolveNames(province, city, district string) (Location, error) {
 			}
 		}
 	}
+	return matches
+}
+
+// ResolveNames accepts colloquial names but never picks one of several matches.
+func ResolveNames(province, city, district string) (Location, error) {
+	if strings.TrimSpace(city) == "" {
+		return Location{}, errors.New("请补充城市名称")
+	}
+	matches := MatchNames(province, city, district)
 	if len(matches) != 1 {
 		return Location{}, errors.New("地区名称不明确或省市区不匹配，请补充准确的城市和区县")
 	}
