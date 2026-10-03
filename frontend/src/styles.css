@@ -239,28 +239,32 @@ h1, h2, h3, p { margin: 0; }
 .composer-area { position: relative; flex-shrink: 0; padding: 6px 20px max(8px, env(safe-area-inset-bottom)); background: transparent; z-index: 2; }
 .composer-stage { max-height: 52px; opacity: 1; overflow: hidden; transition: max-height .24s cubic-bezier(.2,.7,.2,1), opacity .18s ease; }
 .composer-stage.is-expanded { max-height: 300px; }
-.composer-compact { display: flex; align-items: center; gap: 8px; height: 52px; opacity: 1; transition: height .22s ease, opacity .14s ease; }
+.composer-compact { display: flex; align-items: center; gap: 4px; height: 52px; padding: 6px 9px 6px 14px; border-radius: 18px; background: #f4f5f7; opacity: 1; transition: height .22s ease, opacity .14s ease; }
 .composer-stage.is-expanded .composer-compact { height: 0; opacity: 0; overflow: hidden; pointer-events: none; visibility: hidden; }
-.composer-compact-text { min-width: 0; flex: 1; height: 48px; padding: 0 16px; border-radius: 17px; background: #f4f5f7; color: #8b95a6; text-align: left; font-size: 14px; }
+.composer-compact-text { min-width: 0; flex: 1; height: 40px; padding: 0 2px; background: transparent; color: #8b95a6; text-align: left; font-size: 13px; touch-action: none; user-select: none; -webkit-user-select: none; }
 .composer-compact-text span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.composer-compact-voice { display: flex; align-items: center; justify-content: center; gap: 6px; flex: none; height: 48px; min-width: 108px; padding: 0 12px; border-radius: 17px; background: #edf3ff; color: var(--blue); font-size: 12px; font-weight: 600; touch-action: none; user-select: none; -webkit-user-select: none; }
+.composer-compact .attachment-button, .composer-compact .voice-button { width: 32px; height: 36px; }
+.composer-compact .send-button { width: 36px; height: 36px; }
 .composer-expanded-shell { max-height: 0; opacity: 0; visibility: hidden; overflow: hidden; transform: translateY(8px); transition: max-height .24s cubic-bezier(.2,.7,.2,1), opacity .2s ease, transform .24s ease, visibility 0s linear .24s; }
 .composer-stage.is-expanded .composer-expanded-shell { max-height: 300px; opacity: 1; visibility: visible; transform: translateY(0); transition: max-height .24s cubic-bezier(.2,.7,.2,1), opacity .2s ease, transform .24s ease, visibility 0s; }
-.composer-voice-panel { display: flex; align-items: center; justify-content: center; gap: 15px; max-height: 0; opacity: 0; visibility: hidden; overflow: hidden; border-radius: 17px; background: #edf3ff; color: #2e63cf; transition: max-height .22s ease, opacity .18s ease, visibility 0s linear .22s; }
+.composer-voice-panel { display: flex; flex-direction: column; gap: 4px; max-height: 0; opacity: 0; visibility: hidden; overflow: hidden; color: #2e63cf; transition: max-height .22s ease, opacity .18s ease, visibility 0s linear .22s; }
 .composer-area.is-voice-active .quick-actions, .composer-area.is-voice-active .composer-stage { max-height: 0; margin-top: 0; margin-bottom: 0; opacity: 0; overflow: hidden; pointer-events: none; transition: max-height .18s ease, opacity .12s ease, margin .18s ease; }
-.composer-area.is-voice-active .composer-voice-panel { max-height: 86px; height: 84px; opacity: 1; visibility: visible; transition: max-height .22s ease, opacity .18s ease, visibility 0s; }
-.composer-area.is-voice-cancel .composer-voice-panel { background: #fff1ed; color: #b35b52; }
-.composer-voice-copy { display: flex; flex-direction: column; justify-content: center; min-width: 0; gap: 3px; }
-.composer-voice-copy strong { max-width: min(250px, 62vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 600; }
-.composer-voice-copy span { font-size: 11px; opacity: .76; }
+.composer-area.is-voice-active .composer-voice-panel { max-height: 84px; height: 84px; opacity: 1; visibility: visible; transition: max-height .22s ease, opacity .18s ease, visibility 0s; }
+.composer-voice-hint { display: flex; align-items: center; justify-content: center; gap: 18px; height: 28px; flex: none; color: #5373ad; font-size: 11px; font-weight: 600; }
+.composer-voice-field { position: relative; display: flex; align-items: center; justify-content: center; height: 52px; flex: none; overflow: hidden; border-radius: 18px; background: linear-gradient(100deg, #e9f2ff, #dbe9ff 52%, #e9f2ff); }
+.composer-voice-field::before { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, #ffffff77, transparent); transform: translateX(-100%); animation: composer-sweep 1.8s linear infinite; }
+.composer-area.is-voice-cancel .composer-voice-field { background: #fff1ed; color: #b35b52; }
+.composer-area.is-voice-cancel .composer-voice-hint { color: #b35b52; }
+.composer-voice-copy { position: relative; z-index: 1; max-width: 70%; padding: 4px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-radius: 9px; background: #ecf4ffcc; font-size: 13px; font-weight: 600; }
 .composer-voice-key-actions { display: flex; gap: 5px; margin-left: auto; padding-right: 10px; }
 .composer-voice-key-actions button { padding: 7px 8px; border-radius: 8px; color: currentColor; background: #fff9; font-size: 11px; }
-.composer-voice-wave { display: flex; align-items: center; justify-content: center; gap: 3px; width: 34px; height: 35px; flex: none; }
-.composer-voice-wave i { display: block; width: 3px; height: 5px; border-radius: 3px; background: currentColor; opacity: .65; transition: height .12s ease; }
+.composer-voice-wave { position: absolute; inset: 0; display: flex; align-items: center; justify-content: space-around; padding: 0 13px; }
+.composer-voice-wave i { display: block; width: 3px; height: 6px; border-radius: 3px; background: currentColor; opacity: .48; transition: height .12s ease; }
 .composer-voice-wave.is-speaking i { animation: composer-wave .58s ease-in-out infinite alternate; }
-.composer-voice-wave.is-speaking i:nth-child(2), .composer-voice-wave.is-speaking i:nth-child(4) { animation-delay: -.24s; }
-.composer-voice-wave.is-speaking i:nth-child(3) { animation-delay: -.4s; }
+.composer-voice-wave.is-speaking i:nth-child(2n) { animation-delay: -.24s; }
+.composer-voice-wave.is-speaking i:nth-child(3n) { animation-delay: -.4s; }
 @keyframes composer-wave { from { height: 6px; opacity: .6; } to { height: 28px; opacity: 1; } }
+@keyframes composer-sweep { to { transform: translateX(100%); } }
 .composer-attachments { display: flex; gap: 7px; overflow-x: auto; padding: 4px 1px 8px; scrollbar-width: none; }
 .attachment-chip { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 185px; flex: 0 0 auto; padding: 4px 5px 4px 7px; border: 0; border-radius: 9px; background: var(--surface); color: #52627e; font-size: 11px; }
 .attachment-chip img { width: 27px; height: 27px; border-radius: 5px; object-fit: cover; }
@@ -270,7 +274,7 @@ h1, h2, h3, p { margin: 0; }
 .attachment-button:disabled { opacity: .45; }
 .voice-button { position: relative; touch-action: none; user-select: none; -webkit-user-select: none; }
 .voice-control { position: relative; flex: 0 0 auto; }
-@media (prefers-reduced-motion: reduce) { .composer-voice-wave.is-speaking i { animation: none; height: 16px; } }
+@media (prefers-reduced-motion: reduce) { .composer-voice-wave.is-speaking i { animation: none; height: 16px; } .composer-voice-field::before { animation: none; } }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
 .quick-actions { display: flex; align-items: center; gap: 8px; max-height: 36px; opacity: 1; margin: 0 2px 4px; transition: max-height .18s ease, opacity .14s ease, margin .18s ease; }
 .quick-actions button { min-height: 28px; background: var(--surface); border: 0; border-radius: 12px; padding: 4px 12px; font-size: 11px; color: #667d9e; display: flex; align-items: center; gap: 6px; }

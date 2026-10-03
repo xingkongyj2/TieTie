@@ -56,6 +56,8 @@ export function Composer({ members, sending, disabled = false, placeholder = '�
   const fileRef = useRef<HTMLInputElement>(null);
   const speechRef = useRef<SpeechRecognitionLike | null>(null);
   const gestureRef = useRef<VoiceGesture | null>(null);
+  const compactHoldCleanupRef = useRef<(() => void) | null>(null);
+  const suppressCompactClickRef = useRef(false);
   useLayoutEffect(() => { onExpandedChange?.(expanded); }, [expanded, onExpandedChange]);
   useEffect(() => () => onExpandedChange?.(false), [onExpandedChange]);
   useLayoutEffect(() => {
@@ -75,6 +77,7 @@ export function Composer({ members, sending, disabled = false, placeholder = '�
     return () => observer.disconnect();
   }, [text]);
   useEffect(() => () => {
+    compactHoldCleanupRef.current?.();
     if (gestureRef.current?.timer) clearTimeout(gestureRef.current.timer);
     gestureRef.current = null;
     speechRef.current?.abort(); speechRef.current = null;
@@ -208,6 +211,37 @@ export function Composer({ members, sending, disabled = false, placeholder = '�
     startVoice(event.clientY, event.pointerId);
     if (gestureRef.current) event.currentTarget.setPointerCapture(event.pointerId);
   };
+  const compactPointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    if (sending || disabled || event.button !== 0) return;
+    compactHoldCleanupRef.current?.();
+    suppressCompactClickRef.current = false;
+    const pointerId = event.pointerId;
+    const startY = event.clientY;
+    let started = false;
+    let timer: ReturnType<typeof setTimeout> | undefined = setTimeout(() => {
+      timer = undefined;
+      started = true;
+      suppressCompactClickRef.current = true;
+      compactHoldCleanupRef.current?.();
+      startVoice(startY, pointerId);
+    }, 360);
+    const cleanup = () => {
+      if (timer) clearTimeout(timer);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', cancel);
+      if (compactHoldCleanupRef.current === cleanup) compactHoldCleanupRef.current = null;
+    };
+    const move = (current: PointerEvent) => {
+      if (current.pointerId === pointerId && !started && Math.abs(current.clientY - startY) > 16) cleanup();
+    };
+    const up = (current: PointerEvent) => { if (current.pointerId === pointerId) cleanup(); };
+    const cancel = (current: PointerEvent) => { if (current.pointerId === pointerId) cleanup(); };
+    compactHoldCleanupRef.current = cleanup;
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', cancel);
+  };
   const setDraftAt = (next: string, at: number) => {
     setText(next);
     requestAnimationFrame(() => {
@@ -291,6 +325,7 @@ export function Composer({ members, sending, disabled = false, placeholder = '�
     finally { setQueryingWeather(false); }
   };
   return <footer className={`composer-area${voiceState !== 'idle' ? ' is-voice-active' : ''}${voiceState === 'cancel' ? ' is-voice-cancel' : ''}`}>
+    <input ref={fileRef} type="file" className="visually-hidden" aria-label="选择文件或图片" multiple onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = ''; }} />
     <div className="quick-actions">
       <button type="button" aria-label="@TA" aria-pressed={toPartner} disabled={sending || !partner} onMouseDown={(event) => event.preventDefault()} onClick={mentionPartner}><AtSign size={14} /><span>TA</span></button>
       <button onClick={() => onTool('reminders')}><Bell size={14} /><span>添加提醒</span></button>
@@ -299,8 +334,10 @@ export function Composer({ members, sending, disabled = false, placeholder = '�
     </div>
     <div className={`composer-stage${expanded ? ' is-expanded' : ''}`}>
     <div className="composer-compact" aria-hidden={expanded || voiceState !== 'idle'}>
-      <button type="button" className="composer-compact-text" disabled={sending} onClick={openEditor} aria-label="发消息，打开输入框"><span>{text || (files.length ? `已选 ${files.length} 个附件，点此继续` : '发消息…')}</span></button>
-      <button type="button" className="composer-compact-voice" aria-label="按住说话，松手发送，上移取消" disabled={sending || disabled} onPointerDown={voicePointerDown} onContextMenu={(event) => event.preventDefault()} onClick={(event) => { if (event.detail === 0) gestureRef.current ? releaseVoice() : startVoice(); }}><Mic size={18} /><span>按住说话</span></button>
+      <button type="button" className="composer-compact-text" disabled={sending || disabled} onPointerDown={compactPointerDown} onContextMenu={(event) => event.preventDefault()} onClick={() => { if (suppressCompactClickRef.current) { suppressCompactClickRef.current = false; return; } openEditor(); }} aria-label="发消息或按住说话"><span>{text || (files.length ? `已选 ${files.length} 个附件，点此继续` : '发消息或按住说话')}</span></button>
+      <button type="button" className="attachment-button" aria-label="添加附件或图片" title="添加附件或图片" disabled={sending || disabled} onClick={() => { openEditor(); fileRef.current?.click(); }}><Paperclip size={19} strokeWidth={2} /></button>
+      <button type="button" className="voice-button" aria-label="按住说话，松手发送，上移取消" title="按住说话" disabled={sending || disabled} onPointerDown={voicePointerDown} onContextMenu={(event) => event.preventDefault()} onClick={(event) => { if (event.detail === 0) gestureRef.current ? releaseVoice() : startVoice(); }}><Mic size={19} strokeWidth={2} aria-hidden="true" /></button>
+      <button type="button" className="send-button" aria-label="发送消息" disabled={(!text.trim() && !files.length) || sending || disabled} onClick={() => void send()}>{sending ? <span className="spinner" /> : <ArrowUp size={22} strokeWidth={2.2} />}</button>
     </div>
     <div className="composer-expanded-shell" aria-hidden={!expanded || voiceState !== 'idle'}>
     {files.length > 0 && <div className="composer-attachments" aria-label="待发送附件">{files.map((file, index) => <div className="attachment-chip" key={`${file.name}-${index}`}>
@@ -309,7 +346,6 @@ export function Composer({ members, sending, disabled = false, placeholder = '�
       <button type="button" aria-label={`移除 ${file.name}`} disabled={sending} onClick={() => setFiles((current) => current.filter((_, at) => at !== index))}><X size={13} /></button>
     </div>)}</div>}
     <form className="composer" onSubmit={(event) => { event.preventDefault(); void send(); }}>
-      <input ref={fileRef} type="file" className="visually-hidden" aria-label="选择文件或图片" multiple onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = ''; }} />
       <div className="composer-input-wrap">
       <div ref={mirrorRef} className="composer-input-mirror" aria-hidden="true"><MentionText text={text + '\u200b'} names={names} className="composer-mention-token" /></div>
       <textarea ref={inputRef} aria-label="聊天消息" placeholder={placeholder} rows={1} enterKeyHint="enter" maxLength={2000} value={text} disabled={sending} onBlur={() => { requestAnimationFrame(() => { if (!text && !files.length && !document.activeElement?.closest('.composer-expanded-shell')) setExpanded(false); }); }} onChange={(event) => { if (compositionRef.current !== null) setText(event.target.value); else editDraft(text, event.target.value, event.target.selectionStart); }} onCompositionStart={() => { compositionRef.current = text; }} onCompositionEnd={(event) => { const previous = compositionRef.current ?? text; compositionRef.current = null; editDraft(previous, event.currentTarget.value, event.currentTarget.selectionStart); }} onScroll={(event) => { if (mirrorRef.current) mirrorRef.current.scrollTop = event.currentTarget.scrollTop; }} onBeforeInput={(event) => {
@@ -337,9 +373,12 @@ export function Composer({ members, sending, disabled = false, placeholder = '�
     </div>
     </div>
     <div className="composer-voice-panel" role="status" aria-live="polite" aria-hidden={voiceState === 'idle'}>
-      <div className={`composer-voice-wave${voiceActive && voiceState === 'listening' ? ' is-speaking' : ''}`} aria-hidden="true"><i /><i /><i /><i /><i /></div>
-      <div className="composer-voice-copy"><strong>{voiceState === 'cancel' ? '松手取消' : voiceState === 'processing' ? '正在识别…' : voiceText || '正在听你说…'}</strong><span>{voiceState === 'cancel' ? '下移继续说话' : voiceState === 'processing' ? '识别完成后自动发送' : '松手发送 · 上移取消'}</span></div>
-      {gestureRef.current?.pointerId === null && voiceState === 'listening' && <div className="composer-voice-key-actions"><button type="button" onClick={cancelVoice}>取消</button><button type="button" onClick={releaseVoice}>发送</button></div>}
+      <div className="composer-voice-hint"><span>{voiceState === 'cancel' ? '松手取消' : voiceState === 'processing' ? '正在识别，稍等发送' : '松手发送'}</span><span>{voiceState === 'cancel' ? '下移继续说话' : '上移取消'}</span></div>
+      <div className="composer-voice-field">
+        <div className={`composer-voice-wave${voiceActive && voiceState === 'listening' ? ' is-speaking' : ''}`} aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /><i /><i /></div>
+        <strong className="composer-voice-copy">{voiceState === 'cancel' ? '松手取消' : voiceState === 'processing' ? '正在识别…' : voiceText || '正在听你说…'}</strong>
+        {gestureRef.current?.pointerId === null && voiceState === 'listening' && <div className="composer-voice-key-actions"><button type="button" onClick={cancelVoice}>取消</button><button type="button" onClick={releaseVoice}>发送</button></div>}
+      </div>
     </div>
     {!toPartner && <p className="composer-caption"><span>✧</span> 默认和贴贴聊，输入 @ 直接告诉对方 <span>✧</span></p>}
   </footer>;
