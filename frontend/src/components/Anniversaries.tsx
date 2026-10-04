@@ -74,7 +74,8 @@ export function Anniversaries({ state, compact = false, notify }: { state: Anniv
   const styles = recordCardStyles(items, ['blue'])
   const originCard = <Hero key="origin" item={null} spaceCreatedAt={state.spaceCreatedAt} originPinned={!state.featured} onPin={() => void pinOrigin()} pinDisabled={busy !== null} pinning={busy === 'origin'} />
   const cards = items.map(item => <Hero key={item.id} item={item} style={styles.get(item.id)} spaceCreatedAt={state.spaceCreatedAt} onPin={() => void pin(item)} pinDisabled={busy !== null} pinning={busy === item.id} />)
-  if (!compact && state.loading && !state.spaceCreatedAt) return <TabLoading />
+  const hasOrigin = !!state.spaceCreatedAt && !Number.isNaN(new Date(state.spaceCreatedAt).getTime())
+  if (!compact && !items.length && !hasOrigin && !state.error) return <TabLoading empty={!state.loading} />
   return <div className={`anniversaries ${compact ? 'is-compact' : ''}`}>
     {state.error && <div className="anniversary-error" role="alert"><span>{state.error}</span><button type="button" disabled={state.loading} onClick={() => void state.reload()} aria-label="刷新纪念日"><RefreshCw size={15} /></button></div>}
     {compact ? <Hero item={state.featured} style={state.featured ? styles.get(state.featured.id) : undefined} spaceCreatedAt={state.spaceCreatedAt} /> : <div className="anniversary-list">

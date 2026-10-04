@@ -30,8 +30,15 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
   const [exiting, setExiting] = useState(false)
   const [copied, setCopied] = useState(false)
   const codeRef = useRef<HTMLElement>(null)
+  const changingAvatar = useRef(false)
+  const mounted = useRef(true)
   const saving = savingAvatar || savingProfile
   const gender = self.gender === 'male' ? '男生' : self.gender === 'female' ? '女生' : '暂不填写'
+
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
 
   useEffect(() => {
     if (!copied) return
@@ -75,15 +82,21 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
   }
 
   const selectAvatar = async (avatar: string) => {
-    if (avatar === self.avatar) return
+    if (avatar === self.avatar || changingAvatar.current || savingProfile) return
+    changingAvatar.current = true
     setSavingAvatar(true)
     try {
+      const image = new Image()
+      image.src = avatar
+      await image.decode()
+      if (!mounted.current) return
       await onSaveMember({ ...self, avatar })
-      notify('头像已更新')
+      if (mounted.current) notify('头像已更新')
     } catch {
-      notify('头像保存失败，请再试一次。')
+      if (mounted.current) notify('头像切换失败，请再试一次。')
     } finally {
-      setSavingAvatar(false)
+      changingAvatar.current = false
+      if (mounted.current) setSavingAvatar(false)
     }
   }
 
@@ -109,9 +122,9 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
       <section className="mine-identity-card" aria-label="我的个人空间">
         <SpaceBuddies className="mine-buddies" />
         <div className="mine-identity">
-          <button type="button" className="mine-avatar-edit" aria-label={savingAvatar ? '正在保存头像' : '修改头像'} disabled={saving} onClick={() => setPickerOpen(true)}>
+          <button type="button" className="mine-avatar-edit" aria-label={savingAvatar ? '正在切换头像' : '修改头像'} aria-busy={savingAvatar} disabled={saving} onClick={() => setPickerOpen(true)}>
             <Avatar member={self} size="large" />
-            <span className="mine-avatar-pencil"><Pencil size={12} aria-hidden="true" /></span>
+            {savingAvatar ? <span className="mine-avatar-loading" role="status" aria-live="polite"><span className="spinner" aria-hidden="true" /><span className="sr-only">正在切换头像</span></span> : <span className="mine-avatar-pencil"><Pencil size={12} aria-hidden="true" /></span>}
           </button>
           <div className="mine-name"><h2>{username}</h2><p>有自己的小宇宙，也有在意的人。</p></div>
         </div>

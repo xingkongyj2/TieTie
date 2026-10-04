@@ -55,6 +55,9 @@
 .things-page #things-care-tab { --tab-label-scale-y: 1.04; }
 .things-page #things-countdown-tab { --tab-label-scale-y: 1.02; }
 .things-page .things-tab-panel { padding-top: 0; }
+/* 状态占位随当前 tab 撑满标题与底栏之间的可用空间。 */
+.things-page .things-scroll:has(> .things-tab-panel:not([hidden]) > .tab-loading) { display: flex; flex-direction: column; padding-bottom: 0; }
+.things-page .things-tab-panel:not([hidden]):has(> .tab-loading) { display: flex; flex-direction: column; flex: 1; }
 .things-page #things-reminders-panel > .things-section-heading { margin-top: 24px; }
 .things-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; margin: 0 2px 12px; }
 .things-section-heading h2 { display: flex; align-items: center; gap: 12px; }

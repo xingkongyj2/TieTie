@@ -25,7 +25,7 @@ interface Props {
   notify: (text: string) => void
 }
 
-export function LittleThings({ sessionId, selfId, onEditRegion, onBind, state, anniversaries, reminderState = state, onToggle, onCancel, reminderNotice, remindersLoading, onReloadReminders, notify }: Props) {
+export function LittleThings({ sessionId, selfId, onEditRegion, state, anniversaries, reminderState = state, onToggle, onCancel, reminderNotice, remindersLoading, onReloadReminders, notify }: Props) {
   const [activeTab, setActiveTab] = useState<'care' | 'reminders' | 'anniversary' | 'countdown'>('reminders')
   const [activeFilter, setActiveFilter] = useState<'both' | 'self' | 'partner' | null>(null)
   const pendingReminders = reminderState.reminders.filter((reminder) => reminderPhase(reminder) === 'pending')
@@ -94,7 +94,7 @@ export function LittleThings({ sessionId, selfId, onEditRegion, onBind, state, a
         <Anniversaries state={anniversaries} notify={notify} />
       </section>
       <section role="tabpanel" id="things-care-panel" aria-labelledby="things-care-tab" className="things-tab-panel" hidden={activeTab !== 'care'}>
-        {activeTab === 'care' && <CareWithAnniversary sessionId={sessionId} selfId={selfId} onEditRegion={onEditRegion} onBind={onBind} notify={notify} />}
+        {activeTab === 'care' && <CareWithAnniversary key={sessionId ?? 'unbound'} sessionId={sessionId} selfId={selfId} onEditRegion={onEditRegion} notify={notify} />}
       </section>
     </div>
   </section>

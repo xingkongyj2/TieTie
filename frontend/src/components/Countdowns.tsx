@@ -30,9 +30,9 @@ export function Countdowns({ sessionId }: { sessionId?: string }) {
   finally { if (mounted.current && seq === generation.current) setLoading(false) }
  }, [sessionId])
  useEffect(() => { mounted.current = true; pages.current = 1; setItems([]); setLoading(true); void reload(); const timer = setInterval(() => { void reload() }, 30_000); const focus = () => { void reload() }; window.addEventListener('focus', focus); return () => { mounted.current = false; generation.current++; clearInterval(timer); window.removeEventListener('focus', focus) } }, [reload])
- if (!sessionId) return null
+ if (!sessionId) return <TabLoading empty />
  if (loading) return <TabLoading />
- if (!items.length && !error) return <TabLoading empty text="暂无倒计时" />
+ if (!items.length && !error) return <TabLoading empty />
  const styles = recordCardStyles(items)
  return <div className="countdowns">
   {error && <div className="cloud-error" role="alert">{error}<button type="button" onClick={() => void reload()}>重试</button></div>}
