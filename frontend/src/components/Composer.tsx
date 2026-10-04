@@ -84,6 +84,13 @@ export function Composer({ members, sending, processing, stopping, disabled = fa
     speechRef.current?.abort(); speechRef.current = null;
   }, []);
   useEffect(() => {
+    if (!processing) return;
+    if (focusTimerRef.current) clearTimeout(focusTimerRef.current);
+    focusTimerRef.current = null;
+    inputRef.current?.blur();
+    setExpanded(false);
+  }, [processing]);
+  useEffect(() => {
     if (!expanded || sending || processing || voiceState !== 'idle') return;
     const closeOutside = (event: PointerEvent) => {
       if (!(event.target instanceof Node) || composerRef.current?.contains(event.target)) return;
@@ -346,15 +353,15 @@ export function Composer({ members, sending, processing, stopping, disabled = fa
       <button type="button" disabled={sending || disabled || processing} onClick={() => onTool('anniversary')}><CalendarDays size={14} /><span>小纪念</span></button>
       <button type="button" disabled={queryingWeather || sending || disabled} onPointerDown={keepInputFocus} onClick={() => void queryWeather()}><CloudSun size={14} /><span>{queryingWeather ? '查询中' : '查天气'}</span></button>
     </div>
-    <div className={`composer-stage${expanded ? ' is-expanded' : ''}`}>
-    <div className="composer-compact" aria-hidden={expanded || voiceState !== 'idle'}>
+    <div className={`composer-stage${expanded && !processing ? ' is-expanded' : ''}`}>
+    <div className="composer-compact" aria-hidden={expanded && !processing || voiceState !== 'idle'}>
       <button type="button" className="composer-compact-text" disabled={sending || disabled || processing} onPointerDown={compactPointerDown} onContextMenu={(event) => event.preventDefault()} onClick={() => { if (suppressCompactClickRef.current) { suppressCompactClickRef.current = false; return; } openEditor(); }} aria-label={processing ? 'AI正在处理' : disabledReason ?? '发消息或按住说话'}><span>{processing ? 'AI正在处理' : text || (files.length ? `已选 ${files.length} 个附件，点此继续` : disabled && disabledReason || '发消息或按住说话')}</span></button>
       <button type="button" className="attachment-button" aria-label="添加附件或图片" title="添加附件或图片" disabled={sending || disabled || processing} onClick={() => { openEditor(false); fileRef.current?.click(); }}><Paperclip size={19} strokeWidth={2} /></button>
       <button type="button" className="voice-button" aria-label="按住说话，松手发送，上移取消" title="按住说话" disabled={sending || disabled || processing} onPointerDown={voicePointerDown} onContextMenu={(event) => event.preventDefault()} onClick={(event) => { if (event.detail === 0) gestureRef.current ? releaseVoice() : startVoice(); }}><Mic size={19} strokeWidth={2} aria-hidden="true" /></button>
       {processing ? <button type="button" className="send-button stop-button" aria-label="停止AI处理" aria-busy={stopping} disabled={stopping} onClick={() => void onStop().catch((error) => onError(error instanceof Error ? error.message : '停止失败，请再试一次。'))}>{stopping ? <span className="spinner" aria-hidden="true" /> : <Square size={15} fill="currentColor" strokeWidth={2} aria-hidden="true" />}</button>
         : <button type="button" className="send-button" aria-label="发送消息" disabled={(!text.trim() && !files.length) || sending || disabled} onClick={() => void send()}>{sending ? <span className="spinner" /> : <ArrowUp size={22} strokeWidth={2.2} />}</button>}
     </div>
-    <div className="composer-expanded-shell" aria-hidden={!expanded || voiceState !== 'idle'}>
+    <div className="composer-expanded-shell" aria-hidden={!expanded || processing || voiceState !== 'idle'}>
     <div className="composer-expanded-content">
     {files.length > 0 && <div className="composer-attachments" aria-label="待发送附件">{files.map((file, index) => <div className="attachment-chip" key={`${file.name}-${index}`}>
       {previews[index] ? <img src={previews[index]} alt="" /> : /\.(xlsx|xls|xlsm|xlsb)$/i.test(file.name) ? <FileSpreadsheet size={16} /> : <FileText size={16} />}

@@ -34,7 +34,7 @@ export function ChatMessage({ message, members, onError, onOpenImage, onAnswer }
         {message.streaming && <span className="stream-caret" aria-label="正在生成" />}
       </div>}
       {message.reminderError && <p className="message-reminder-error" role="alert">{message.reminderError}</p>}
-      {message.localStatus && <p className={`message-local-status${message.localStatus === 'failed' || message.localStatus === 'uncertain' ? ' is-error' : ''}`} role={message.localStatus === 'failed' ? 'alert' : 'status'}>{message.localStatus === 'sending' ? '发送中…' : message.localStatus === 'sent' ? '已发出，正在同步…' : message.localStatus === 'uncertain' ? '发送状态待确认，请勿重复发送' : '发送失败，草稿已保留'}</p>}
+      {(message.localStatus === 'failed' || message.localStatus === 'uncertain') && <p className="message-local-status is-error" role={message.localStatus === 'failed' ? 'alert' : 'status'}>{message.localStatus === 'uncertain' ? '发送状态待确认，请勿重复发送' : '发送失败，草稿已保留'}</p>}
     </div>
   </div>;
 }
