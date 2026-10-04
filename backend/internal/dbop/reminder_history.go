@@ -46,6 +46,9 @@ type ReminderHistoryMonth struct {
 func (ReminderHistoryMonth) TableName() string { return "reminder_history_months" }
 
 func reminderBoardStatus(r *Reminder) string {
+	if r.Status == ReminderDeleted {
+		return ReminderDeleted
+	}
 	if r.Status == ReminderCancelled {
 		return "cancelled"
 	}
@@ -115,13 +118,13 @@ func syncReminderHistory(tx *gorm.DB, r *Reminder) error {
 		if err != nil {
 			return err
 		}
-		if err := syncHistoryPage(tx, *location, r.BindingCreatedAt, r.Status == ReminderCancelled); err != nil {
+		if err := syncHistoryPage(tx, *location, r.BindingCreatedAt, r.Status == ReminderCancelled || r.Status == ReminderDeleted); err != nil {
 			return err
 		}
-		if err := syncHistoryIndex(tx, session, r.BindingCreatedAt, r.Status == ReminderCancelled); err != nil {
+		if err := syncHistoryIndex(tx, session, r.BindingCreatedAt, r.Status == ReminderCancelled || r.Status == ReminderDeleted); err != nil {
 			return err
 		}
-		if err := syncTodoBoard(tx, session, r.BindingCreatedAt, r.Status == ReminderCancelled); err != nil {
+		if err := syncTodoBoard(tx, session, r.BindingCreatedAt, r.Status == ReminderCancelled || r.Status == ReminderDeleted); err != nil {
 			return err
 		}
 	}
@@ -130,7 +133,7 @@ func syncReminderHistory(tx *gorm.DB, r *Reminder) error {
 
 func syncHistoryPage(tx *gorm.DB, location ReminderHistoryLocation, epoch time.Time, allowUnbound bool) error {
 	var rows []Reminder
-	err := tx.Table("reminder_history_locations AS l").Select("r.*").Joins("JOIN reminders r ON r.id=l.reminder_id").Where("l.session_id=? AND l.month=? AND l.page=?", location.SessionID, location.Month, location.Page).Order("l.position ASC").Limit(ReminderHistoryPageSize).Find(&rows).Error
+	err := tx.Table("reminder_history_locations AS l").Select("r.*").Joins("JOIN reminders r ON r.id=l.reminder_id").Where("l.session_id=? AND l.month=? AND l.page=? AND l.board_status != ?", location.SessionID, location.Month, location.Page, ReminderDeleted).Order("l.position ASC").Limit(ReminderHistoryPageSize).Find(&rows).Error
 	if err != nil {
 		return err
 	}

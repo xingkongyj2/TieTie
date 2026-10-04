@@ -16,6 +16,8 @@ export interface Member {
   /** Verified account identity for a member of the shared cloud space. */
   userId?: number
   name: string
+  /** Current account profile name, when one has been saved. */
+  profileName?: string
   role: string
   avatar: string
   gender?: 'male' | 'female' | 'unspecified'

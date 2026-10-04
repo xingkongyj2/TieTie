@@ -210,6 +210,9 @@ export const qoderApi = {
   updateReminder(id: string, reminderId: string, status: 'completed' | 'scheduled' | 'cancelled'): Promise<{ reminder: CloudReminder }> {
     return request(`${remindersPath(id)}/${encodeURIComponent(reminderId)}`, { method: 'PATCH', body: { status } })
   },
+  deleteReminder(id: string, reminderId: string): Promise<void> {
+    return request(`${remindersPath(id)}/${encodeURIComponent(reminderId)}`, { method: 'DELETE' })
+  },
   getMessages(id: string, after?: string | null, signal?: AbortSignal, careAfter?: string): Promise<CloudHistory> {
     const query = after ? `?${new URLSearchParams({ after })}` : ''
     return request(`${sessionPath(id)}${query}`, { signal, timeoutMs: 120_000, headers: careAfter ? { 'X-Tietie-Care-After': careAfter } : undefined })

@@ -10,6 +10,7 @@ export interface ProvinceOption {
 
 export interface UserProfile {
   userId: number
+  name: string
   gender: NonNullable<Member['gender']>
   birthday: string
   hobbies: string[]
@@ -27,6 +28,7 @@ export const profileApi = {
   },
   save(member: Member): Promise<{ profile: UserProfile; memoryStatus: 'pending' | 'not_bound' }> {
     return request('/api/account/profile', { method: 'PUT', body: {
+      name: member.name,
       gender: member.gender ?? 'unspecified', birthday: member.birthday,
       hobbies: member.hobbies, bio: member.bio, avatar: member.avatar,
       region: member.region ?? null,

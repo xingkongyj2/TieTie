@@ -33,6 +33,13 @@ type Action struct {
 	DueAt           string            `json:"dueAt,omitempty"`
 	RecipientIDs    []int64           `json:"recipientIds"`
 	ReminderID      string            `json:"reminderId,omitempty"`
+	ReminderIDs     []string          `json:"reminderIds,omitempty"`
+	DeleteMode      string            `json:"deleteMode,omitempty"`
+	TitleContains   string            `json:"titleContains,omitempty"`
+	DateField       string            `json:"dateField,omitempty"`
+	DueFrom         string            `json:"dueFrom,omitempty"`
+	DueBefore       string            `json:"dueBefore,omitempty"`
+	Statuses        []string          `json:"statuses,omitempty"`
 	Storage         string            `json:"storage,omitempty"`
 	Content         string            `json:"content,omitempty"`
 	Scope           string            `json:"scope,omitempty"`

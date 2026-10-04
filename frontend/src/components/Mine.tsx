@@ -126,7 +126,7 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
             <Avatar member={self} size="large" />
             {savingAvatar ? <span className="mine-avatar-loading" role="status" aria-live="polite"><span className="spinner" aria-hidden="true" /><span className="sr-only">正在切换头像</span></span> : <span className="mine-avatar-pencil"><Pencil size={12} aria-hidden="true" /></span>}
           </button>
-          <div className="mine-name"><h2>{username}</h2><p>有自己的小宇宙，也有在意的人。</p></div>
+          <div className="mine-name"><div className="mine-name-heading"><h2>{self.name || username}</h2><button type="button" className="mine-name-edit" aria-label="修改名称" title="修改名称" disabled={saving} onClick={() => setEditorOpen(true)}><Pencil size={14} aria-hidden="true" /></button></div><p>有自己的小宇宙，也有在意的人。</p></div>
         </div>
       </section>
 
@@ -165,7 +165,7 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
       </div>
     </div>}</Sheet>}
     {editorOpen && <Sheet title="编辑我的小档案" onClose={() => setEditorOpen(false)}>{(close) => <div className="mine-profile-editor">
-      <MemberForm member={self} onSave={async (member) => {
+      <MemberForm member={self} showName onSave={async (member) => {
         setSavingProfile(true)
         try { await onSaveMember(member); close() }
         finally { setSavingProfile(false) }

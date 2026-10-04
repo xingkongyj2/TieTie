@@ -18,6 +18,7 @@ import (
 // corrections; old spaces are never silently rewritten after a new binding.
 type UserProfile struct {
 	UserID             int64            `json:"userId" gorm:"primaryKey"`
+	Name               string           `json:"name" gorm:"size:24"`
 	Gender             string           `json:"gender"`
 	Birthday           string           `json:"birthday"`
 	Hobbies            []string         `json:"hobbies" gorm:"serializer:json;type:mediumtext"`
@@ -33,7 +34,7 @@ func (p UserProfile) Fields() map[string]any {
 	if p.Region.CityCode != "" {
 		region = p.Region
 	}
-	return map[string]any{"gender": p.Gender, "birthday": p.Birthday, "hobbies": p.Hobbies, "bio": p.Bio, "avatar": p.Avatar, "region": region, "regionSourceUserId": p.RegionSourceUserID}
+	return map[string]any{"name": p.Name, "gender": p.Gender, "birthday": p.Birthday, "hobbies": p.Hobbies, "bio": p.Bio, "avatar": p.Avatar, "region": region, "regionSourceUserId": p.RegionSourceUserID}
 }
 
 func (db *DB) GetUserProfile(ctx context.Context, userID int64) (*UserProfile, error) {
@@ -68,6 +69,12 @@ func (db *DB) SaveUserProfile(ctx context.Context, profile UserProfile, preserve
 		lookup := tx.Where("user_id=?", profile.UserID).First(&previous).Error
 		if lookup != nil && !errors.Is(lookup, gorm.ErrRecordNotFound) {
 			return lookup
+		}
+		if profile.Name == "" {
+			profile.Name = previous.Name
+			if profile.Name == "" {
+				profile.Name = user.Username
+			}
 		}
 		if len(preserveRegion) > 0 && preserveRegion[0] {
 			profile.Region = previous.Region
@@ -116,6 +123,10 @@ func (db *DB) SaveUserProfile(ctx context.Context, profile UserProfile, preserve
 }
 
 func syncUserProfile(tx *gorm.DB, binding Binding, user User, profile UserProfile) error {
+	displayName := profile.Name
+	if displayName == "" {
+		displayName = user.Username
+	}
 	path := "profile/users.json"
 	var root MemoryRecord
 	err := tx.Where("id=?", MemoryID(binding.SessionID, path)).First(&root).Error
@@ -152,19 +163,19 @@ func syncUserProfile(tx *gorm.DB, binding Binding, user User, profile UserProfil
 		if member["userId"] != float64(user.ID) {
 			continue
 		}
-		member["name"] = user.Username
 		member["profileSource"], member["profileUpdatedAt"] = "self_profile", profile.UpdatedAt
 		for key, value := range profile.Fields() {
 			member[key] = value
 		}
+		member["name"] = displayName
 	}
 	body, _ := json.Marshal(doc)
 	if err := queueHistoryDocument(tx, binding.SessionID, path, "template", string(body), binding.CreatedAt, false); err != nil {
 		return err
 	}
 	data := profile.Fields()
-	data["name"] = user.Username
-	fact, _ := json.Marshal(map[string]any{"content": fmt.Sprintf("%s在我的小档案中保存的当前个人资料。", user.Username), "data": data, "sourceType": "self_profile", "confirmation": "已确认", "ownerId": user.ID, "sourceUserId": user.ID, "updatedAt": profile.UpdatedAt})
+	data["name"] = displayName
+	fact, _ := json.Marshal(map[string]any{"content": fmt.Sprintf("%s在我的小档案中保存的当前个人资料。", displayName), "data": data, "sourceType": "self_profile", "confirmation": "已确认", "ownerId": user.ID, "sourceUserId": user.ID, "updatedAt": profile.UpdatedAt})
 	logicalPath := memoryspace.FactPath("profile", "self", user.ID, "account_profile")
 	var existing MemoryRecord
 	if err := tx.Where("id=?", MemoryID(binding.SessionID, logicalPath)).First(&existing).Error; err == nil && existing.Content == string(fact) {

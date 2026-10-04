@@ -246,6 +246,16 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     }
   }, [update])
 
+  const deleteReminder = useCallback(async (reminderId: string) => {
+    const id = current.current.selectedId
+    if (!id || !current.current.loaded) throw new Error('共享提醒还未加载，请稍后再试。')
+    await qoderApi.deleteReminder(id, reminderId)
+    if (mounted.current && current.current.selectedId === id) {
+      update({ reminders: current.current.reminders.filter((item) => item.id !== reminderId) })
+      void readRef.current()
+    }
+  }, [update])
+
   const sendMessage = useCallback(async (text: string, files: File[] = [], visibility: 'shared' | 'private' = 'shared', silent = false): Promise<boolean> => {
     const snapshot = current.current
     const draft = text.trim()
@@ -449,6 +459,6 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     thinking: state.thinking, streaming: state.streaming, replyFeedback,
     silent: state.replyMode === 'silent',
     turnError: state.turnError,
-    reload, sendMessage, answerAsk, saveReminder, changeReminder,
+    reload, sendMessage, answerAsk, saveReminder, changeReminder, deleteReminder,
   }
 }

@@ -29,6 +29,12 @@ type ReminderMemory struct {
 
 func (ReminderMemory) TableName() string { return "reminder_memories" }
 func syncReminderMemory(tx *gorm.DB, r *Reminder) error {
+	if r.Status == ReminderDeleted {
+		if err := tx.Where("reminder_id = ?", r.ID).Delete(&ReminderMemory{}).Error; err != nil {
+			return err
+		}
+		return syncReminderHistory(tx, r)
+	}
 	m := ReminderMemory{ReminderID: r.ID, SessionID: r.SessionID, Title: r.Title, DueAt: r.DueAt,
 		RecipientIDs: r.RecipientIDs, CreatedBy: r.CreatedBy, Status: r.Status, TaskStatus: r.TaskStatus,
 		DeliveredAt: r.DeliveredAt, CompletedBy: r.CompletedBy, UpdatedAt: time.Now().UTC()}
@@ -42,7 +48,7 @@ func (db *DB) ListReminderMemories(ctx context.Context, id string) ([]ReminderMe
 		return nil, errNoDB
 	}
 	memories := make([]ReminderMemory, 0)
-	err := db.gdb.WithContext(ctx).Where("session_id = ?", id).Order("updated_at DESC").Limit(20).Find(&memories).Error
+	err := db.gdb.WithContext(ctx).Where("session_id = ? AND status != ?", id, ReminderDeleted).Order("updated_at DESC").Limit(20).Find(&memories).Error
 	return memories, err
 }
 
@@ -70,7 +76,7 @@ func syncTodoBoard(tx *gorm.DB, session string, epoch time.Time, allowUnbound bo
 	if err := tx.Where("session_id=? AND board_status='pending'", session).Order("due_at ASC,reminder_id ASC").Limit(TodoBoardLimit + 1).Find(&upcoming).Error; err != nil {
 		return err
 	}
-	if err := tx.Where("session_id=?", session).Order("created_at DESC,reminder_id DESC").Limit(TodoRecentLimit).Find(&recent).Error; err != nil {
+	if err := tx.Where("session_id=? AND board_status != ?", session, ReminderDeleted).Order("created_at DESC,reminder_id DESC").Limit(TodoRecentLimit).Find(&recent).Error; err != nil {
 		return err
 	}
 	var board map[string]any
@@ -91,8 +97,12 @@ func syncTodoBoard(tx *gorm.DB, session string, epoch time.Time, allowUnbound bo
 	}
 	board["reminders"] = items
 	board["recentReminders"] = recentItems
-	var months []ReminderHistoryMonth
-	if err := tx.Where("session_id=?", session).Order("month DESC").Limit(13).Find(&months).Error; err != nil {
+	var months []struct {
+		Month       string
+		RecordCount int64
+		PageCount   int64
+	}
+	if err := tx.Model(&ReminderHistoryLocation{}).Select("month, COUNT(*) AS record_count, MAX(page) + 1 AS page_count").Where("session_id=? AND board_status != ?", session, ReminderDeleted).Group("month").Order("month DESC").Limit(13).Scan(&months).Error; err != nil {
 		return err
 	}
 	more := len(months) > 12
@@ -101,13 +111,13 @@ func syncTodoBoard(tx *gorm.DB, session string, epoch time.Time, allowUnbound bo
 	}
 	itemsHistory := make([]map[string]any, 0, len(months))
 	for _, month := range months {
-		itemsHistory = append(itemsHistory, map[string]any{"month": month.Month, "recordCount": month.RecordCount, "pageCount": (month.RecordCount + ReminderHistoryPageSize - 1) / ReminderHistoryPageSize})
+		itemsHistory = append(itemsHistory, map[string]any{"month": month.Month, "recordCount": month.RecordCount, "pageCount": month.PageCount})
 	}
 	history := board["history"].(map[string]any)
 	history["months"], history["hasEarlierMonths"] = itemsHistory, more
 	if len(months) > 0 {
-		var earliest ReminderHistoryMonth
-		if err := tx.Where("session_id=?", session).Order("month ASC").First(&earliest).Error; err != nil {
+		var earliest ReminderHistoryLocation
+		if err := tx.Where("session_id=? AND board_status != ?", session, ReminderDeleted).Order("month ASC").First(&earliest).Error; err != nil {
 			return err
 		}
 		history["earliestMonth"], history["latestMonth"] = earliest.Month, months[0].Month

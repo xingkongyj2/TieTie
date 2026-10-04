@@ -21,13 +21,14 @@ interface Props {
   reminderState?: RelationshipState
   onToggle: (id: string) => Promise<void>
   onCancel?: (id: string) => Promise<void>
+  onDelete?: (id: string) => Promise<void>
   reminderNotice?: string
   remindersLoading?: boolean
   onReloadReminders?: () => Promise<void>
   notify: (text: string) => void
 }
 
-export function LittleThings({ sessionId, selfId, onEditRegion, onBind, state, anniversaries, reminderState = state, onToggle, onCancel, reminderNotice, remindersLoading, onReloadReminders, notify }: Props) {
+export function LittleThings({ sessionId, selfId, onEditRegion, onBind, state, anniversaries, reminderState = state, onToggle, onCancel, onDelete, reminderNotice, remindersLoading, onReloadReminders, notify }: Props) {
   const [activeTab, setActiveTab] = useState<'care' | 'reminders' | 'anniversary' | 'countdown'>('reminders')
   const [activeFilter, setActiveFilter] = useState<'both' | 'self' | 'partner' | null>(null)
   const pendingReminders = reminderState.reminders.filter((reminder) => reminderPhase(reminder) === 'pending')
@@ -95,7 +96,7 @@ export function LittleThings({ sessionId, selfId, onEditRegion, onBind, state, a
         </div>
         <div className="things-section-heading"><h2><span className="reminder-title-lettering">待完成</span></h2></div>
         {reminderNotice && <div className="cloud-error" role="alert"><span>{reminderNotice}</span>{onReloadReminders && <button disabled={remindersLoading} onClick={() => void onReloadReminders()}>刷新</button>}</div>}
-        {remindersLoading && !reminderState.reminders.length ? <p className="empty-note" role="status">正在同步共享提醒…</p> : <ReminderBoard state={reminderState} pendingAssignee={activeFilter} onToggle={onToggle} onCancel={onCancel} notify={notify} />}
+        {remindersLoading && !reminderState.reminders.length ? <p className="empty-note" role="status">正在同步共享提醒…</p> : <ReminderBoard state={reminderState} pendingAssignee={activeFilter} onToggle={onToggle} onCancel={onCancel} onDelete={onDelete} notify={notify} />}
         </>}
       </section>
       <section role="tabpanel" id="things-countdown-panel" aria-labelledby="things-countdown-tab" className="things-tab-panel" hidden={activeTab !== 'countdown'}>{activeTab === 'countdown' && <Countdowns sessionId={sessionId} />}</section>

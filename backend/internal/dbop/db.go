@@ -155,6 +155,7 @@ func Open(cfg MySQLConfig) (*DB, error) {
 		&File{},
 		&Reminder{},
 		&ReminderActionReceipt{},
+		&ReminderDeletionReceipt{},
 		&ReminderMemory{},
 		&ReminderHistoryLocation{},
 		&ReminderHistoryMonth{},

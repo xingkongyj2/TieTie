@@ -14,7 +14,7 @@ export function ChatMessage({ message, members, onError, onOpenImage, onAnswer }
   if (!isVisibleChatMessage(message, members)) return null;
   const member = members.find((m) => m.id === message.sender);
   if (!member) return null;
-  const name = message.displayName || member.name;
+  const name = member.profileName || message.displayName || member.name;
   const isSelf = message.sender === 'self';
   const isReminder = message.sender === 'ai' && message.source === 'reminder';
   const isReminderUpdate = message.sender === 'ai' && message.source === 'reminder_update';
@@ -24,7 +24,7 @@ export function ChatMessage({ message, members, onError, onOpenImage, onAnswer }
     <div className="message-content">
       <div className="message-meta"><span>{name}</span>{message.visibility === 'private' && <span className="message-private-label"><LockKeyhole size={10} aria-hidden="true" />仅自己可见</span>}<time dateTime={message.createdAt}>{message.createdAt && !Number.isNaN(Date.parse(message.createdAt)) ? new Date(message.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }) : message.time}</time></div>
       {message.weatherCards?.length ? <div className="message-bubble has-weather-card">{message.weatherCards.map((card, index) => <WeatherCard key={index} card={card} />)}</div> : ask.length ? <AskCard message={message} questions={ask} onAnswer={onAnswer} onError={onError} /> : <div className={`message-bubble ${isReminder || isReminderUpdate ? 'has-reminder-type' : ''}`}>
-        {(isReminder || isReminderUpdate) && <span className={`message-type-badge${isReminderUpdate ? ' is-update' : ''}`}><Bell size={12} aria-hidden="true" />{isReminder ? '主动提醒' : '提醒状态更新'}</span>}
+        {(isReminder || isReminderUpdate) && <span className={`message-type-badge${isReminderUpdate ? ' is-update' : ''}`}><Bell size={12} aria-hidden="true" />{isReminder ? '消息提醒' : '提醒状态更新'}</span>}
         {message.sender === 'ai' ? <MarkdownMessage text={message.text} memberNames={members.filter((m) => m.id !== 'ai').map((m) => m.name)} onOpenImage={onOpenImage} /> : message.text && <div className="message-text"><MentionText text={message.text} names={members.filter((m) => m.id !== 'ai').map((m) => m.name)} /></div>}
         {message.files?.length ? <div className="message-files" role="list" aria-label="消息附件">{message.files.map((file, index) => <span className="message-file" role="listitem" key={`${file}-${index}`}>
           {/\.(xlsx?|xlsm|xlsb|csv)$/i.test(file) ? <FileSpreadsheet size={15} aria-hidden="true" /> : <FileText size={15} aria-hidden="true" />}

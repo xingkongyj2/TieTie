@@ -26,6 +26,7 @@ const (
 	ReminderCancelled   = "cancelled"
 	ReminderUncertain   = "uncertain"
 	ReminderFailed      = "failed"
+	ReminderDeleted     = "deleted"
 )
 
 var (
@@ -33,6 +34,8 @@ var (
 	ErrReminderForbidden = errors.New("reminder recipient is not an active space member")
 	ErrReminderState     = errors.New("reminder state does not allow this operation")
 	ErrReminderInvalid   = errors.New("invalid reminder action")
+	ErrReminderAmbiguous = errors.New("multiple reminders match a single deletion")
+	ErrReminderTooMany   = errors.New("too many reminders match deletion")
 )
 
 // Reminder 是可恢复的提醒队列。绑定创建时间隔离解绑后重新使用同一云会话的旧任务。
@@ -211,7 +214,7 @@ func (db *DB) ListReminders(ctx context.Context, sessionID string) ([]Reminder, 
 		return nil, errNoDB
 	}
 	reminders := make([]Reminder, 0)
-	err := db.gdb.WithContext(ctx).Where("session_id = ?", sessionID).Order("due_at ASC, created_at ASC").Find(&reminders).Error
+	err := db.gdb.WithContext(ctx).Where("session_id = ? AND status != ?", sessionID, ReminderDeleted).Order("due_at ASC, created_at ASC").Find(&reminders).Error
 	return reminders, err
 }
 

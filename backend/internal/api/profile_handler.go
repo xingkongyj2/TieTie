@@ -49,6 +49,7 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
+		Name     *string         `json:"name"`
 		Gender   string          `json:"gender"`
 		Birthday string          `json:"birthday"`
 		Hobbies  []string        `json:"hobbies"`
@@ -62,6 +63,14 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Gender == "" {
 		body.Gender = "unspecified"
+	}
+	name := ""
+	if body.Name != nil {
+		name = strings.TrimSpace(*body.Name)
+		if name == "" || utf8.RuneCountInString(name) > 24 {
+			writeError(w, qoder.NewApiError(400, "invalid_profile_name", "名称请填写 1-24 个字。"))
+			return
+		}
 	}
 	valid := body.Gender == "male" || body.Gender == "female" || body.Gender == "unspecified"
 	if body.Birthday != "" {
@@ -86,7 +95,7 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, qoder.NewApiError(400, "invalid_profile", "请检查生日、性别和爱好，生日不能晚于今天。"))
 		return
 	}
-	profile := dbop.UserProfile{UserID: auth.UserIDFrom(r.Context()), Gender: body.Gender, Birthday: body.Birthday, Hobbies: hobbies, Bio: strings.TrimSpace(body.Bio), Avatar: body.Avatar}
+	profile := dbop.UserProfile{UserID: auth.UserIDFrom(r.Context()), Name: name, Gender: body.Gender, Birthday: body.Birthday, Hobbies: hobbies, Bio: strings.TrimSpace(body.Bio), Avatar: body.Avatar}
 	if len(body.Region) > 0 && string(body.Region) != "null" {
 		var selected regions.Location
 		err := json.Unmarshal(body.Region, &selected)
@@ -111,6 +120,7 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 	status := "not_bound"
 	if session != "" {
 		status = "pending"
+		s.wakeMemory()
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"profile": saved, "memoryStatus": status})
 }
@@ -132,5 +142,9 @@ func (s *Server) memoryMember(ctx context.Context, user *dbop.User) (memoryspace
 	if !profile.UpdatedAt.IsZero() {
 		fields["profileSource"], fields["profileUpdatedAt"] = "self_profile", profile.UpdatedAt
 	}
-	return memoryspace.Member{ID: user.ID, Name: user.Username, Profile: fields}, nil
+	name := profile.Name
+	if name == "" {
+		name = user.Username
+	}
+	return memoryspace.Member{ID: user.ID, Name: name, Profile: fields}, nil
 }

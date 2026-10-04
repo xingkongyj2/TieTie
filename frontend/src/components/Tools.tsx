@@ -11,7 +11,7 @@ import { compareReminderTime, reminderPhase } from '../lib/reminders';
 
 export type ToolName = 'reminders' | 'anniversary';
 interface Props { tool: ToolName; state: RelationshipState; anniversaries: AnniversaryState; onClose: () => void; onAdd: (input: Omit<Reminder, 'id' | 'completed'>) => Promise<void>; notify: (text: string) => void }
-interface ReminderBoardProps { state: RelationshipState; onToggle: (id: string) => Promise<void>; onCancel?: (id: string) => Promise<void>; notify: (text: string) => void; pendingAssignee?: 'both' | 'self' | 'partner' | null }
+interface ReminderBoardProps { state: RelationshipState; onToggle: (id: string) => Promise<void>; onCancel?: (id: string) => Promise<void>; onDelete?: (id: string) => Promise<void>; notify: (text: string) => void; pendingAssignee?: 'both' | 'self' | 'partner' | null }
 
 function finishedTime(reminder: Reminder): number {
   const value = reminder.taskCompletedAt || reminder.deliveredAt || reminder.updatedAt || reminder.time;
@@ -19,7 +19,7 @@ function finishedTime(reminder: Reminder): number {
   return Number.isNaN(time) ? Number.NEGATIVE_INFINITY : time;
 }
 
-export function ReminderBoard({ state, onToggle, onCancel, notify, pendingAssignee = null }: ReminderBoardProps) {
+export function ReminderBoard({ state, onToggle, onCancel, onDelete, notify, pendingAssignee = null }: ReminderBoardProps) {
   const pending = state.reminders.filter((reminder) => reminderPhase(reminder) === 'pending' && (pendingAssignee === null || reminder.assignee === pendingAssignee)).sort(compareReminderTime);
   const completed = state.reminders.filter((reminder) => reminderPhase(reminder) !== 'pending').sort((a, b) => {
     const left = finishedTime(a), right = finishedTime(b);
@@ -42,13 +42,13 @@ export function ReminderBoard({ state, onToggle, onCancel, notify, pendingAssign
     : `暂时没有提醒${{ both: '我们', self: '我', partner: 'TA' }[pendingAssignee]}的待完成事项。`;
   return <div className="reminder-board">
     <section id="things-pending-list" aria-label="待完成" aria-live="polite">
-      <div className="reminders-list">{pending.length ? pending.map((reminder) => <ReminderCard reminder={reminder} key={reminder.id} members={state.members} onToggle={onToggle} onCancel={onCancel} onError={notify} />) : <p className="empty-note">{emptyNote}</p>}</div>
+      <div className="reminders-list">{pending.length ? pending.map((reminder) => <ReminderCard reminder={reminder} key={reminder.id} members={state.members} onToggle={onToggle} onCancel={onCancel} onDelete={onDelete} onError={notify} />) : <p className="empty-note">{emptyNote}</p>}</div>
     </section>
     <section aria-label="已完成">
       <div className="reminder-completed-divider"><h2><span className="reminder-title-lettering">已完成</span></h2></div>
       {completedDays.length ? completedDays.map((day) => <div className="reminder-day-group" key={day.key}>
         <h3 className="reminder-day-heading"><span className="reminder-day-date">{day.label}</span><span className="reminder-day-count">{day.reminders.length} 条</span></h3>
-        <div className="reminders-list">{day.reminders.map((reminder) => <ReminderCard reminder={reminder} key={reminder.id} members={state.members} onToggle={onToggle} onError={notify} />)}</div>
+        <div className="reminders-list">{day.reminders.map((reminder) => <ReminderCard reminder={reminder} key={reminder.id} members={state.members} onToggle={onToggle} onDelete={onDelete} onError={notify} />)}</div>
       </div>) : <p className="empty-note">还没有已完成的提醒。</p>}
     </section>
   </div>;

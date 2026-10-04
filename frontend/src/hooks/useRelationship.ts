@@ -5,7 +5,7 @@ import { assistantSettingsApi } from '../api/assistant-settings';
 import type { AISettings, Member, RelationshipState, Reminder } from '../types';
 
 /** Account profiles and the conversation's speaking style come from the server. */
-export function useRelationship(userId?: number, partnerId?: number, sessionId?: string) {
+export function useRelationship(userId?: number, partnerId?: number, sessionId?: string, username?: string) {
   const key = `${userId ?? ''}:${partnerId ?? ''}:${sessionId ?? ''}`;
   const scope = useRef(key);
   scope.current = key;
@@ -26,7 +26,7 @@ export function useRelationship(userId?: number, partnerId?: number, sessionId?:
         const id = member.id === 'self' ? userId : partnerId;
         const profile = profiles.find((item) => item.userId === id);
         // Never upload demo/local profiles or another account's cached facts.
-        return { ...member, userId: id, gender: profile?.gender ?? 'unspecified' as const,
+        return { ...member, userId: id, profileName: profile?.name || undefined, name: profile?.name || (member.id === 'self' ? username || member.name : member.name), gender: profile?.gender ?? 'unspecified' as const,
           birthday: profile?.birthday ?? '', hobbies: profile?.hobbies ?? [], bio: profile?.bio ?? '',
           region: profile?.region?.cityCode ? profile.region : undefined,
           avatar: profile?.avatar || (member.id === 'self' ? '/avatars/cream-cat.png' : '/avatars/peach-cat.png') };
@@ -37,7 +37,7 @@ export function useRelationship(userId?: number, partnerId?: number, sessionId?:
     } catch (error) {
       if (scope.current === key && requestId === sequence.current) setError(error instanceof Error ? error.message : '小档案暂时没加载出来，再试一次吧。');
     }
-  }, [key, userId, partnerId, sessionId]);
+  }, [key, userId, partnerId, sessionId, username]);
 
   useEffect(() => { setError(''); void reload(); const timer=setInterval(() => { void reload(); },30_000); const focus=()=>{void reload()}; window.addEventListener('focus',focus); return ()=>{clearInterval(timer);window.removeEventListener('focus',focus)}; }, [reload]);
 
@@ -46,7 +46,7 @@ export function useRelationship(userId?: number, partnerId?: number, sessionId?:
     const { profile } = await profileApi.save(member);
     if (scope.current !== key) return;
     setLoaded((current) => current?.key === key ? { ...current, state: { ...current.state,
-      members: current.state.members.map((item) => item.id === 'self' ? { ...item,
+      members: current.state.members.map((item) => item.id === 'self' ? { ...item, profileName: profile.name || undefined, name: profile.name || username || item.name,
         gender: profile.gender, birthday: profile.birthday, hobbies: profile.hobbies,
         region: profile.region?.cityCode ? profile.region : undefined,
         bio: profile.bio, avatar: profile.avatar || '/avatars/cream-cat.png' } : item),

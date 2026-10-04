@@ -44,10 +44,10 @@ const parseBirthday = (shown: string): string | null => {
   return iso <= today ? iso : null;
 };
 
-type RequiredField = 'gender' | 'birthday' | 'region';
+type RequiredField = 'name' | 'gender' | 'birthday' | 'region';
 
-export function MemberForm({ member, onSave, onSaved, submitLabel = '保存', required = false, notify }: { member: Member; onSave: Props['onSaveMember']; onSaved?: () => void; submitLabel?: string; required?: boolean; notify: Props['notify'] }) {
-  const [draft, setDraft] = useState({ gender: member.gender, hobbies: member.hobbies, region: member.region });
+export function MemberForm({ member, onSave, onSaved, submitLabel = '保存', required = false, showName = false, notify }: { member: Member; onSave: Props['onSaveMember']; onSaved?: () => void; submitLabel?: string; required?: boolean; showName?: boolean; notify: Props['notify'] }) {
+  const [draft, setDraft] = useState({ name: member.name, gender: member.gender, hobbies: member.hobbies, region: member.region });
   const [birthday, setBirthday] = useState(displayBirthday(member.birthday));
   const [regionValid, setRegionValid] = useState(true);
   const [hobby, setHobby] = useState('');
@@ -62,6 +62,7 @@ export function MemberForm({ member, onSave, onSaved, submitLabel = '保存', re
     event.preventDefault();
     const iso = parseBirthday(birthday);
     const hobbies = hobby.trim() && !draft.hobbies.includes(hobby.trim()) && draft.hobbies.length < 8 ? [...draft.hobbies, hobby.trim()] : draft.hobbies;
+    if (showName && !draft.name.trim()) { setFieldErrors((current) => ({ ...current, name: '请输入名称' })); return; }
     if (required) {
       const errors: Partial<Record<RequiredField, string>> = {};
       if (draft.gender !== 'male' && draft.gender !== 'female') errors.gender = '请选择性别';
@@ -74,12 +75,13 @@ export function MemberForm({ member, onSave, onSaved, submitLabel = '保存', re
     if (iso === null) { notify('生日还差几位，填成 YYYY.MM.DD 再保存。'); return; }
     if (!regionValid || draft.region && !draft.region.cityCode) { notify('选好城市和区／县，再保存吧。'); return; }
     setBusy(true);
-    try { await onSave({ ...member, ...draft, birthday: iso, hobbies }); setDraft({ ...draft, hobbies }); setHobby(''); notify('小档案收好啦，懂你又多一点点 ♡'); onSaved?.(); }
+    try { await onSave({ ...member, ...draft, name: draft.name.trim(), birthday: iso, hobbies }); setDraft({ ...draft, name: draft.name.trim(), hobbies }); setHobby(''); notify('小档案收好啦，懂你又多一点点 ♡'); onSaved?.(); }
     catch { notify('小档案还没存好，再试一次吧。'); }
     finally { setBusy(false); }
   };
   return <form className="detail-form" onSubmit={(event) => void submit(event)}>
     <fieldset className="form-fields" disabled={busy}>
+    {showName && <section className="form-card profile-card"><label className="field-label" htmlFor="member-name">名称</label><input className="line-input" id="member-name" value={draft.name} maxLength={24} autoComplete="nickname" aria-invalid={!!fieldErrors.name} onChange={(event) => { setDraft({ ...draft, name: event.target.value }); clearError('name'); }} />{fieldErrors.name && <p className="member-field-error" role="alert">{fieldErrors.name}</p>}</section>}
     <section className="form-card profile-card">
       <div className="field-label" id="member-gender-label"><span>性别 {required && <span className="field-required">必填</span>}</span></div><div className="gender-options" role="group" aria-labelledby="member-gender-label" aria-invalid={!!fieldErrors.gender}>{([{ value: 'male', label: '男' }, { value: 'female', label: '女' }] as const).map((option) => <button type="button" key={option.value} className={draft.gender === option.value ? 'selected' : ''} aria-pressed={draft.gender === option.value} onClick={() => { setDraft({ ...draft, gender: option.value }); clearError('gender'); }}>{option.label}</button>)}</div>{fieldErrors.gender && <p className="member-field-error" role="alert">{fieldErrors.gender}</p>}
       <label className="field-label spaced-label" htmlFor="birthday"><span>生日 {required && <span className="field-required">必填</span>}</span><Cake size={15} /></label><DatePicker id="birthday" title="选择生日" placeholder="" clearLabel={required ? undefined : '清空生日'} value={birthday} onChange={(value) => { setBirthday(value); clearError('birthday'); }} />{fieldErrors.birthday && <p className="member-field-error" role="alert">{fieldErrors.birthday}</p>}

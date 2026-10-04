@@ -323,6 +323,16 @@ func definitivelyRejected(err error) bool {
 	var e *qoder.ApiError
 	return errors.As(err, &e) && (e.Status == 400 || e.Status == 401 || e.Status == 403 || e.Status == 404 || e.Status == 409 || e.Status == 429 || e.Code == "not_configured")
 }
+
+func reminderDeletionRequested(text string) bool {
+	lower := strings.ToLower(text)
+	for _, verb := range []string{"删除", "删掉", "删了", "删去", "清空", "清除", "移除", "去掉", "抹掉", "delete", "remove", "erase"} {
+		if strings.Contains(lower, verb) {
+			return true
+		}
+	}
+	return false
+}
 func (s *Server) executeAction(ctx context.Context, j dbop.ControlJob, input conversation.Input, index int, a conversation.Action, space conversation.Context) conversation.ActionResult {
 	result := conversation.ActionResult{Key: a.Key, Type: a.Type, Status: "failed"}
 	fail := func(err error) conversation.ActionResult {
@@ -348,6 +358,46 @@ func (s *Server) executeAction(ctx context.Context, j dbop.ControlJob, input con
 	switch a.Type {
 	case "query_weather":
 		return s.executeWeatherQuery(ctx, j, input, a)
+	case "delete_reminders":
+		if !reminderDeletionRequested(input.Text) {
+			return fail(errors.New("original member request did not ask to delete reminders"))
+		}
+		filter := dbop.ReminderDeleteFilter{IDs: a.ReminderIDs, TitleContains: a.TitleContains, Date: a.Date, DateField: a.DateField, Statuses: a.Statuses, Mode: a.DeleteMode}
+		if a.DueFrom != "" {
+			value, err := time.Parse(time.RFC3339, a.DueFrom)
+			if err != nil {
+				return fail(err)
+			}
+			filter.DueFrom = &value
+		}
+		if a.DueBefore != "" {
+			value, err := time.Parse(time.RFC3339, a.DueBefore)
+			if err != nil {
+				return fail(err)
+			}
+			filter.DueBefore = &value
+		}
+		ids, err := s.DB.DeleteVisibleReminders(ctx, j.SessionID, input.UserID, j.ID+"/"+a.Key, filter)
+		if err != nil {
+			result.ErrorCode = "reminder_delete_failed"
+			switch {
+			case errors.Is(err, dbop.ErrReminderAmbiguous):
+				result.Message = "匹配到多条提醒，请说清楚是哪一条，或明确说全部删除。"
+			case errors.Is(err, dbop.ErrReminderNotFound):
+				result.Message = "没有找到符合条件的提醒，未删除任何卡片。"
+			case errors.Is(err, dbop.ErrReminderTooMany):
+				result.Message = "匹配超过200条提醒，请缩小日期或状态范围后分批删除。"
+			case errors.Is(err, dbop.ErrReminderState):
+				result.Message = "有提醒正在发送，暂时不能删除，请稍后重试。"
+			default:
+				result.Message = "提醒删除失败，请稍后重试。"
+			}
+			return result
+		}
+		s.wakeMemory()
+		result.ReminderIDs, result.DatabaseStatus, result.MemoryStatus, result.Status = ids, "deleted", "pending", "succeeded"
+		result.Message = "已从提醒列表删除，云端记忆正在同步。"
+		return result
 	case "set_region":
 		region := regions.Location{}
 		var err error

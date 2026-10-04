@@ -80,6 +80,10 @@ func (s *Server) handleReminders(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleReminderUpdate(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodDelete {
+		s.handleReminderDelete(w, r)
+		return
+	}
 	if r.Method != http.MethodPatch {
 		writeMethodNotAllowed(w)
 		return
@@ -187,6 +191,45 @@ func (s *Server) handleReminderUpdate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"reminder": reminder})
 }
 
+func (s *Server) handleReminderDelete(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !qoder.ValidSessionID(id) {
+		writeRouteNotFound(w)
+		return
+	}
+	if apiErr := s.ensureBoundSession(r.Context(), id); apiErr != nil {
+		writeError(w, apiErr)
+		return
+	}
+	unlock := s.lockConversation(id)
+	defer unlock()
+	if apiErr := s.ensureBoundSession(r.Context(), id); apiErr != nil {
+		writeError(w, apiErr)
+		return
+	}
+	reminderID := r.PathValue("reminderId")
+	visible, err := s.DB.VisibleReminder(r.Context(), id, reminderID, auth.UserIDFrom(r.Context()))
+	if err != nil || visible == nil || visible.Status == dbop.ReminderDeleted {
+		if err == nil {
+			err = dbop.ErrReminderNotFound
+		}
+		writeError(w, reminderAPIError(err))
+		return
+	}
+	var randomID [16]byte
+	if _, err := rand.Read(randomID[:]); err != nil {
+		writeError(w, err)
+		return
+	}
+	_, err = s.DB.DeleteVisibleReminders(r.Context(), id, auth.UserIDFrom(r.Context()), "manual_delete_"+hex.EncodeToString(randomID[:]), dbop.ReminderDeleteFilter{IDs: []string{reminderID}, Mode: "single"})
+	if err != nil {
+		writeError(w, reminderAPIError(err))
+		return
+	}
+	s.wakeMemory()
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func reminderAPIError(err error) error {
 	switch {
 	case errors.Is(err, dbop.ErrReminderNotFound):
@@ -197,6 +240,10 @@ func reminderAPIError(err error) error {
 		return qoder.NewApiError(409, "reminder_state", "提醒状态已经变化，请刷新提醒板后重试。")
 	case errors.Is(err, dbop.ErrReminderInvalid):
 		return qoder.NewApiError(400, "invalid_reminder", "提醒内容、时间或提醒对象无效。")
+	case errors.Is(err, dbop.ErrReminderAmbiguous):
+		return qoder.NewApiError(409, "reminder_ambiguous", "匹配到多条提醒，请说清楚要删除哪一条，或明确说全部删除。")
+	case errors.Is(err, dbop.ErrReminderTooMany):
+		return qoder.NewApiError(400, "too_many_reminders", "匹配的提醒超过200条，请缩小日期或状态范围后分批删除。")
 	default:
 		return err
 	}

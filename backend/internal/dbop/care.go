@@ -78,7 +78,11 @@ func careMembers(tx *gorm.DB, b Binding) ([]CareMember, error) {
 		if err := tx.Where("session_id=? AND user_id=? AND binding_created_at=?", b.SessionID, id, b.CreatedAt).First(&pref).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, err
 		}
-		out = append(out, CareMember{UserID: id, Name: u.Username, Region: p.Region, PreferenceKey: strings.Join(pref.Metrics, ",")})
+		name := p.Name
+		if name == "" {
+			name = u.Username
+		}
+		out = append(out, CareMember{UserID: id, Name: name, Region: p.Region, PreferenceKey: strings.Join(pref.Metrics, ",")})
 	}
 	return out, nil
 }

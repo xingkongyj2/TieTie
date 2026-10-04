@@ -72,7 +72,15 @@ func (s *Server) conversationContext(ctx context.Context, id string, authorID in
 		if user == nil {
 			return out, binding, errors.New("space member no longer exists")
 		}
-		out.Members = append(out.Members, conversation.Member{ID: user.ID, Name: user.Username})
+		profile, err := s.DB.GetUserProfile(ctx, user.ID)
+		if err != nil {
+			return out, binding, err
+		}
+		name := profile.Name
+		if name == "" {
+			name = user.Username
+		}
+		out.Members = append(out.Members, conversation.Member{ID: user.ID, Name: name})
 	}
 	reminders, err := s.DB.ListContextReminders(ctx, id)
 	if err != nil {
