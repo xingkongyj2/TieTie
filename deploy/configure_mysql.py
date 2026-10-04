@@ -125,7 +125,7 @@ def install_firewall(container, port, cidrs, interface):
     try:
         for cidr in cidrs:
             run("iptables", "-w", "-A", chain, "-s", cidr, "-j", "RETURN")
-        run("iptables", "-w", "-A", chain, "-j", "REJECT", "--reject-with", "tcp-reset")
+        run("iptables", "-w", "-A", chain, "-p", "tcp", "-j", "REJECT", "--reject-with", "tcp-reset")
         # Install before the port exists and before any existing ESTABLISHED rule.
         # Match host DNAT's original port, not an address changed by provider NAT.
         # Only external ingress is filtered; Docker bridge traffic is unaffected.
