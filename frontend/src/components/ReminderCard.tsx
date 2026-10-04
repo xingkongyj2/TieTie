@@ -42,6 +42,25 @@ export function ReminderCard({ reminder, members, onToggle, onCancel, onDelete, 
     setSwipeOffset(0);
     setDragging(false);
   }, [swipeWidth, showCancel, showDelete]);
+  useEffect(() => {
+    if (!swipeOpen) return;
+    const closeOutside = (event: Event) => {
+      if (!(event.target instanceof Node) || swipeRef.current?.contains(event.target)) return;
+      const gesture = gestureRef.current;
+      gestureRef.current = null;
+      if (gesture && swipeRef.current?.hasPointerCapture(gesture.pointerId)) swipeRef.current.releasePointerCapture(gesture.pointerId);
+      suppressClick.current = false;
+      setSwipeOpen(false);
+      setSwipeOffset(0);
+      setDragging(false);
+    };
+    document.addEventListener('pointerdown', closeOutside, true);
+    document.addEventListener('focusin', closeOutside);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside, true);
+      document.removeEventListener('focusin', closeOutside);
+    };
+  }, [swipeOpen]);
   const settleSwipe = (open: boolean) => {
     setSwipeOpen(open && hasSwipeActions);
     setSwipeOffset(open ? swipeWidth : 0);
@@ -101,7 +120,10 @@ export function ReminderCard({ reminder, members, onToggle, onCancel, onDelete, 
   return <div ref={swipeRef} className={`reminder-swipe${hasSwipeActions ? ' has-actions' : ''}${swipeOpen ? ' is-open' : ''}${dragging ? ' is-dragging' : ''}`} role="group" aria-label={`提醒：${reminder.title}`} tabIndex={hasSwipeActions ? busy ? -1 : 0 : undefined} aria-keyshortcuts={hasSwipeActions ? 'ArrowLeft ArrowRight Escape' : undefined}
     onPointerDown={startSwipe} onPointerMove={moveSwipe} onPointerUp={(event) => endSwipe(event)} onPointerCancel={(event) => endSwipe(event, true)} onLostPointerCapture={(event) => { if (event.target === event.currentTarget) endSwipe(event, true); }}
     onDragStart={(event) => { if (hasSwipeActions) event.preventDefault(); }}
-    onClickCapture={(event) => { if (suppressClick.current) { suppressClick.current = false; event.preventDefault(); event.stopPropagation(); } }}
+    onClickCapture={(event) => {
+      if (suppressClick.current) { suppressClick.current = false; event.preventDefault(); event.stopPropagation(); return; }
+      if (swipeOpen && event.target instanceof Element && !event.target.closest('.reminder-swipe-actions')) settleSwipe(false);
+    }}
     onKeyDown={(event) => {
       if (!hasSwipeActions || busy) return;
       if (event.key === 'ArrowLeft' && event.target === event.currentTarget) { event.preventDefault(); settleSwipe(true); }
