@@ -98,17 +98,22 @@ func (s *Server) attachControlReply(ctx context.Context, id string, input conver
 	return s.DB.CompleteControl(ctx, job.ID)
 }
 func (s *Server) runControl(ctx context.Context, j dbop.ControlJob) (workErr error) {
+	started := time.Now()
 	unlock := s.lockConversation(j.SessionID)
 	defer unlock()
+	logging.Scheduler().Info("开始处理系统动作", "event", "control.started", "session_id", j.SessionID, "request_id", j.RequestID,
+		"queue_age_ms", time.Since(j.CreatedAt).Milliseconds(), "lock_wait_ms", time.Since(started).Milliseconds())
 	attempted := false
 	done := false
+	retryAfter := 15 * time.Second
 	defer func() {
 		if !done {
 			save, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
-			_ = s.DB.RetryControl(save, j.ID, attempted)
+			_ = s.DB.RetryControl(save, j.ID, attempted, retryAfter)
 		}
 	}()
+	contextStarted := time.Now()
 	space, binding, err := s.conversationContext(ctx, j.SessionID, j.CreatedBy)
 	if err != nil {
 		return err
@@ -117,14 +122,24 @@ func (s *Server) runControl(ctx context.Context, j dbop.ControlJob) (workErr err
 		done = true
 		return s.DB.AbandonControl(ctx, j.ID)
 	}
+	contextDuration := time.Since(contextStarted)
+	historyStarted := time.Now()
 	history, err := s.Qoder.GetMessages(ctx, j.SessionID, "")
 	if err != nil {
 		return err
 	}
-	if !conversationIdle(history) {
+	idle := conversationIdle(history)
+	logging.Scheduler().Info("系统动作会话检查完成", "event", "control.readiness", "session_id", j.SessionID, "request_id", j.RequestID,
+		"context_ms", contextDuration.Milliseconds(), "history_ms", time.Since(historyStarted).Milliseconds(), "event_count", len(history.Events), "idle", idle)
+	if !idle {
+		// The control frame can precede its idle event by a few milliseconds.
+		// Retry that active turn promptly; idle tool waits keep the normal delay.
+		retryAfter = controlReadinessRetryDelay(history)
 		return nil
 	}
+	actionsStarted := time.Now()
 	var results []conversation.ActionResult
+	groundedRequest := false
 	if j.Results != "" {
 		if err := json.Unmarshal([]byte(j.Results), &results); err != nil {
 			return err
@@ -141,13 +156,21 @@ func (s *Server) runControl(ctx context.Context, j dbop.ControlJob) (workErr err
 		if len(actions) == 0 {
 			results = []conversation.ActionResult{{Key: "protocol", Type: "control", Status: "failed", ErrorCode: "invalid_control", Message: "AI 控制格式或请求关联无效，操作未执行，请重试。"}}
 		}
-		for index, a := range actions {
-			results = append(results, s.executeAction(ctx, j, input, index, a, space))
+		actions, groundedRequest, err = groundSingleReminderAction(actions, input, space)
+		if err != nil {
+			results = []conversation.ActionResult{{Key: "reminder_request", Type: "create_reminder", Status: "failed", ErrorCode: "invalid_reminder_request", Message: "你指定的提醒时间已过去，未创建提醒，请提供未来时间。"}}
+		} else {
+			for index, a := range actions {
+				results = append(results, s.executeAction(ctx, j, input, index, a, space))
+			}
 		}
 		if err := s.DB.SaveControlResults(ctx, j, results); err != nil {
 			return err
 		}
 	}
+	logging.Scheduler().Info("系统动作与记忆处理完成", "event", "control.actions_completed", "session_id", j.SessionID, "request_id", j.RequestID,
+		"actions", len(results), "action_ms", time.Since(actionsStarted).Milliseconds(), "reused_results", j.Results != "", "grounded_request", groundedRequest)
+	receiptStarted := time.Now()
 	frame := conversation.NewEnvelopeV2(space, "action_result", j.RequestID)
 	if input, ok := conversation.DecodeInput(j.Origin); ok {
 		frame.ReplyMode, frame.RecipientID = input.Context.ReplyMode, input.Context.RecipientID
@@ -201,8 +224,12 @@ func (s *Server) runControl(ctx context.Context, j dbop.ControlJob) (workErr err
 		return err
 	}
 	attempted = true
-	logging.Scheduler().Info("系统动作执行完成，向 AI 发送隐藏回执", "event", "control.receipt", "session_id", j.SessionID, "request_id", j.RequestID, "actions", len(results))
+	logging.Scheduler().Info("系统动作执行完成，向 AI 发送隐藏回执", "event", "control.receipt", "session_id", j.SessionID, "request_id", j.RequestID,
+		"actions", len(results), "receipt_prepare_ms", time.Since(receiptStarted).Milliseconds())
+	sendStarted := time.Now()
 	sent, err := s.Qoder.SendMessage(ctx, j.SessionID, qoder.MessageInput{Text: text})
+	logging.Scheduler().Info("系统动作回执发送结束", "event", "control.receipt_sent", "session_id", j.SessionID, "request_id", j.RequestID,
+		"post_ms", time.Since(sendStarted).Milliseconds(), "duration_ms", time.Since(started).Milliseconds(), "accepted", err == nil)
 	save, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
 	if err != nil {
@@ -227,6 +254,47 @@ func (s *Server) runControl(ctx context.Context, j dbop.ControlJob) (workErr err
 	done = true
 	return nil
 }
+
+func controlReadinessRetryDelay(history *qoder.MessagesResult) time.Duration {
+	if history != nil && history.Session != nil && strings.EqualFold(history.Session.Status, "running") {
+		return time.Second
+	}
+	return 15 * time.Second
+}
+
+// The complete member request is authoritative when it names exactly one
+// reminder and one model action. Keep the model's stable key and storage mode.
+func groundSingleReminderAction(actions []conversation.Action, input conversation.Input, space conversation.Context) ([]conversation.Action, bool, error) {
+	index, mutations := -1, 0
+	for i, action := range actions {
+		switch action.Type {
+		case "create_reminder":
+			index = i
+			mutations++
+		case "cancel_reminder", "complete_reminder":
+			mutations++
+		}
+	}
+	if index < 0 || mutations != 1 || input.Hidden {
+		return actions, false, nil
+	}
+	// Compact provenance may omit unchanged members. Use the current authorized
+	// space for identities, retaining the original request's clock and author.
+	space.Now, space.AuthorID = input.Context.Now, input.UserID
+	parsed, ok := conversation.ParseSingleReminder(input.Text, space)
+	if !ok {
+		return actions, false, nil
+	}
+	if !parsed.DueAt.After(input.Context.Now) {
+		return actions, false, dbop.ErrReminderInvalid
+	}
+	grounded := append([]conversation.Action(nil), actions...)
+	grounded[index].DueAt = parsed.DueAt.Format(time.RFC3339)
+	grounded[index].Title = parsed.Title
+	grounded[index].RecipientIDs = parsed.RecipientIDs
+	return grounded, true, nil
+}
+
 func conversationIdle(h *qoder.MessagesResult) bool {
 	if h.Session == nil || strings.ToLower(h.Session.Status) != "idle" {
 		return false
@@ -349,6 +417,8 @@ func (s *Server) executeAction(ctx context.Context, j dbop.ControlJob, input con
 			return fail(err)
 		}
 		result.ReminderID = reminder.ID
+		snapshot := protocolReminder(*reminder)
+		result.Reminder = &snapshot
 		result.DatabaseStatus = "saved"
 		memory, err = s.DB.GetReminderMemory(ctx, *reminder)
 		if err != nil {

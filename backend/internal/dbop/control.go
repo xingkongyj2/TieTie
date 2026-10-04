@@ -123,12 +123,15 @@ func (db *DB) CompleteControl(ctx context.Context, id string) error {
 	sanitized, _ := json.Marshal(results)
 	return db.gdb.WithContext(ctx).Model(&ControlJob{}).Where("id = ? AND status IN ?", id, []string{"awaiting_reply", "uncertain", "sending"}).Updates(map[string]any{"status": "completed", "origin": "", "actions": "", "results": string(sanitized)}).Error
 }
-func (db *DB) RetryControl(ctx context.Context, id string, uncertain bool) error {
+func (db *DB) RetryControl(ctx context.Context, id string, uncertain bool, retryAfter ...time.Duration) error {
 	status := "pending"
+	delay := 15 * time.Second
 	if uncertain {
 		status = "uncertain"
+	} else if len(retryAfter) > 0 && retryAfter[0] > 0 {
+		delay = retryAfter[0]
 	}
-	return db.gdb.WithContext(ctx).Model(&ControlJob{}).Where("id = ? AND status IN ?", id, []string{"executing", "sending"}).Updates(map[string]any{"status": status, "run_at": time.Now().Add(15 * time.Second).UTC()}).Error
+	return db.gdb.WithContext(ctx).Model(&ControlJob{}).Where("id = ? AND status IN ?", id, []string{"executing", "sending"}).Updates(map[string]any{"status": status, "run_at": time.Now().Add(delay).UTC()}).Error
 }
 func (db *DB) RecoverControls(ctx context.Context) error {
 	return db.gdb.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

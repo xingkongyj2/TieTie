@@ -231,8 +231,10 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request, id string) 
 		}
 	}
 	var protocolState *dbop.ConversationProtocol
+	operationRequestID := ""
 	if s.useV2() {
 		frame := conversation.NewEnvelopeV2(space, "user_message", conversation.RequestID(space))
+		operationRequestID = frame.RequestID
 		frame.Text = input.Text
 		input.Text, protocolState, err = s.prepareProtocolInput(r.Context(), frame)
 		if err != nil {
@@ -288,6 +290,9 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request, id string) 
 	}
 	result.Messages = acceptedMemberMessages(result.Messages)
 	result.ReplyMode = space.ReplyMode
+	if operationRequestID != "" {
+		result.Operation = &qoder.AcceptedOperation{SessionID: id, RequestID: operationRequestID}
+	}
 	s.recordMessages(r.Context(), id, result.Messages)
 	writeJSON(w, http.StatusOK, result)
 }

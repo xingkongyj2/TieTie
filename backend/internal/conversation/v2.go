@@ -142,6 +142,7 @@ type ActionResult struct {
 	Metrics        []string          `json:"metrics,omitempty"`
 	Countdown      *Countdown        `json:"countdown,omitempty"`
 	Anniversary    *Anniversary      `json:"anniversary,omitempty"`
+	Reminder       *Reminder         `json:"reminder,omitempty"`
 	Key            string            `json:"key"`
 	Type           string            `json:"type"`
 	Status         string            `json:"status"`

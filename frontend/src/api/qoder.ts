@@ -24,6 +24,23 @@ export interface CloudHistory {
   remindersError?: string | null
 }
 
+export interface CloudOperation {
+  sessionId: string
+  requestId: string
+}
+
+export interface CloudOperationStatus {
+  status: 'pending' | 'saved' | 'failed'
+  reminders: CloudReminder[]
+  message?: string
+}
+
+interface SendResult {
+  messages: Message[]
+  replyMode?: 'silent'
+  operation?: CloudOperation
+}
+
 export type CloudStreamEvent =
   | { type: 'start'; id: string; kind: 'thinking' | 'message' }
   | { type: 'delta'; id: string; text: string }
@@ -214,7 +231,11 @@ export const qoderApi = {
     const query = after ? `?${new URLSearchParams({ after })}` : ''
     return request(`${sessionPath(id)}${query}`, { signal, timeoutMs: 120_000, headers: careAfter ? { 'X-Tietie-Care-After': careAfter } : undefined })
   },
-  async sendMessage(id: string, text: string, files: File[] = [], visibility: 'shared' | 'private' = 'shared'): Promise<{ messages: Message[]; replyMode?: 'silent' }> {
+  getOperationStatus(operation: CloudOperation, signal?: AbortSignal): Promise<CloudOperationStatus> {
+    const query = new URLSearchParams({ requestId: operation.requestId })
+    return request(`/api/qoder/sessions/${encodeURIComponent(operation.sessionId)}/operation-status?${query}`, { signal, timeoutMs: 5_000 })
+  },
+  async sendMessage(id: string, text: string, files: File[] = [], visibility: 'shared' | 'private' = 'shared'): Promise<SendResult> {
     // Never tie a submitted turn to the current view's abort signal.
     validateAttachments(files)
     const attachments = await Promise.all(files.map(async (file) => {

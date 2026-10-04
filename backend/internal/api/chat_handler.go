@@ -11,6 +11,8 @@ import (
 	"unicode"
 
 	"tietie/backend/internal/auth"
+	"tietie/backend/internal/conversation"
+	"tietie/backend/internal/logging"
 	"tietie/backend/internal/qoder"
 )
 
@@ -113,12 +115,36 @@ func (s *Server) relayConversationStream(r *http.Request, w io.Writer, flusher h
 
 	frameID := ""
 	var dataLines []string
+	// Keep the exact server envelope from this ordered stream, including hidden
+	// action receipts. It supplies provenance without reloading old cloud events.
+	priorInput := ""
 	flushFrame := func() {
 		defer func() { frameID = ""; dataLines = nil }()
 		if len(dataLines) == 0 {
 			return
 		}
-		item := qoder.ParseStreamEvent([]byte(strings.Join(dataLines, "\n")))
+		data := []byte(strings.Join(dataLines, "\n"))
+		var event qoder.Event
+		if json.Unmarshal(data, &event) == nil && qoder.ValidEventID(event.ID) {
+			if event.Type == "user.message" || event.Type == "user.custom_tool_result" {
+				priorInput = eventText(event)
+			}
+			if event.Type == "agent.message" && conversation.ParseAssistant(eventText(event)).Control && streamOriginMatches(priorInput, sessionID, event) {
+				// Control envelopes have no public bubble, but must still enter the
+				// durable queue as soon as the model emits them.
+				unlock := s.lockConversation(sessionID)
+				if s.ensureConversationViewer(r.Context(), sessionID) == nil {
+					_, _, err := s.processConversationFrom(r.Context(), sessionID, &qoder.MessagesResult{Events: []qoder.Event{event}}, auth.UserIDFrom(r.Context()), priorInput)
+					if err != nil {
+						logging.Scheduler().Warn("实时控制消息暂未入队，后台同步将继续恢复", "event", "control.stream_failed", "session_id", sessionID, "source_event_id", event.ID, "error", err)
+					} else {
+						logging.Scheduler().Info("实时通道已处理 AI 控制消息", "event", "control.stream_received", "session_id", sessionID, "source_event_id", event.ID)
+					}
+				}
+				unlock()
+			}
+		}
+		item := qoder.ParseStreamEvent(data)
 		if item == nil {
 			return
 		}
@@ -135,9 +161,18 @@ func (s *Server) relayConversationStream(r *http.Request, w io.Writer, flusher h
 						unlock()
 						return
 					}
-					history, err := s.Qoder.GetMessages(r.Context(), sessionID, "")
-					if err == nil {
-						_, _, err = s.processConversation(r.Context(), sessionID, history, auth.UserIDFrom(r.Context()))
+					var history *qoder.MessagesResult
+					var err error
+					if streamOriginMatches(priorInput, sessionID, event) {
+						history = &qoder.MessagesResult{Events: []qoder.Event{event}, Messages: []qoder.PublicMessage{message}}
+						_, _, err = s.processConversationFrom(r.Context(), sessionID, history, auth.UserIDFrom(r.Context()), priorInput)
+					} else {
+						// Resuming halfway through a turn may omit its input envelope.
+						// Reconstruct provenance from full chronology in that case.
+						history, err = s.Qoder.GetMessages(r.Context(), sessionID, "")
+						if err == nil {
+							_, _, err = s.processConversation(r.Context(), sessionID, history, auth.UserIDFrom(r.Context()))
+						}
 					}
 					matched := false
 					if err == nil {
@@ -148,6 +183,7 @@ func (s *Server) relayConversationStream(r *http.Request, w io.Writer, flusher h
 								break
 							}
 						}
+						s.recordMessages(r.Context(), sessionID, history.Messages)
 					} else {
 						// Polling will recover; do not display unverified action results.
 						unlock()
@@ -214,4 +250,18 @@ func (s *Server) relayConversationStream(r *http.Request, w io.Writer, flusher h
 	if err := sc.Err(); err != nil && !isClientGone(err) {
 		log.Printf("SSE 上游流读取中断: %v", err)
 	}
+}
+
+// Fast verification is allowed only when the ordered stream contains the exact
+// server-owned input for this session and the V2 reply is correlated to its turn.
+func streamOriginMatches(priorInput, sessionID string, event qoder.Event) bool {
+	if event.Type != "agent.message" || !qoder.ValidEventID(event.ID) {
+		return false
+	}
+	input, ok := conversation.DecodeInput(priorInput)
+	if !ok || input.Context.SessionID != sessionID || input.Version != 2 {
+		return false
+	}
+	assistant := conversation.ParseAssistant(eventText(event))
+	return assistant.Version == 2 && assistant.RequestID == input.RequestID
 }

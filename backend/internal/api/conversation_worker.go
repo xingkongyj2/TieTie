@@ -85,7 +85,11 @@ func (s *Server) RunConversationWorker(ctx context.Context) {
 		Work: func(jobCtx context.Context, reminder dbop.Reminder) error {
 			return run(jobCtx, func() error { return s.dispatchReminder(jobCtx, reminder) })
 		}, OnError: report}
-	syncs := scheduler.Worker[dbop.ConversationJob]{Options: options, Claim: s.DB.ClaimConversationSync, Wake: s.conversationWake,
+	syncOptions := options.Normalized()
+	if syncOptions.PollInterval > time.Second {
+		syncOptions.PollInterval = time.Second
+	}
+	syncs := scheduler.Worker[dbop.ConversationJob]{Options: syncOptions, Claim: s.DB.ClaimConversationSync, Wake: s.conversationWake,
 		Work: func(jobCtx context.Context, job dbop.ConversationJob) error {
 			return run(jobCtx, func() error { return s.syncConversationJob(jobCtx, job) })
 		}, OnError: report}
@@ -130,7 +134,7 @@ func (s *Server) RunConversationWorker(ctx context.Context) {
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
-			w := scheduler.Worker[dbop.ControlJob]{Options: options, Claim: s.DB.ClaimControls, Wake: s.controlWake, Work: func(c context.Context, j dbop.ControlJob) error {
+			w := scheduler.Worker[dbop.ControlJob]{Options: syncOptions, Claim: s.DB.ClaimControls, Wake: s.controlWake, Work: func(c context.Context, j dbop.ControlJob) error {
 				return run(c, func() error { return s.runControl(c, j) })
 			}, OnError: report}
 			w.Run(ctx)
@@ -169,6 +173,9 @@ func (s *Server) syncConversationJob(ctx context.Context, job dbop.ConversationJ
 	finished := false
 	defer func() {
 		next := time.Now().Add(5 * time.Second)
+		if time.Since(job.PendingSince) < 30*time.Second {
+			next = time.Now().Add(time.Second)
+		}
 		if time.Since(job.PendingSince) > 5*time.Minute {
 			next = time.Now().Add(time.Minute)
 		}

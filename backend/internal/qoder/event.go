@@ -35,9 +35,17 @@ type MessageInput struct {
 
 // SendResult 对应 POST /api/qoder/sessions/:id/messages 的响应体。
 type SendResult struct {
-	ReplyMode string          `json:"replyMode,omitempty"`
-	Messages  []PublicMessage `json:"messages"`
-	Events    []Event         `json:"-"`
+	ReplyMode string             `json:"replyMode,omitempty"`
+	Messages  []PublicMessage    `json:"messages"`
+	Events    []Event            `json:"-"`
+	Operation *AcceptedOperation `json:"operation,omitempty"`
+}
+
+// AcceptedOperation identifies a server-issued turn whose durable results may
+// be available before the assistant finishes its confirmation reply.
+type AcceptedOperation struct {
+	SessionID string `json:"sessionId"`
+	RequestID string `json:"requestId"`
 }
 
 // SendMessage 发送一条用户消息：document 先抽文本，file 上传并挂载，image 内联 base64。

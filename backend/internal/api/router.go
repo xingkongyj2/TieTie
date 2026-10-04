@@ -54,6 +54,7 @@ func NewRouter(s *Server) http.Handler {
 	mux.Handle("/api/account/unbind", authed(s.handleUnbind))
 	mux.Handle("/api/qoder/sessions/{id}/messages", authed(s.handleMessages))
 	mux.Handle("GET /api/qoder/sessions/{id}/message-preview", authed(s.handleMessagePreview))
+	mux.Handle("GET /api/qoder/sessions/{id}/operation-status", authed(s.handleOperationStatus))
 	mux.Handle("GET /api/qoder/sessions/{id}/memories", authed(s.handleMemoryIndex))
 	mux.Handle("/api/qoder/sessions/{id}/partner-impression", authed(s.handlePartnerImpression))
 	mux.Handle("/api/qoder/sessions/{id}/assistant-settings", authed(s.handleAssistantSettings))
