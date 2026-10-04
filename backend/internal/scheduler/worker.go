@@ -38,6 +38,7 @@ type Worker[T any] struct {
 	Claim   func(context.Context, time.Time, int) ([]T, error)
 	Work    func(context.Context, T) error
 	OnError func(error)
+	Wake    <-chan struct{}
 }
 
 // maxIdleBackoff 是空转时轮询间隔最多放宽到几倍。
@@ -46,6 +47,7 @@ const maxIdleBackoff = 2
 func (worker Worker[T]) Run(ctx context.Context) {
 	options := worker.Options.Normalized()
 	idle := 0
+	wake := worker.Wake
 	for ctx.Err() == nil {
 		count := worker.RunOnce(ctx, time.Now())
 		if count == options.BatchSize {
@@ -63,6 +65,13 @@ func (worker Worker[T]) Run(ctx context.Context) {
 		case <-ctx.Done():
 			timer.Stop()
 			return
+		case _, ok := <-wake:
+			timer.Stop()
+			if ok {
+				idle = 0
+			} else {
+				wake = nil
+			}
 		case <-timer.C:
 		}
 	}

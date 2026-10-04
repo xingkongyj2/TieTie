@@ -19,14 +19,18 @@ import (
 
 // Server 聚合全部 handler 依赖。
 type Server struct {
-	Cfg          *config.Config
-	Qoder        *qoder.Client
-	Auth         *auth.Service
-	DB           *dbop.DB // 可为 nil：未配置数据库时账号类接口返回 503
-	Weather      weather.Provider
-	weatherOnce  sync.Once
-	locksMu      sync.Mutex
-	sessionLocks map[string]*conversationLock
+	Cfg              *config.Config
+	Qoder            *qoder.Client
+	Auth             *auth.Service
+	DB               *dbop.DB // 可为 nil：未配置数据库时账号类接口返回 503
+	Weather          weather.Provider
+	weatherOnce      sync.Once
+	locksMu          sync.Mutex
+	sessionLocks     map[string]*conversationLock
+	wakeOnce         sync.Once
+	conversationWake chan struct{}
+	controlWake      chan struct{}
+	memoryWake       chan struct{}
 }
 
 // NewRouter 是全后端唯一的路由注册点。

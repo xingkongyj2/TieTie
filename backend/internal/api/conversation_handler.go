@@ -469,7 +469,9 @@ func conversationFinishedFrom(result *qoder.MessagesResult, since time.Time, pri
 			inputText = eventText(result.Events[lastInput])
 		}
 		input, decoded := conversation.DecodeInput(inputText)
-		if !decoded || input.Context.Now.Before(since) {
+		// MySQL DATETIME(6) rounds the persisted pending_since to microseconds.
+		// The protocol timestamp retains nanoseconds, so allow that one-unit gap.
+		if !decoded || input.Context.Now.Add(time.Microsecond).Before(since) {
 			return false
 		}
 	}

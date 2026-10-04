@@ -57,6 +57,7 @@ func (s *Server) acceptControlEvent(ctx context.Context, id string, binding *dbo
 	if err := s.DB.EnqueueControl(ctx, id, origin.RequestID, "\n<TIETIE_INPUT_V2>\n"+string(encoded)+"\n</TIETIE_INPUT_V2>", event.ID, a.Actions, origin.UserID, binding.CreatedAt); err != nil {
 		return err
 	}
+	s.wakeControl()
 	controls[origin.RequestID] = nil // 详情未知：同轮再出现不重复插入，需要内容时回源查一次
 	return nil
 }
@@ -222,6 +223,7 @@ func (s *Server) runControl(ctx context.Context, j dbop.ControlJob) (workErr err
 	if err := s.DB.AcceptControlReceipt(save, j.ID, ids); err != nil {
 		return err
 	}
+	s.wakeConversation()
 	done = true
 	return nil
 }
@@ -476,7 +478,9 @@ func (s *Server) executeAction(ctx context.Context, j dbop.ControlJob, input con
 		return fail(errors.New("missing memory outbox"))
 	}
 	result.MemoryKey = memory.ID
-	if err := s.syncMemoryLocked(ctx, *memory); err != nil {
+	syncErr := s.syncMemoryLocked(ctx, *memory)
+	s.wakeMemory()
+	if syncErr != nil {
 		result.Status = "partial"
 		result.MemoryStatus = "pending"
 		result.Message = "后台操作已记录，云端记忆暂未同步成功，系统会继续重试。"

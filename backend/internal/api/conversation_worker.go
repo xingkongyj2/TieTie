@@ -21,6 +21,7 @@ func (s *Server) RunConversationWorker(ctx context.Context) {
 	if s.DB == nil || s.Qoder == nil {
 		return
 	}
+	s.initQueueWakes()
 	recovered, err := s.DB.RecoverReminderDispatches(ctx)
 	if err != nil {
 		logging.Scheduler().Error("恢复提醒队列失败", "event", "scheduler.recovery_failed", "error", err)
@@ -84,7 +85,7 @@ func (s *Server) RunConversationWorker(ctx context.Context) {
 		Work: func(jobCtx context.Context, reminder dbop.Reminder) error {
 			return run(jobCtx, func() error { return s.dispatchReminder(jobCtx, reminder) })
 		}, OnError: report}
-	syncs := scheduler.Worker[dbop.ConversationJob]{Options: options, Claim: s.DB.ClaimConversationSync,
+	syncs := scheduler.Worker[dbop.ConversationJob]{Options: options, Claim: s.DB.ClaimConversationSync, Wake: s.conversationWake,
 		Work: func(jobCtx context.Context, job dbop.ConversationJob) error {
 			return run(jobCtx, func() error { return s.syncConversationJob(jobCtx, job) })
 		}, OnError: report}
@@ -129,7 +130,7 @@ func (s *Server) RunConversationWorker(ctx context.Context) {
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
-			w := scheduler.Worker[dbop.ControlJob]{Options: options, Claim: s.DB.ClaimControls, Work: func(c context.Context, j dbop.ControlJob) error {
+			w := scheduler.Worker[dbop.ControlJob]{Options: options, Claim: s.DB.ClaimControls, Wake: s.controlWake, Work: func(c context.Context, j dbop.ControlJob) error {
 				return run(c, func() error { return s.runControl(c, j) })
 			}, OnError: report}
 			w.Run(ctx)
@@ -139,7 +140,7 @@ func (s *Server) RunConversationWorker(ctx context.Context) {
 		workers.Add(1)
 		go func() {
 			defer workers.Done()
-			w := scheduler.Worker[dbop.MemoryRecord]{Options: options, Claim: s.DB.ClaimMemorySync, Work: func(c context.Context, j dbop.MemoryRecord) error {
+			w := scheduler.Worker[dbop.MemoryRecord]{Options: options, Claim: s.DB.ClaimMemorySync, Wake: s.memoryWake, Work: func(c context.Context, j dbop.MemoryRecord) error {
 				return run(c, func() error { return s.runMemorySync(c, j) })
 			}, OnError: report}
 			w.Run(ctx)
@@ -323,7 +324,11 @@ func (s *Server) dispatchReminder(ctx context.Context, reminder dbop.Reminder) (
 	}
 	s.acceptProtocolInput(saveCtx, protocolState)
 	logging.Scheduler().Info("云端已接受到期事件，等待 AI 实际提醒回复", "event", "reminder.accepted", "reminder_id", reminder.ID, "event_ids", ids)
-	return s.DB.RecordReminderDispatch(saveCtx, reminder.ID, ids)
+	if err := s.DB.RecordReminderDispatch(saveCtx, reminder.ID, ids); err != nil {
+		return err
+	}
+	s.wakeConversation()
+	return nil
 }
 
 // Heartbeats use one ordered-index lookup, never scan the user table or count

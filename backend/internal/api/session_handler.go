@@ -260,6 +260,7 @@ func (s *Server) postMessage(w http.ResponseWriter, r *http.Request, id string) 
 	}
 	logging.System().Info("成员消息已被 AI 接受，后台开始跟踪回复", "event", "conversation.accepted", "session_id", id, "user_id", space.AuthorID)
 	s.acceptProtocolInput(r.Context(), protocolState)
+	s.wakeConversation()
 	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
 	defer cancel()
 	var direct *dbop.Reminder
@@ -369,6 +370,7 @@ func (s *Server) handleToolResult(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.acceptProtocolInput(r.Context(), protocolState)
+	s.wakeConversation()
 	for index := range result.Messages {
 		mapMessageViewer(&result.Messages[index], space, space.AuthorID)
 	}

@@ -72,6 +72,7 @@ func (s *Server) handleReminders(w http.ResponseWriter, r *http.Request) {
 			writeError(w, reminderAPIError(err))
 			return
 		}
+		s.wakeMemory()
 		writeJSON(w, http.StatusCreated, map[string]any{"reminder": reminder})
 	default:
 		writeMethodNotAllowed(w)
@@ -160,6 +161,10 @@ func (s *Server) handleReminderUpdate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, reminderAPIError(err))
 		return
+	}
+	s.wakeMemory()
+	if s.useV2() && (body.Status == dbop.ReminderCompleted || body.Status == dbop.ReminderCancelled) {
+		s.wakeControl()
 	}
 	reminder.SessionID = id
 	if reminder.MemorySessionID != "" {
