@@ -75,19 +75,22 @@
 .things-page .reminder-card { position: relative; padding: 18px 18px 15px; border: 0; border-radius: 24px; background: #f7f8fa; }
 .things-page .reminder-main { align-items: flex-start; gap: 12px; }
 .things-page .reminder-main > div { min-width: 0; flex: 1; }
-.things-page .reminder-title-row { flex-direction: column-reverse; align-items: flex-start; gap: 9px; margin-bottom: 8px; }
+.things-page .reminder-title-row { flex-direction: row; align-items: baseline; gap: 7px; margin-bottom: 8px; }
 .things-page .reminder-main h3 { font-size: 14px; font-weight: 550; line-height: 1.65; color: #202b40; }
 .things-page .reminder-main p { color: #75859e; font-size: 11px; line-height: 1.5; }
 .things-page .reminder-main p.reminder-recurrence { display: flex; align-items: center; gap: 5px; margin-top: 5px; color: #6288bf; }
+.things-page .reminder-recurrence-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px 8px; }
+.things-page .reminder-recurrence-row .reminder-cancel { padding: 2px 5px; color: #7184a0; font-size: 10px; }
 .things-page .reminder-check { margin: 12px -3px 0 0; width: 44px; height: 44px; border: none; border-radius: 14px; background: #fff; color: #2864ef; }
 .things-page .reminder-check::before { position: absolute; inset: 11px; border: 1.5px solid #99b4db; border-radius: 7px; pointer-events: none; }
-.things-page .reminder-check:hover { background: #e2edff; }
+.things-page button.reminder-check:hover { background: #e2edff; }
 .things-page .reminder-footer { margin-top: 10px; padding-top: 0; border-top: 0; font-size: 10px; color: #75859e; }
 .things-page .reminder-footer .avatar-tiny { width: 24px; height: 24px; }
 .things-page .is-completed { background: #fafafa; }
 .things-page .is-completed .reminder-main h3 { color: #202b40; }
 .things-page .is-completed .reminder-check { background: #e2ecfd; color: #5c88cf; }
 .things-page .is-completed .reminder-check::before { display: none; }
+.things-page .reminder-check.is-readonly { background: #eceff2; color: #9aa3ae; cursor: default; }
 .things-page .reminder-check.is-cancelled-mark { background: #fff1cc; color: #a7791e; }
 .things-page .reminder-check.is-cancelled-mark::before { display: none; }
 .things-page .reminder-completed-divider { justify-content: flex-start; gap: 0; min-height: 44px; margin: 24px 2px 12px; }

@@ -392,7 +392,7 @@ func completeReminder(tx *gorm.DB, sessionID, id string, userID int64) (*Reminde
 	return &reminder, true, nil
 }
 
-// RestoreCompletedReminder 只恢复尚未到期的提醒，避免把已触发过的任务再次投递。
+// RestoreCompletedReminder restores a manually completed reminder. Delivered reminders stay locked.
 func (db *DB) RestoreCompletedReminder(ctx context.Context, sessionID, id string, userID int64) (*Reminder, error) {
 	if !db.enabled() {
 		return nil, errNoDB
@@ -447,10 +447,11 @@ func restoreCompletedReminder(tx *gorm.DB, sessionID, id string, userID int64) (
 	if !slices.Contains(reminder.RecipientIDs, userID) {
 		return nil, ErrReminderForbidden
 	}
-	if reminder.Status != ReminderCompleted || !reminder.DueAt.After(time.Now()) || reminder.hasCompletedDelivery() {
+	if reminder.Status != ReminderCompleted || reminder.hasCompletedDelivery() {
 		return nil, ErrReminderState
 	}
-	if reminder.SeriesID != "" {
+	overdue := !reminder.DueAt.After(time.Now())
+	if reminder.SeriesID != "" && !overdue {
 		var next Reminder
 		err := tx.Where("series_id=? AND occurrence=?", reminder.SeriesID, reminder.Occurrence+1).First(&next).Error
 		if err == nil {
@@ -468,15 +469,20 @@ func restoreCompletedReminder(tx *gorm.DB, sessionID, id string, userID int64) (
 			return nil, err
 		}
 	}
+	taskStatus := "pending"
+	if overdue {
+		// Keep an overdue item available for manual completion without sending a late reminder.
+		taskStatus = "manual_pending"
+	}
 	result := tx.Model(&Reminder{}).Where("id = ? AND status = ?", id, ReminderCompleted).
-		Updates(map[string]any{"status": ReminderScheduled, "completed_by": nil, "run_at": reminder.DueAt, "task_status": "pending"})
+		Updates(map[string]any{"status": ReminderScheduled, "completed_by": nil, "run_at": reminder.DueAt, "task_status": taskStatus})
 	if result.Error != nil {
 		return nil, result.Error
 	}
 	if result.RowsAffected != 1 {
 		return nil, ErrReminderState
 	}
-	reminder.Status, reminder.CompletedBy, reminder.TaskStatus = ReminderScheduled, nil, "pending"
+	reminder.Status, reminder.CompletedBy, reminder.TaskStatus, reminder.RunAt = ReminderScheduled, nil, taskStatus, reminder.DueAt
 	if err := syncReminderMemory(tx, &reminder); err != nil {
 		return nil, err
 	}
@@ -518,10 +524,10 @@ func (db *DB) ClaimDueReminder(ctx context.Context, now time.Time) (*Reminder, e
 // ClaimDueReminders 只领已建索引的到期任务，且每个空间最多一条。
 // 候选判断和状态改写放在同一把领取锁里，避免两个 worker 同时看到"该空间没有投递中的任务"。
 const dueReminderIDs = `SELECT r.id FROM reminders r FORCE INDEX (idx_reminders_ready)
-WHERE r.status = ? AND r.run_at <= ?
+WHERE r.status = ? AND r.task_status = 'pending' AND r.run_at <= ?
 AND (EXISTS(SELECT 1 FROM bindings b WHERE b.session_id=r.session_id AND b.created_at=r.binding_created_at) OR EXISTS(SELECT 1 FROM private_channels p JOIN bindings b ON b.session_id=p.space_id AND b.created_at=p.binding_created_at WHERE p.session_id=r.session_id AND b.created_at=r.binding_created_at))
 AND NOT EXISTS (SELECT 1 FROM reminders pending WHERE pending.session_id = r.session_id AND pending.status = ?)
-AND NOT EXISTS (SELECT 1 FROM reminders earlier WHERE earlier.session_id = r.session_id AND earlier.status = ?
+AND NOT EXISTS (SELECT 1 FROM reminders earlier WHERE earlier.session_id = r.session_id AND earlier.status = ? AND earlier.task_status = 'pending'
 AND earlier.binding_created_at = r.binding_created_at
 AND (earlier.run_at < r.run_at OR (earlier.run_at = r.run_at AND earlier.id < r.id)))
 ORDER BY r.run_at ASC, r.id ASC LIMIT ?`
@@ -544,7 +550,7 @@ func (db *DB) ClaimDueReminders(ctx context.Context, now time.Time, limit int) (
 		}
 		// 领取写入保持原 RETURNING 语句的列集合：走 GORM 的 Updates 会顺带刷新自动更新时间列。
 		if err := tx.Exec(`UPDATE reminders SET status = ?, task_status = 'running', attempts = attempts + 1, updated_at = ?
-WHERE id IN (?) AND status = ?`, ReminderDispatching, now.UTC(), ids, ReminderScheduled).Error; err != nil {
+WHERE id IN (?) AND status = ? AND task_status = 'pending'`, ReminderDispatching, now.UTC(), ids, ReminderScheduled).Error; err != nil {
 			return err
 		}
 		// 只回读本事务真正改成投递中的行，避免把领取间隙里被改走状态的提醒也交给 worker。

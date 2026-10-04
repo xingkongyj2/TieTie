@@ -38,9 +38,9 @@ export function canCancelReminder(reminder: Lifecycle): boolean {
 }
 
 export function canToggleReminder(reminder: Reminder): boolean {
-  if (!reminder.status) return true;
   if (reminderPhase(reminder) === 'cancelled' || hasCompletedDelivery(reminder)) return false;
-  if (reminder.status === 'completed') return !!reminder.time && Date.parse(reminder.time) > Date.now();
+  if (!reminder.status) return true;
+  if (reminder.status === 'completed') return true;
   return ['scheduled', 'uncertain'].includes(reminder.status);
 }
 
@@ -48,7 +48,7 @@ export function reminderStatusText(reminder: Lifecycle): string {
   const phase = reminderPhase(reminder);
   if (phase === 'cancelled') return '已取消';
   if (phase === 'completed') return hasCompletedDelivery(reminder) ? '已提醒' : '已完成';
-  return reminder.status ? { scheduled: '待提醒', dispatching: '正在提醒', failed: '提醒失败', uncertain: '提醒状态待确认', delivered: '', completed: '', cancelled: '' }[reminder.status] : '';
+  return reminder.status ? { scheduled: '', dispatching: '正在提醒', failed: '提醒失败', uncertain: '提醒状态待确认', delivered: '', completed: '', cancelled: '' }[reminder.status] : '';
 }
 
 export function reminderRecurrenceText(recurrence?: ReminderRecurrence): string {

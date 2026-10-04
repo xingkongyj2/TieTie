@@ -63,7 +63,7 @@ func (db *DB) NextScheduledReminder(ctx context.Context) (*Reminder, error) {
 		return nil, errNoDB
 	}
 	var r Reminder
-	err := db.gdb.WithContext(ctx).Where("status = ?", ReminderScheduled).Order("run_at ASC, id ASC").First(&r).Error
+	err := db.gdb.WithContext(ctx).Where("status = ? AND task_status = ?", ReminderScheduled, "pending").Order("run_at ASC, id ASC").First(&r).Error
 	return firstOrNil(&r, err)
 }
 
