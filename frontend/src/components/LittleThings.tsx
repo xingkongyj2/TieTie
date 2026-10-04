@@ -1,3 +1,4 @@
+import { ArrowRight, Bell } from 'lucide-react'
 import { useState } from 'react'
 import type { RelationshipState } from '../types'
 import { ReminderBoard } from './Tools'
@@ -7,6 +8,7 @@ import { SpaceBuddy } from './SpaceBuddies'
 import { reminderPhase } from '../lib/reminders'
 import { Countdowns } from './Countdowns'
 import { CareWithAnniversary } from './CareModes'
+import { EmptyTabState } from './EmptyTabState'
 import './LittleThings.css'
 
 interface Props {
@@ -25,7 +27,7 @@ interface Props {
   notify: (text: string) => void
 }
 
-export function LittleThings({ sessionId, selfId, onEditRegion, state, anniversaries, reminderState = state, onToggle, onCancel, reminderNotice, remindersLoading, onReloadReminders, notify }: Props) {
+export function LittleThings({ sessionId, selfId, onEditRegion, onBind, state, anniversaries, reminderState = state, onToggle, onCancel, reminderNotice, remindersLoading, onReloadReminders, notify }: Props) {
   const [activeTab, setActiveTab] = useState<'care' | 'reminders' | 'anniversary' | 'countdown'>('reminders')
   const [activeFilter, setActiveFilter] = useState<'both' | 'self' | 'partner' | null>(null)
   const pendingReminders = reminderState.reminders.filter((reminder) => reminderPhase(reminder) === 'pending')
@@ -55,8 +57,14 @@ export function LittleThings({ sessionId, selfId, onEditRegion, state, anniversa
           </div>
         </div>
       </header>
-    <div className="tab-page-scroll things-scroll">
-      <section role="tabpanel" id="things-reminders-panel" aria-labelledby="things-reminders-tab" className="things-tab-panel" hidden={activeTab !== 'reminders'}>
+    <div className={`tab-page-scroll things-scroll${!sessionId && activeTab === 'reminders' ? ' is-unbound' : ''}`}>
+      <section role="tabpanel" id="things-reminders-panel" aria-labelledby="things-reminders-tab" className={`things-tab-panel${!sessionId ? ' is-unbound' : ''}`} hidden={activeTab !== 'reminders'}>
+        {!sessionId ? <div className="things-unbound">
+          <span className="things-unbound-icon"><Bell size={25} strokeWidth={1.7} aria-hidden="true" /></span>
+          <h2>一起记下要紧的事</h2>
+          <p>绑定两人空间后，提醒会在这里清楚地排好。</p>
+          <button type="button" className="primary-button" onClick={onBind}>去绑定 <ArrowRight size={16} aria-hidden="true" /></button>
+        </div> : <>
         <section className="things-hero" aria-label="待办概览">
           <div className="things-hero-top">
             <div className="things-hero-copy">
@@ -88,10 +96,11 @@ export function LittleThings({ sessionId, selfId, onEditRegion, state, anniversa
         <div className="things-section-heading"><h2><span className="reminder-title-lettering">待完成</span></h2></div>
         {reminderNotice && <div className="cloud-error" role="alert"><span>{reminderNotice}</span>{onReloadReminders && <button disabled={remindersLoading} onClick={() => void onReloadReminders()}>刷新</button>}</div>}
         {remindersLoading && !reminderState.reminders.length ? <p className="empty-note" role="status">正在同步共享提醒…</p> : <ReminderBoard state={reminderState} pendingAssignee={activeFilter} onToggle={onToggle} onCancel={onCancel} notify={notify} />}
+        </>}
       </section>
       <section role="tabpanel" id="things-countdown-panel" aria-labelledby="things-countdown-tab" className="things-tab-panel" hidden={activeTab !== 'countdown'}>{activeTab === 'countdown' && <Countdowns sessionId={sessionId} />}</section>
       <section role="tabpanel" id="things-anniversary-panel" aria-labelledby="things-anniversary-tab" className="things-tab-panel" hidden={activeTab !== 'anniversary'}>
-        <Anniversaries state={anniversaries} notify={notify} />
+        {sessionId ? <Anniversaries state={anniversaries} notify={notify} /> : activeTab === 'anniversary' && <EmptyTabState kind="anniversary" title="还没有纪念日" example="我们是 2025 年 5 月 20 日在一起的" />}
       </section>
       <section role="tabpanel" id="things-care-panel" aria-labelledby="things-care-tab" className="things-tab-panel" hidden={activeTab !== 'care'}>
         {activeTab === 'care' && <CareWithAnniversary key={sessionId ?? 'unbound'} sessionId={sessionId} selfId={selfId} onEditRegion={onEditRegion} notify={notify} />}

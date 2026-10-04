@@ -153,6 +153,11 @@ func (s *Server) relayConversationStream(r *http.Request, w io.Writer, flusher h
 		if item["type"] == "delta" {
 			return
 		}
+		if item["type"] == "start" {
+			if kind := proactiveStreamKind(priorInput, sessionID); kind != "" {
+				item["proactive"] = kind
+			}
+		}
 		if item["type"] == "message" {
 			if message, ok := item["message"].(qoder.PublicMessage); ok {
 				if message.Sender == "ai" {
@@ -264,4 +269,18 @@ func streamOriginMatches(priorInput, sessionID string, event qoder.Event) bool {
 	}
 	assistant := conversation.ParseAssistant(eventText(event))
 	return assistant.Version == 2 && assistant.RequestID == input.RequestID
+}
+
+func proactiveStreamKind(priorInput, sessionID string) string {
+	origin, ok := conversation.DecodeInput(priorInput)
+	if !ok || origin.Context.SessionID != sessionID {
+		return ""
+	}
+	if origin.Kind == "reminder_due" && origin.Reminder != nil {
+		return "reminder"
+	}
+	if manualReminderNotice(origin) {
+		return "update"
+	}
+	return ""
 }

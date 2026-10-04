@@ -44,12 +44,16 @@ const parseBirthday = (shown: string): string | null => {
   return iso <= today ? iso : null;
 };
 
-export function MemberForm({ member, onSave, onSaved, submitLabel = '保存', notify }: { member: Member; onSave: Props['onSaveMember']; onSaved?: () => void; submitLabel?: string; notify: Props['notify'] }) {
+type RequiredField = 'gender' | 'birthday' | 'region';
+
+export function MemberForm({ member, onSave, onSaved, submitLabel = '保存', required = false, notify }: { member: Member; onSave: Props['onSaveMember']; onSaved?: () => void; submitLabel?: string; required?: boolean; notify: Props['notify'] }) {
   const [draft, setDraft] = useState({ gender: member.gender, hobbies: member.hobbies, region: member.region });
   const [birthday, setBirthday] = useState(displayBirthday(member.birthday));
   const [regionValid, setRegionValid] = useState(true);
   const [hobby, setHobby] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<RequiredField, string>>>({});
   const [busy, setBusy] = useState(false);
+  const clearError = (field: RequiredField) => setFieldErrors((current) => ({ ...current, [field]: undefined }));
   const addHobby = () => {
     const value = hobby.trim();
     if (value && !draft.hobbies.includes(value) && draft.hobbies.length < 8) { setDraft({ ...draft, hobbies: [...draft.hobbies, value] }); setHobby(''); }
@@ -57,10 +61,19 @@ export function MemberForm({ member, onSave, onSaved, submitLabel = '保存', no
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const iso = parseBirthday(birthday);
+    const hobbies = hobby.trim() && !draft.hobbies.includes(hobby.trim()) && draft.hobbies.length < 8 ? [...draft.hobbies, hobby.trim()] : draft.hobbies;
+    if (required) {
+      const errors: Partial<Record<RequiredField, string>> = {};
+      if (draft.gender !== 'male' && draft.gender !== 'female') errors.gender = '请选择性别';
+      if (!birthday) errors.birthday = '请选择生日';
+      else if (iso === null) errors.birthday = '请选择有效的生日';
+      if (!draft.region?.cityCode || !regionValid) errors.region = '请选择完整的地区';
+      setFieldErrors(errors);
+      if (Object.keys(errors).length) { notify('请先填写完整资料，再继续。'); return; }
+    }
     if (iso === null) { notify('生日还差几位，填成 YYYY.MM.DD 再保存。'); return; }
     if (!regionValid || draft.region && !draft.region.cityCode) { notify('选好城市和区／县，再保存吧。'); return; }
     setBusy(true);
-    const hobbies = hobby.trim() && !draft.hobbies.includes(hobby.trim()) && draft.hobbies.length < 8 ? [...draft.hobbies, hobby.trim()] : draft.hobbies;
     try { await onSave({ ...member, ...draft, birthday: iso, hobbies }); setDraft({ ...draft, hobbies }); setHobby(''); notify('小档案收好啦，懂你又多一点点 ♡'); onSaved?.(); }
     catch { notify('小档案还没存好，再试一次吧。'); }
     finally { setBusy(false); }
@@ -68,10 +81,10 @@ export function MemberForm({ member, onSave, onSaved, submitLabel = '保存', no
   return <form className="detail-form" onSubmit={(event) => void submit(event)}>
     <fieldset className="form-fields" disabled={busy}>
     <section className="form-card profile-card">
-      <div className="field-label" id="member-gender-label">性别</div><div className="gender-options" role="group" aria-labelledby="member-gender-label">{([{ value: 'male', label: '男' }, { value: 'female', label: '女' }] as const).map((option) => <button type="button" key={option.value} className={draft.gender === option.value ? 'selected' : ''} aria-pressed={draft.gender === option.value} onClick={() => setDraft({ ...draft, gender: option.value })}>{option.label}</button>)}</div>
-      <label className="field-label spaced-label" htmlFor="birthday">生日 <Cake size={15} /></label><DatePicker id="birthday" title="选择生日" clearLabel="清空生日" value={birthday} onChange={setBirthday} />
+      <div className="field-label" id="member-gender-label"><span>性别 {required && <span className="field-required">必填</span>}</span></div><div className="gender-options" role="group" aria-labelledby="member-gender-label" aria-invalid={!!fieldErrors.gender}>{([{ value: 'male', label: '男' }, { value: 'female', label: '女' }] as const).map((option) => <button type="button" key={option.value} className={draft.gender === option.value ? 'selected' : ''} aria-pressed={draft.gender === option.value} onClick={() => { setDraft({ ...draft, gender: option.value }); clearError('gender'); }}>{option.label}</button>)}</div>{fieldErrors.gender && <p className="member-field-error" role="alert">{fieldErrors.gender}</p>}
+      <label className="field-label spaced-label" htmlFor="birthday"><span>生日 {required && <span className="field-required">必填</span>}</span><Cake size={15} /></label><DatePicker id="birthday" title="选择生日" placeholder="" clearLabel={required ? undefined : '清空生日'} value={birthday} onChange={(value) => { setBirthday(value); clearError('birthday'); }} />{fieldErrors.birthday && <p className="member-field-error" role="alert">{fieldErrors.birthday}</p>}
     </section>
-    <RegionPicker value={draft.region} onChange={(region) => setDraft((current) => ({ ...current, region }))} onValidityChange={setRegionValid} />
+    <div className="member-region-field"><RegionPicker value={draft.region} required={required} onChange={(region) => { setDraft((current) => ({ ...current, region })); clearError('region'); }} onValidityChange={setRegionValid} />{fieldErrors.region && <p className="member-field-error" role="alert">{fieldErrors.region}</p>}</div>
     <section className="form-card"><label className="field-label" htmlFor="hobby-input">喜欢的事物</label><div className="hobby-tags">{draft.hobbies.map((item) => <button key={item} type="button" aria-label={`移除爱好：${item}`} onClick={() => setDraft({ ...draft, hobbies: draft.hobbies.filter((h) => h !== item) })}>{item}<span>×</span></button>)}</div><div className="hobby-input-row"><input id="hobby-input" placeholder="添加爱好" maxLength={20} value={hobby} onChange={(event) => setHobby(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.nativeEvent.isComposing) { event.preventDefault(); addHobby(); } }} /><button type="button" disabled={!hobby.trim() || draft.hobbies.length >= 8} aria-label="添加爱好" onClick={addHobby}>添加</button></div></section>
     <div className="form-bottom"><button className="primary-button" type="submit" disabled={busy}>{busy ? '正在收好…' : submitLabel}</button></div>
     </fieldset>

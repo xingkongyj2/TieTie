@@ -277,6 +277,12 @@ func (s *Server) processConversationFrom(ctx context.Context, id string, result 
 			message.ReminderError += value
 		}
 		message.Source = "chat"
+		if hasOrigin && manualReminderNotice(origin) {
+			message.Source = "reminder_update"
+			if origin.ReplyTo != nil {
+				message.RecipientIDs = []int64{origin.ReplyTo.ID}
+			}
+		}
 		if hasOrigin && origin.Kind == "reminder_due" && origin.Reminder != nil {
 			// Recheck against storage rather than trusting model recipient claims.
 			reminder, loadErr := s.DB.GetDispatchReminder(ctx, id, origin.Reminder.ID)
@@ -541,4 +547,24 @@ func reminderMentions(text string, ids []int64, space conversation.Context) stri
 		return strings.Join(prefix, " ") + " " + strings.TrimSpace(text)
 	}
 	return text
+}
+
+func manualReminderNotice(input conversation.Input) bool {
+	if input.Version != 2 || input.Kind != "action_result" || len(input.Results) != 1 {
+		return false
+	}
+	result := input.Results[0]
+	if result.ReminderID == "" || result.Status != "succeeded" {
+		return false
+	}
+	switch result.Type {
+	case "complete_reminder":
+		return strings.HasPrefix(input.RequestID, "manual_complete_"+result.ReminderID+"_")
+	case "restore_reminder":
+		return strings.HasPrefix(input.RequestID, "manual_restore_"+result.ReminderID+"_")
+	case "cancel_reminder":
+		return input.RequestID == "manual_cancel_"+result.ReminderID
+	default:
+		return false
+	}
 }

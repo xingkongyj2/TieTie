@@ -10,12 +10,13 @@ export function useViewportHeight() {
     let fullHeight = Math.max(window.innerHeight, viewport.height);
     const update = () => {
       frame = 0;
-      const height = Math.round(viewport.height);
+      const top = Math.floor(viewport.offsetTop);
+      const height = Math.ceil(viewport.height + viewport.offsetTop - top);
       const focused = document.activeElement;
       const editable = focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement;
       if (!editable || height > fullHeight - 80) fullHeight = Math.max(fullHeight, height);
       root.style.setProperty('--app-height', `${height}px`);
-      root.style.setProperty('--app-top', `${Math.round(viewport.offsetTop)}px`);
+      root.style.setProperty('--app-top', `${top}px`);
       root.classList.toggle('keyboard-open', editable && fullHeight - height > 120);
     };
     const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };

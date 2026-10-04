@@ -179,7 +179,7 @@ func (s *Server) runControl(ctx context.Context, j dbop.ControlJob) (workErr err
 	if j.NotificationOnly {
 		input, valid := conversation.DecodeInput(j.Origin)
 		if !valid || input.Hidden || input.UserID != j.CreatedBy || len(results) != 1 ||
-			(results[0].Type != "cancel_reminder" && results[0].Type != "complete_reminder") {
+			(results[0].Type != "cancel_reminder" && results[0].Type != "complete_reminder" && results[0].Type != "restore_reminder") {
 			return errors.New("invalid manual reminder receipt")
 		}
 		reminder, err := s.DB.GetReminder(ctx, j.SessionID, results[0].ReminderID)
@@ -187,7 +187,7 @@ func (s *Server) runControl(ctx context.Context, j dbop.ControlJob) (workErr err
 			return errors.New("manual reminder receipt not found")
 		}
 		if results[0].Type == "complete_reminder" {
-			if reminder.Status != dbop.ReminderCompleted || reminder.CompletedBy == nil || *reminder.CompletedBy != j.CreatedBy {
+			if reminder.Status != dbop.ReminderCompleted || reminder.CompletedBy == nil || *reminder.CompletedBy != j.CreatedBy || reminder.UpdatedAt.After(j.CreatedAt) {
 				done = true
 				return s.DB.AbandonControl(ctx, j.ID) // The user restored or changed this item before confirmation.
 			}
@@ -197,6 +197,19 @@ func (s *Server) runControl(ctx context.Context, j dbop.ControlJob) (workErr err
 			}
 			if !ready {
 				return nil // Durable memory and confirmation jobs will retry.
+			}
+			frame.Results[0].MemoryStatus = "synced"
+		} else if results[0].Type == "restore_reminder" {
+			if reminder.Status != dbop.ReminderScheduled || reminder.CompletedBy != nil || reminder.UpdatedAt.After(j.CreatedAt) {
+				done = true
+				return s.DB.AbandonControl(ctx, j.ID) // A newer toggle superseded this confirmation.
+			}
+			ready, err := s.DB.ReminderMemorySynced(ctx, *reminder)
+			if err != nil {
+				return err
+			}
+			if !ready {
+				return nil
 			}
 			frame.Results[0].MemoryStatus = "synced"
 		} else if reminder.Status != dbop.ReminderCancelled {

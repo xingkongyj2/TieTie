@@ -124,7 +124,7 @@ docker build -t tietie-backend .      # 镜像只含后端，静态文件用卷�
 
 - `GET /api/qoder/sessions/:id/reminders` 返回 `{reminders}`。
 - `POST .../reminders` 接收 `{title,dueAt,recipientIds}`，dueAt 必须是未来的 RFC3339 时间，recipientIds 必须来自当前空间，返回 `{reminder}`。
-- `PATCH .../reminders/:reminderId` 接收 `{status:"completed"|"scheduled"|"cancelled"}`。完成/恢复仅接收者可操作，已到期或已投递的任务不能撤销完成。
+- `PATCH .../reminders/:reminderId` 接收 `{status:"completed"|"scheduled"|"cancelled"}`。完成/恢复仅接收者可操作，已到期或已投递的任务不能撤销完成。V2 中手动完成和恢复会在同一事务排入 AI 状态确认；聊天消息以 `source=reminder_update` 区分普通回复，到点主动提醒仍使用 `source=reminder`。
 - 消息历史额外包含 `members`、`reminders`、`remindersError`；消息包含 `userId`、`displayName`、`recipientIds`、`source`、提醒回执 ID/错误。原始云端 Events 与提醒操作 JSON 不对外公开。
 
 当前只支持一次性提醒，默认用 Asia/Shanghai 解释相对时间。服务需常驻，页面关闭不影响保存与唤醒；离线手机/微信推送尚未接入。MySQL 下每类队列的「挑候选 + 改状态」由一把 advisory lock 串起来，跨连接不会重复领取；但多副本运行仍需分布式租约与跨实例空间锁，会话内的串行也还依赖进程内互斥，不能直接运行多个进程各自在启动时恢复相同队列。

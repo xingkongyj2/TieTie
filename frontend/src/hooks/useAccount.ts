@@ -2,12 +2,12 @@ import { useCallback, useEffect, useState } from 'react'
 import { authApi, type AccountResult } from '../api/auth'
 import { clearToken, getToken } from '../lib/token'
 
-type OnboardingStep = 'profile' | 'usage'
+type OnboardingStep = 'profile' | 'bind' | 'usage'
 const onboardingKey = (userId: number) => `tietie.onboarding.${userId}`
 const readOnboarding = (userId: number): OnboardingStep | null => {
   try {
     const value = localStorage.getItem(onboardingKey(userId))
-    return value === 'profile' || value === 'usage' ? value : null
+    return value === 'profile' || value === 'bind' || value === 'usage' ? value : null
   } catch { return null }
 }
 const writeOnboarding = (userId: number, step: OnboardingStep | null) => {
@@ -62,10 +62,11 @@ export function useAccount() {
   }, [])
 
   const advanceOnboarding = useCallback(() => {
-    if (!account) return
-    writeOnboarding(account.user.userId, 'usage')
-    setOnboardingStep('usage')
-  }, [account])
+    if (!account || !onboardingStep || onboardingStep === 'usage') return
+    const next = onboardingStep === 'profile' ? 'bind' : 'usage'
+    writeOnboarding(account.user.userId, next)
+    setOnboardingStep(next)
+  }, [account, onboardingStep])
 
   const finishOnboarding = useCallback(() => {
     if (!account) return

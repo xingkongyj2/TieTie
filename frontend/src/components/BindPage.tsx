@@ -1,10 +1,11 @@
-import { Copy, Link, Link2 } from 'lucide-react';
+import { ArrowLeft, Copy, Link, Link2 } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import { SpaceBuddies } from './SpaceBuddies';
 
 interface Props {
   code: string;
   onBind: (code: string) => Promise<void>;
+  onBack?: () => void;
   notify: (text: string) => void;
   embedded?: boolean;
 }
@@ -39,7 +40,7 @@ function shareLink(code: string): string {
 }
 
 /** 已登录但未绑定时的全屏引导页：展示专属邀请码、分享入口，并可用对方邀请码完成绑定。 */
-export function BindPage({ code, onBind, notify, embedded = false }: Props) {
+export function BindPage({ code, onBind, onBack, notify, embedded = false }: Props) {
   const [invite, setInvite] = useState('');
   const [binding, setBinding] = useState(false);
   const [error, setError] = useState('');
@@ -75,7 +76,7 @@ export function BindPage({ code, onBind, notify, embedded = false }: Props) {
   };
 
   return <div className={embedded ? 'bind-page bind-page-embedded' : 'app-shell bind-page'}>
-    <header className="bind-header"><h1>贴贴清单</h1></header>
+    <header className="bind-header">{onBack && <button type="button" className="icon-button bind-back" aria-label="返回我们首页" onClick={onBack}><ArrowLeft size={19} /></button>}<h1>贴贴清单</h1></header>
     <div className="bind-welcome">
       <SpaceBuddies className="bind-buddy" />
       <h2>两个人，刚刚好</h2>

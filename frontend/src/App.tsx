@@ -1,4 +1,4 @@
-import { Ellipsis, Sparkles } from 'lucide-react';
+import { ArrowRight, Bell, Ellipsis, Sparkles } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Avatar } from './components/Avatar';
 import { BindPage } from './components/BindPage';
@@ -47,6 +47,7 @@ export default function App() {
   const anniversaries = useAnniversaries(account.account?.binding?.sessionId);
   const reloadAnniversaries = useRef(anniversaries.reload); reloadAnniversaries.current = anniversaries.reload;
   const [view, setView] = useState<'we' | 'things' | 'mine' | 'details'>('we');
+  const [showBindPage, setShowBindPage] = useState(() => Boolean(new URLSearchParams(window.location.search).get('invite')));
   const [tool, setTool] = useState<ToolName | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
   const [toast, setToast] = useState('');
@@ -110,26 +111,30 @@ export default function App() {
     for (const message of chat.messages) {
       if (seen.ids.has(message.id)) continue;
       seen.ids.add(message.id);
-      if (message.source === 'reminder' && userId && message.recipientIds?.includes(userId)
+      if ((message.source === 'reminder' || message.source === 'reminder_update') && userId && message.recipientIds?.includes(userId)
         && Date.now() - Date.parse(message.createdAt ?? '') < 120_000
-        && (view !== 'we' || !nearBottom.current)) notify(`给你的提醒：${message.text.slice(0, 80)}`);
+        && (view !== 'we' || !nearBottom.current)) notify(`${message.source === 'reminder' ? '贴贴主动提醒' : '提醒状态更新'}：${message.text.slice(0, 80)}`);
     }
   }, [chat.selectedId, chat.loading, chat.messages, account.account?.user.userId, view, notify]);
 
   if (!account.ready) return <div className="app-shell loading-screen"><div className="brand-mark"><img src="/brand-notes.png" alt="" /></div><h1>贴贴清单</h1><p>{account.error || '正在打开贴贴清单…'}</p>{account.error && <button className="primary-button" onClick={() => void account.reload()}>再试一次</button>}</div>;
   if (!account.account) return <LoginPage onLogin={account.login} onRegister={account.register} notify={notify} />;
   if (!state) return <div className="app-shell loading-screen"><div className="brand-mark"><img src="/brand-notes.png" alt="" /></div><h1>贴贴清单</h1><p>{error || '正在打开贴贴清单…'}</p>{error && <button className="primary-button" onClick={() => void reload()}>再试一次</button>}</div>;
-  if (account.onboardingStep) return <Onboarding key={account.account.user.userId} step={account.onboardingStep} username={account.account.user.username} member={state.members.find((member) => member.id === 'self')!} onSaveMember={saveMember} onNext={account.advanceOnboarding} onDone={account.finishOnboarding} notify={notify} toast={toast} />;
+  if (account.onboardingStep) return <Onboarding key={account.account.user.userId} step={account.onboardingStep} username={account.account.user.username} member={state.members.find((member) => member.id === 'self')!} onSaveMember={saveMember} onNext={account.advanceOnboarding} onDone={() => { setView('we'); setShowBindPage(false); account.finishOnboarding(); }} notify={notify} toast={toast} />;
 
   const ai = state.members.find((m) => m.id === 'ai')!;
   const feedback = chat.replyFeedback;
-  const feedbackText = feedback?.message || (feedback?.phase === 'sending' ? '消息正在发送…'
-    : feedback?.phase === 'thinking' ? `${ai.name}正在思考…`
-      : feedback?.phase === 'replying' ? `${ai.name}正在回复…`
-        : feedback?.phase === 'syncing' ? `${ai.name}正在整理回复…`
-          : feedback?.phase === 'sent' ? '消息已发给对方'
-            : feedback?.phase === 'error' ? '这次回复遇到问题，请重试。'
-              : `${ai.name}已收到，正在准备回复…`);
+  const proactiveFeedback = feedback?.phase === 'proactive_reminder' || feedback?.phase === 'proactive_update';
+  const showFeedback = feedback && feedback.phase !== 'sending' && feedback.phase !== 'complete'
+    && !(feedback.phase === 'delayed' && feedback.message?.startsWith('消息发送状态待确认'));
+  const feedbackText = feedback?.phase === 'error' ? feedback.message || '这次回复遇到问题，请重试。'
+    : feedback?.phase === 'sent' ? '消息已发给对方'
+      : feedback?.phase === 'proactive_reminder' ? `${ai.name}主动提醒你`
+        : feedback?.phase === 'proactive_update' ? `${ai.name}正在告诉你提醒的变化`
+      : feedback?.phase === 'delayed' ? '回复还需要一点时间'
+        : feedback?.phase === 'syncing' ? `${ai.name}正在整理回复`
+          : feedback?.phase === 'thinking' || feedback?.phase === 'replying' ? `${ai.name}正在回复`
+            : `${ai.name}正在准备回复`;
   const selfId = account.account.user.userId;
   const partnerId = account.account.binding?.partnerId;
   const sharedMembers = state.members.map((member) => {
@@ -141,7 +146,7 @@ export default function App() {
   const reminders: Reminder[] = chat.reminders.map((reminder) => ({
     id: reminder.id, title: reminder.title, time: reminder.dueAt,
     recipientIds: reminder.recipientIds, status: reminder.status,
-    deliveredAt: reminder.deliveredAt, taskStatus: reminder.taskStatus, taskCompletedAt: reminder.taskCompletedAt,
+    deliveredAt: reminder.deliveredAt, taskStatus: reminder.taskStatus, taskCompletedAt: reminder.taskCompletedAt, updatedAt: reminder.updatedAt,
     assignee: reminder.recipientIds.length > 1 ? 'both' : reminder.recipientIds.includes(selfId) ? 'self' : 'partner',
     completed: reminderPhase(reminder) === 'completed',
   }));
@@ -153,8 +158,8 @@ export default function App() {
     const completing = reminder.status !== 'completed';
     await chat.changeReminder(id, completing ? 'completed' : 'scheduled');
     notify(completing
-      ? `你已手动完成「${reminder.title}」，AI 记忆同步后会在聊天里确认。`
-      : `已把「${reminder.title}」恢复为待完成。`);
+      ? `已完成「${reminder.title}」，贴贴会在聊天里确认。`
+      : `已将「${reminder.title}」恢复为待完成，贴贴会在聊天里确认。`);
   };
   const cancelReminder = (id: string) => chat.changeReminder(id, 'cancelled');
   const addReminder = async (input: Omit<Reminder, 'id' | 'completed'>) => {
@@ -183,17 +188,22 @@ export default function App() {
           {(index === 0 || messageDay(chat.messages[index - 1].createdAt) !== messageDay(message.createdAt)) && <div className="chat-date"><span /><strong>{messageDayLabel(message.createdAt)}</strong><span /></div>}
           <ChatMessage message={message} members={sharedMembers} onError={notify} onOpenImage={(src, alt) => setPreviewImage({ src, alt })} onAnswer={chat.answerAsk} />
         </Fragment>)}</div>
-        {feedback && <div className={`assistant-feedback${feedback.phase === 'error' ? ' is-error' : ''}${feedback.phase === 'sent' || feedback.phase === 'error' ? ' is-terminal' : ''}`} role={feedback.phase === 'error' ? 'alert' : 'status'} aria-live="polite"><Avatar member={ai} /><div className="assistant-feedback-bubble"><span>{feedbackText}</span><span className="typing-dots" aria-hidden="true"><i /><i /><i /></span>{chat.error && <button className="assistant-feedback-retry" disabled={chat.loading || chat.refreshing || chat.submitting} onClick={() => void chat.reload()}>重新同步</button>}</div></div>}
+        {showFeedback && <div className={`assistant-feedback${feedback.phase === 'error' ? ' is-error' : ''}${proactiveFeedback ? ' is-proactive' : ''}`} role={feedback.phase === 'error' ? 'alert' : 'status'} aria-live="polite"><Avatar member={ai} /><div className="assistant-feedback-bubble">{proactiveFeedback && <Bell size={13} aria-hidden="true" />}<span>{feedbackText}</span>{feedback.phase !== 'sent' && feedback.phase !== 'error' && <span className="typing-dots" aria-hidden="true"><i /><i /><i /></span>}{chat.error && <button className="assistant-feedback-retry" disabled={chat.loading || chat.refreshing || chat.submitting} onClick={() => void chat.reload()}>重新同步</button>}</div></div>}
         {chat.turnError && !feedback && <div className="turn-error" role="alert">{chat.turnError}</div>}
         {chat.remindersError && <div className="turn-error" role="alert">{chat.remindersError}</div>}
       </main>
       <Composer members={sharedMembers} key={chat.selectedId ?? 'no-session'} sending={chat.submitting} disabled={!chat.canSend} placeholder={chat.awaitingAsk ? '先回答上面那道选择题…' : chat.busy ? (chat.silent ? '消息已发给对方，可以先写下一句…' : '伙伴正在回复，可以先写下一句…') : '记下一个共同提醒…'} onSend={sendMessage} onTool={setTool} onError={notify} />
-      </> : <BindPage code={account.account.user.code} onBind={account.bind} notify={notify} embedded />}
+      </> : showBindPage ? <BindPage code={account.account.user.code} onBind={async (code) => { await account.bind(code); setShowBindPage(false); }} onBack={() => setShowBindPage(false)} notify={notify} embedded /> : <>
+        <header className="chat-header"><div className="chat-heading"><h1>我们</h1></div></header>
+        <main className="chat-scroll is-empty unbound-home-scroll" aria-label="我们的空间">
+          <div className="cloud-empty chat-welcome"><span className="welcome-eyebrow"><Sparkles size={13} />我们的共享空间</span><SpaceBuddy variant="blue" className="chat-welcome-buddy" /><h2>共同的提醒，日常的分享</h2><p>连接 TA 后，就能一起聊天、安排提醒。</p><button type="button" className="primary-button unbound-home-bind" onClick={() => setShowBindPage(true)}>连接彼此 <ArrowRight size={16} aria-hidden="true" /></button></div>
+        </main>
+      </>}
     </div>
-    {view === 'things' && <LittleThings sessionId={account.account.binding?.sessionId} selfId={selfId} onEditRegion={() => { setEditProfileInitially(true); setView('mine'); }} onBind={() => setView('we')} state={state} anniversaries={anniversaries} reminderState={sharedState} onToggle={toggleReminder} onCancel={cancelReminder} remindersLoading={chat.loading} reminderNotice={!account.account.binding ? '绑定两人空间后，可以一起安排和查看提醒。' : chat.remindersError || chat.error} onReloadReminders={account.account.binding ? chat.reload : undefined} notify={notify} />}
+    {view === 'things' && <LittleThings sessionId={account.account.binding?.sessionId} selfId={selfId} onEditRegion={() => { setEditProfileInitially(true); setView('mine'); }} onBind={() => { setShowBindPage(true); setView('we'); }} state={state} anniversaries={anniversaries} reminderState={sharedState} onToggle={toggleReminder} onCancel={cancelReminder} remindersLoading={chat.loading} reminderNotice={!account.account.binding ? '绑定两人空间后，可以一起安排和查看提醒。' : chat.remindersError || chat.error} onReloadReminders={account.account.binding ? chat.reload : undefined} notify={notify} />}
     {view === 'mine' && <Mine editProfileInitially={editProfileInitially} state={state} username={account.account.user.username} code={account.account.user.code} hasSession={!!account.account.binding} onSaveMember={saveMember} onLogout={account.logout} onExitSession={account.unbind} notify={notify} />}
     {view === 'details' && <Details state={sharedState} sessionId={account.account.binding?.sessionId} onBack={() => setView('we')} onSaveMember={saveMember} onSaveSettings={saveSettings} notify={notify} />}
-    {view !== 'details' && <BottomNav view={view} onChange={(next) => { setEditProfileInitially(false); setView(next); }} />}
+    {view !== 'details' && <BottomNav view={view} onChange={(next) => { setEditProfileInitially(false); setShowBindPage(false); setView(next); }} />}
     {tool && <Tools tool={tool} state={sharedState} anniversaries={anniversaries} onClose={() => setTool(null)} onAdd={addReminder} notify={notify} />}
     {previewImage && <ImageViewer src={previewImage.src} alt={previewImage.alt} onClose={() => setPreviewImage(null)} />}
     {toast && <div className="toast" role="status"><Sparkles size={16} />{toast}</div>}

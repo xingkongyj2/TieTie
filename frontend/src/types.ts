@@ -44,6 +44,7 @@ export interface Reminder {
   taskStatus?: 'pending' | 'running' | 'completed' | 'cancelled' | 'failed' | 'uncertain'
   taskCompletedAt?: string
   deliveredAt?: string
+  updatedAt?: string
 }
 
 export type CloudReminderStatus = 'scheduled' | 'dispatching' | 'delivered' | 'completed' | 'cancelled' | 'failed' | 'uncertain'
@@ -64,6 +65,7 @@ export interface CloudReminder {
   taskStatus?: 'pending' | 'running' | 'completed' | 'cancelled' | 'failed' | 'uncertain'
   taskCompletedAt?: string
   deliveredAt?: string
+  updatedAt?: string
 }
 
 /** Agent 通过云端自定义工具（AskUserQuestion）抛出的选择题。 */
@@ -91,7 +93,7 @@ export interface Message {
   userId?: number
   displayName?: string
   recipientIds?: number[]
-  source?: 'chat' | 'reminder'
+  source?: 'chat' | 'reminder' | 'reminder_update'
   text: string
   time: string
   /** Cloud event timestamp, used for local-time display and day separators. */

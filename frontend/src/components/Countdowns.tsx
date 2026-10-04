@@ -2,6 +2,7 @@ import { CalendarDays, Clock3, CloudMoon, Compass, Flower2, Gem, Leaf, Mountain,
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { countdownApi, type Countdown } from '../api/countdowns'
 import { TabLoading } from './TabLoading'
+import { EmptyTabState } from './EmptyTabState'
 import { cardSeed, recordCardStyles } from '../lib/cardAppearance'
 import './Countdowns.css'
 
@@ -30,9 +31,9 @@ export function Countdowns({ sessionId }: { sessionId?: string }) {
   finally { if (mounted.current && seq === generation.current) setLoading(false) }
  }, [sessionId])
  useEffect(() => { mounted.current = true; pages.current = 1; setItems([]); setLoading(true); void reload(); const timer = setInterval(() => { void reload() }, 30_000); const focus = () => { void reload() }; window.addEventListener('focus', focus); return () => { mounted.current = false; generation.current++; clearInterval(timer); window.removeEventListener('focus', focus) } }, [reload])
- if (!sessionId) return <TabLoading empty />
+ if (!sessionId) return <EmptyTabState kind="countdown" title="还没有倒计时" example="TA 是 1998 年 11 月 16 日出生的" />
  if (loading) return <TabLoading />
- if (!items.length && !error) return <TabLoading empty />
+ if (!items.length && !error) return <EmptyTabState kind="countdown" title="还没有倒计时" example="TA 是 1998 年 11 月 16 日出生的" />
  const styles = recordCardStyles(items)
  return <div className="countdowns">
   {error && <div className="cloud-error" role="alert">{error}<button type="button" onClick={() => void reload()}>重试</button></div>}

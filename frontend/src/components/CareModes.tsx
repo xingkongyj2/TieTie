@@ -6,6 +6,7 @@ import { anniversaryRemindersApi, type AnniversaryReminderSettings } from '../ap
 import { TimePicker } from './TimePicker'
 import { AnniversaryReminders } from './AnniversaryReminders'
 import { TabLoading } from './TabLoading'
+import { EmptyTabState } from './EmptyTabState'
 import './CareModes.css'
 
 export function CareWithAnniversary({ sessionId, selfId, onEditRegion, notify }: {
@@ -83,10 +84,10 @@ export function CareWithAnniversary({ sessionId, selfId, onEditRegion, notify }:
       if (mounted.current && seq === sequence.current) { setBusy(null); void reload() }
     }
   }
-  if (!sessionId) return <TabLoading empty />
+  if (!sessionId) return <EmptyTabState kind="care" title="还没有贴贴提醒" example="帮我们看看明天的天气" />
   if (loading) return <TabLoading />
   if (!settings || !state) return <div className="cloud-error" role="alert"><span>{error}</span><button type="button" onClick={() => { setLoading(true); void reload() }}>重试</button></div>
-  if (!state.modes.length && !error) return <TabLoading empty />
+  if (!state.modes.length && !error) return <EmptyTabState kind="care" title="还没有贴贴提醒" example="帮我们看看明天的天气" />
   const modes = state.modes
   return <div className="form-card settings-card" aria-label="提醒偏好">
     <div className="care-modes">

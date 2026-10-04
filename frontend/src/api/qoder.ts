@@ -25,7 +25,7 @@ export interface CloudHistory {
 }
 
 export type CloudStreamEvent =
-  | { type: 'start'; id: string; kind: 'thinking' | 'message' }
+  | { type: 'start'; id: string; kind: 'thinking' | 'message'; proactive?: 'reminder' | 'update' }
   | { type: 'delta'; id: string; text: string }
   | { type: 'message'; id: string; message: Message | null }
   | { type: 'thinking_end'; id: string }

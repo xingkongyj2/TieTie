@@ -3,7 +3,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { Sheet } from './Sheet'
 import './DatePicker.css'
 
-interface Props { id: string; value: string; onChange: (value: string) => void; title?: string; clearLabel?: string; allowFuture?: boolean; disabled?: boolean }
+interface Props { id: string; value: string; onChange: (value: string) => void; title?: string; clearLabel?: string; placeholder?: string; allowFuture?: boolean; disabled?: boolean }
 
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -107,12 +107,12 @@ function DateDialog({ id, title, value, clearLabel, allowFuture, onClose, onConf
 }
 
 /** 日期统一在弹窗内选择，确认后才更新表单。 */
-export function DatePicker({ id, title = '选择日期', clearLabel, value, onChange, allowFuture = false, disabled = false }: Props) {
+export function DatePicker({ id, title = '选择日期', clearLabel, placeholder = 'YYYY.MM.DD', value, onChange, allowFuture = false, disabled = false }: Props) {
   const [open, setOpen] = useState(false)
   const show = () => { if (!disabled) setOpen(true) }
   return <div className="date-picker">
     <div className="date-picker-field">
-      <input className="line-input" id={id} type="text" readOnly inputMode="none" autoComplete="off" placeholder="YYYY.MM.DD"
+      <input className="line-input" id={id} type="text" readOnly inputMode="none" autoComplete="off" placeholder={placeholder}
         disabled={disabled} value={value} aria-haspopup="dialog" aria-expanded={open} aria-controls={`${id}-calendar`} onClick={show}
         onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ' || event.altKey && event.key === 'ArrowDown') { event.preventDefault(); show() } }} />
       <button type="button" className="date-picker-toggle" disabled={disabled} aria-label={title} aria-haspopup="dialog" aria-controls={`${id}-calendar`} aria-expanded={open} onClick={show}>

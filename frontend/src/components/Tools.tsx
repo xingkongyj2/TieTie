@@ -13,9 +13,30 @@ export type ToolName = 'reminders' | 'anniversary';
 interface Props { tool: ToolName; state: RelationshipState; anniversaries: AnniversaryState; onClose: () => void; onAdd: (input: Omit<Reminder, 'id' | 'completed'>) => Promise<void>; notify: (text: string) => void }
 interface ReminderBoardProps { state: RelationshipState; onToggle: (id: string) => Promise<void>; onCancel?: (id: string) => Promise<void>; notify: (text: string) => void; pendingAssignee?: 'both' | 'self' | 'partner' | null }
 
+function finishedTime(reminder: Reminder): number {
+  const value = reminder.taskCompletedAt || reminder.deliveredAt || reminder.updatedAt || reminder.time;
+  const time = Date.parse(value ?? '');
+  return Number.isNaN(time) ? Number.NEGATIVE_INFINITY : time;
+}
+
 export function ReminderBoard({ state, onToggle, onCancel, notify, pendingAssignee = null }: ReminderBoardProps) {
   const pending = state.reminders.filter((reminder) => reminderPhase(reminder) === 'pending' && (pendingAssignee === null || reminder.assignee === pendingAssignee)).sort(compareReminderTime);
-  const completed = state.reminders.filter((reminder) => reminderPhase(reminder) !== 'pending').sort(compareReminderTime);
+  const completed = state.reminders.filter((reminder) => reminderPhase(reminder) !== 'pending').sort((a, b) => {
+    const left = finishedTime(a), right = finishedTime(b);
+    return left === right ? a.id.localeCompare(b.id) : left > right ? -1 : 1;
+  });
+  const completedDays: { key: string; label: string; reminders: Reminder[] }[] = [];
+  for (const reminder of completed) {
+    const time = finishedTime(reminder);
+    const date = Number.isFinite(time) ? new Date(time) : null;
+    const key = date ? `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}` : 'unknown';
+    let day = completedDays.find((item) => item.key === key);
+    if (!day) {
+      day = { key, label: date ? date.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }) : '日期未记录', reminders: [] };
+      completedDays.push(day);
+    }
+    day.reminders.push(reminder);
+  }
   const emptyNote = pendingAssignee === null
     ? completed.length ? '待完成的提醒都处理好啦。' : '还没有提醒，先添加一条吧。'
     : `暂时没有提醒${{ both: '我们', self: '我', partner: 'TA' }[pendingAssignee]}的待完成事项。`;
@@ -25,7 +46,10 @@ export function ReminderBoard({ state, onToggle, onCancel, notify, pendingAssign
     </section>
     <section aria-label="已完成">
       <div className="reminder-completed-divider"><h2><span className="reminder-title-lettering">已完成</span></h2></div>
-      <div className="reminders-list">{completed.length ? completed.map((reminder) => <ReminderCard reminder={reminder} key={reminder.id} members={state.members} onToggle={onToggle} onError={notify} />) : <p className="empty-note">还没有已完成的提醒。</p>}</div>
+      {completedDays.length ? completedDays.map((day) => <div className="reminder-day-group" key={day.key}>
+        <h3 className="reminder-day-heading"><span className="reminder-day-date">{day.label}</span><span className="reminder-day-count">{day.reminders.length} 条</span></h3>
+        <div className="reminders-list">{day.reminders.map((reminder) => <ReminderCard reminder={reminder} key={reminder.id} members={state.members} onToggle={onToggle} onError={notify} />)}</div>
+      </div>) : <p className="empty-note">还没有已完成的提醒。</p>}
     </section>
   </div>;
 }

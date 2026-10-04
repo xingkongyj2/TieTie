@@ -29,7 +29,7 @@ interface CloudState {
   replyFeedback: ReplyFeedback | null
 }
 
-type ReplyPhase = 'sending' | 'waiting' | 'thinking' | 'replying' | 'syncing' | 'delayed' | 'sent' | 'error' | 'complete'
+type ReplyPhase = 'sending' | 'waiting' | 'thinking' | 'replying' | 'syncing' | 'delayed' | 'sent' | 'error' | 'complete' | 'proactive_reminder' | 'proactive_update'
 interface ReplyFeedback { phase: ReplyPhase; message?: string }
 
 interface PendingTurn {
@@ -119,6 +119,12 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     const snapshot = current.current
     let replyFeedback = snapshot.replyFeedback?.phase === 'complete' && history.session.status.toLowerCase() === 'idle'
       ? null : snapshot.replyFeedback
+    if (!pending && (replyFeedback?.phase === 'proactive_reminder' || replyFeedback?.phase === 'proactive_update')) {
+      if (history.session.status.toLowerCase() === 'terminated') {
+        replyFeedback = { phase: 'error', message: history.turnError || 'AI 会话已中断，请重试。' }
+      } else if (history.session.status.toLowerCase() === 'idle' || history.messages.some((message) => message.sender === 'ai'
+        && !snapshot.messages.some((existing) => existing.id === message.id))) replyFeedback = null
+    }
     if (pending) {
       const replied = !pending.silent && history.messages.some((message) => message.sender === 'ai' && message.source === 'chat'
         && !pending.messageIds.has(message.id))
@@ -153,7 +159,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       loaded: true, loading: false, refreshing: false, error: '',
       pending: pendingTurns.current.has(id),
       replyFeedback,
-      ...(history.session.status.toLowerCase() === 'idle' ? { thinking: false } : {}),
+      ...(['idle', 'terminated'].includes(history.session.status.toLowerCase()) ? { thinking: false } : {}),
       ...(history.turnError !== null ? { turnError: history.turnError } : {}),
     })
   }, [update])
@@ -234,7 +240,8 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     if (!id || !current.current.loaded) throw new Error('共享提醒还未加载，请稍后再试。')
     const { reminder } = await qoderApi.updateReminder(id, reminderId, status)
     if (mounted.current && current.current.selectedId === id) {
-      update({ reminders: current.current.reminders.map((item) => item.id === reminder.id ? reminder : item) })
+      const currentReminder = { ...reminder, updatedAt: new Date().toISOString() }
+      update({ reminders: current.current.reminders.map((item) => item.id === reminder.id ? currentReminder : item) })
       void readRef.current()
     }
   }, [update])
@@ -376,9 +383,13 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       if (item.private && item.type === 'status') { void readRef.current({ full: true }); return }
       const nextCursor = item.private ? snapshot.cursor : item.id
       const pendingTurn = pendingTurns.current.get(id)
+      const hasProactiveFeedback = snapshot.replyFeedback?.phase === 'proactive_reminder'
+        || snapshot.replyFeedback?.phase === 'proactive_update'
       if (item.type === 'start') {
-        if (item.kind === 'thinking') update({ thinking: true, ...(pendingTurn && !pendingTurn.silent ? { replyFeedback: { phase: 'thinking' } as ReplyFeedback } : {}) })
-        else update({ thinking: false, ...(pendingTurn && !pendingTurn.silent ? { replyFeedback: { phase: 'replying' } as ReplyFeedback } : {}) })
+        const proactiveFeedback: ReplyFeedback | null = !pendingTurn && item.proactive
+          ? { phase: item.proactive === 'reminder' ? 'proactive_reminder' : 'proactive_update' } : null
+        if (item.kind === 'thinking') update({ thinking: true, ...(pendingTurn && !pendingTurn.silent ? { replyFeedback: { phase: 'thinking' } as ReplyFeedback } : proactiveFeedback ? { replyFeedback: proactiveFeedback } : {}) })
+        else update({ thinking: false, ...(pendingTurn && !pendingTurn.silent ? { replyFeedback: { phase: 'replying' } as ReplyFeedback } : proactiveFeedback ? { replyFeedback: proactiveFeedback } : {}) })
       } else if (item.type === 'delta') {
         // The assistant streams a structured envelope. Only server-parsed final
         // messages are safe to display; keep the thinking indicator until then.
@@ -391,7 +402,8 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
           if (replied) pendingTurns.current.delete(id)
           update({ messages: mergeMessages(current.current.messages, [item.message]), cursor: nextCursor, thinking: false,
             pending: pendingTurns.current.has(id), ...(item.message.sender === 'ai' ? { turnError: '' } : {}),
-            ...(replied ? { replyFeedback: { phase: 'complete' } as ReplyFeedback } : {}) })
+            ...(replied || item.message.sender === 'ai' && (snapshot.replyFeedback?.phase === 'proactive_reminder' || snapshot.replyFeedback?.phase === 'proactive_update')
+              ? { replyFeedback: { phase: 'complete' } as ReplyFeedback } : {}) })
         }
         else update({ cursor: nextCursor })
       } else if (item.type === 'thinking_end') {
@@ -407,14 +419,14 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
           ...(status === 'idle' ? { lastIdleEventId: item.id } : {}),
           ...(pendingTurn && !pendingTurn.silent && status === 'idle' ? { replyFeedback: { phase: 'syncing' } as ReplyFeedback } : {}),
           ...(!pendingTurn && status === 'idle' && snapshot.replyFeedback?.phase === 'complete' ? { replyFeedback: null } : {}),
-          ...(pendingTurn && status === 'terminated' ? { replyFeedback: { phase: 'error', message: 'AI 会话已中断，请重试。' } as ReplyFeedback } : {}),
+          ...((pendingTurn || hasProactiveFeedback) && status === 'terminated' ? { replyFeedback: { phase: 'error', message: 'AI 会话已中断，请重试。' } as ReplyFeedback } : {}),
         })
         if (status === 'idle' || status === 'terminated') void readRef.current({ full: true })
       } else if (item.type === 'session_error') {
         if (pendingTurn) pendingTurns.current.delete(id)
         update({ turnError: snapshot.replyMode === 'silent' ? '' : item.message, cursor: nextCursor, thinking: false,
           pending: pendingTurns.current.has(id),
-          ...(pendingTurn ? { replyFeedback: { phase: 'error', message: item.message || 'AI 回复失败，请重试。' } as ReplyFeedback } : {}) })
+          ...(pendingTurn || hasProactiveFeedback ? { replyFeedback: { phase: 'error', message: item.message || 'AI 回复失败，请重试。' } as ReplyFeedback } : {}) })
       }
     }
     const privateSource = hasPrivateChannel ? qoderApi.privateStream(id) : null

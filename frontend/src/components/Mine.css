@@ -12,7 +12,7 @@
 .mine-header-sparkle { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 50%; background: #f6f8fb; color: var(--mine-accent); }
 
 .mine-identity-card { position: relative; isolation: isolate; padding: 16px 24px 24px; overflow: hidden; border: 0; border-radius: 28px; background: #f7f8fa; }
-.mine-buddies { position: absolute; z-index: -1; top: 15px; right: 2px; width: 177px; height: 144px; pointer-events: none; filter: drop-shadow(0 8px 9px #7ba9df17); }
+.mine-buddies { position: absolute; z-index: -1; top: 8px; right: 2px; width: 177px; height: 144px; pointer-events: none; filter: drop-shadow(0 8px 9px #7ba9df17); }
 .mine-buddy-back { transform-origin: 141px 89px; animation: mine-buddy-arrive .7s .08s both; }
 .mine-buddy-front { transform-origin: 80px 104px; animation: mine-buddy-arrive .7s .18s both; }
 .mine-identity { position: relative; }
@@ -76,7 +76,7 @@
   .mine-page .tab-page-scroll.mine-scroll { padding-right: 18px; padding-left: 18px; }
   .mine-header h1 { font-size: 20px; }
   .mine-identity-card { padding-right: 20px; padding-left: 20px; }
-  .mine-buddies { top: 24px; right: -9px; width: 158px; height: 128px; }
+  .mine-buddies { top: 17px; right: -9px; width: 158px; height: 128px; }
   .mine-name h2 { font-size: 24px; }
   .mine-invite { gap: 10px; padding-right: 14px; padding-left: 20px; }
   .mine-invite-copy strong { font-size: 20px; letter-spacing: 1.4px; }

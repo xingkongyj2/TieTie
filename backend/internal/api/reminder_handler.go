@@ -137,7 +137,21 @@ func (s *Server) handleReminderUpdate(w http.ResponseWriter, r *http.Request) {
 			reminder, err = s.DB.CompleteReminder(r.Context(), storageID, visible.ID, auth.UserIDFrom(r.Context()))
 		}
 	case dbop.ReminderScheduled:
-		reminder, err = s.DB.RestoreCompletedReminder(r.Context(), storageID, r.PathValue("reminderId"), auth.UserIDFrom(r.Context()))
+		if s.useV2() {
+			var space conversation.Context
+			var binding *dbop.Binding
+			space, binding, err = s.conversationContext(r.Context(), storageID, auth.UserIDFrom(r.Context()))
+			if err == nil {
+				requestID := "manual_restore_" + visible.ID + "_" + time.Now().UTC().Format("20060102150405.000000000")
+				origin := conversation.NewEnvelopeV2(space, "user_message", requestID)
+				origin.Text = "在提醒页手动恢复事项为待完成"
+				origin.Compact = true
+				encoded, _ := json.Marshal(origin)
+				reminder, err = s.DB.RestoreCompletedReminderAndNotify(r.Context(), storageID, visible.ID, space.AuthorID, dbop.ControlJob{SessionID: storageID, RequestID: requestID, Origin: "\n<TIETIE_INPUT_V2>\n" + string(encoded) + "\n</TIETIE_INPUT_V2>", CreatedBy: space.AuthorID, BindingCreatedAt: binding.CreatedAt})
+			}
+		} else {
+			reminder, err = s.DB.RestoreCompletedReminder(r.Context(), storageID, visible.ID, auth.UserIDFrom(r.Context()))
+		}
 	case dbop.ReminderCancelled:
 		if s.useV2() {
 			var space conversation.Context
@@ -163,7 +177,7 @@ func (s *Server) handleReminderUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.wakeMemory()
-	if s.useV2() && (body.Status == dbop.ReminderCompleted || body.Status == dbop.ReminderCancelled) {
+	if s.useV2() && (body.Status == dbop.ReminderCompleted || body.Status == dbop.ReminderScheduled || body.Status == dbop.ReminderCancelled) {
 		s.wakeControl()
 	}
 	reminder.SessionID = id

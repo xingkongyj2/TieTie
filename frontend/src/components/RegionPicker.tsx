@@ -36,8 +36,9 @@ function RegionColumn({ label, options, selected, placeholder, onSelect }: {
 
 const regionName = (value?: RegionLocation) => value ? [value.province, value.province === value.city ? '' : value.city, value.district].filter(Boolean).join(' · ') : ''
 
-export function RegionPicker({ value, onChange, onValidityChange }: {
+export function RegionPicker({ value, required = false, onChange, onValidityChange }: {
   value?: RegionLocation
+  required?: boolean
   onChange: (value?: RegionLocation) => void
   onValidityChange: (valid: boolean) => void
 }) {
@@ -68,7 +69,7 @@ export function RegionPicker({ value, onChange, onValidityChange }: {
   const draftCity = draftProvince?.cities.find((item) => item.code === draft?.cityCode)
   const complete = !!draftProvince && !!draftCity && (!draftCity.districts.length || draftCity.districts.some((item) => item.code === draft?.districtCode))
   return <section className="form-card region-card">
-    <div className="field-label" id={labelId}>地区 <MapPin size={15} aria-hidden="true" /></div>
+    <div className="field-label" id={labelId}><span>地区 {required && <span className="field-required">必填</span>}</span><MapPin size={15} aria-hidden="true" /></div>
     <button type="button" className="region-picker-trigger" aria-label="选择地区" aria-haspopup="dialog" aria-expanded={open}
       onClick={() => { setDraft(value ? { ...value } : undefined); setOpen(true) }}>
       <span className={value ? '' : 'is-placeholder'}>{regionName(value) || '选择省份、城市和区／县'}</span><ChevronRight size={16} aria-hidden="true" />

@@ -76,7 +76,7 @@ export function LoginPage({ onLogin, onRegister, notify }: Props) {
         value={password}
         onChange={(event) => { setPassword(event.target.value); setError(''); }}
         aria-label="密码"
-        placeholder={mode === 'register' ? '密码，至少 6 位' : '密码'}
+        placeholder="密码"
         autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
         maxLength={64}
         disabled={busy}
@@ -86,7 +86,7 @@ export function LoginPage({ onLogin, onRegister, notify }: Props) {
         value={confirm}
         onChange={(event) => { setConfirm(event.target.value); setError(''); }}
         aria-label="确认密码"
-        placeholder="再输一次"
+        placeholder="确认密码"
         autoComplete="new-password"
         maxLength={64}
         disabled={busy}
