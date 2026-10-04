@@ -60,7 +60,7 @@ function ReminderCompose({ state, onAdd, onClose, notify, onPickTime }: Pick<Pro
       </div>
     </div>
     <div className="reminder-time-field"><span>提醒时间</span><div className="reminder-date-time">
-      <div><label className="sr-only" htmlFor="quick-reminder-date">提醒日期</label><DatePicker id="quick-reminder-date" value={date} allowFuture placement="above" disabled={busy} onChange={(value) => { setDate(value); setError(''); }} /></div>
+      <div><label className="sr-only" htmlFor="quick-reminder-date">提醒日期</label><DatePicker id="quick-reminder-date" title="选择提醒日期" value={date} allowFuture disabled={busy} onChange={(value) => { setDate(value); setError(''); }} /></div>
       <button type="button" className="reminder-clock" disabled={busy} aria-label={time ? `提醒时刻 ${time}` : '选择提醒时刻'} aria-haspopup="dialog" onClick={() => {
         const next = new Date(Date.now() + 60 * 60_000);
         const initial = time || `${String(next.getHours()).padStart(2, '0')}:${String(next.getMinutes()).padStart(2, '0')}`;

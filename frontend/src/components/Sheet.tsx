@@ -1,5 +1,6 @@
 import { X } from 'lucide-react';
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 /** H5 弹层的焦点恢复与键盘约束集中管理，迁移时可替换为小程序弹层。 */
 export function Sheet({ title, children, onClose }: { title: string; children: ReactNode | ((close: () => void) => ReactNode); onClose: () => void }) {
@@ -22,12 +23,18 @@ export function Sheet({ title, children, onClose }: { title: string; children: R
   useEffect(() => {
     const previousFocus = document.activeElement as HTMLElement | null;
     const panel = panelRef.current!;
+    const backdrop = panel.parentElement!;
+    const backdrops = Array.from(document.querySelectorAll<HTMLElement>('.sheet-backdrop'));
+    const underneath = backdrops.slice(0, backdrops.indexOf(backdrop)).map((node) => ({ node, inert: node.inert, hidden: node.getAttribute('aria-hidden') }));
+    underneath.forEach(({ node }) => { node.inert = true; node.setAttribute('aria-hidden', 'true'); });
     panel.focus({ preventScroll: true });
     let openFrame = requestAnimationFrame(() => {
       openFrame = requestAnimationFrame(() => { if (!closingRef.current) setVisible(true); });
     });
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') requestClose();
+      const dialogs = document.querySelectorAll('.sheet[role="dialog"]');
+      if (dialogs[dialogs.length - 1] !== panel) return;
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); requestClose(); }
       if (event.key === 'Tab') {
         const buttons = Array.from(panel.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), [tabindex="0"]'));
         const first = buttons[0];
@@ -37,7 +44,13 @@ export function Sheet({ title, children, onClose }: { title: string; children: R
       }
     };
     panel.addEventListener('keydown', onKey);
-    return () => { cancelAnimationFrame(openFrame); panel.removeEventListener('keydown', onKey); if (closeTimerRef.current) clearTimeout(closeTimerRef.current); previousFocus?.focus({ preventScroll: true }); };
+    return () => {
+      cancelAnimationFrame(openFrame);
+      panel.removeEventListener('keydown', onKey);
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+      underneath.forEach(({ node, inert, hidden }) => { node.inert = inert; if (hidden === null) node.removeAttribute('aria-hidden'); else node.setAttribute('aria-hidden', hidden); });
+      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+    };
   }, []);
-  return <div className={`sheet-backdrop ${visible ? 'is-open' : ''} ${closing ? 'is-closing' : ''}`} onClick={(event) => { if (event.target === event.currentTarget) requestClose(); }}><div className="sheet" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={panelRef} tabIndex={-1}><div className="sheet-handle" /><header className="sheet-header"><h2 id={titleId}>{title}</h2><button className="icon-button" aria-label="关闭弹窗" onClick={requestClose}><X size={19} /></button></header>{typeof children === 'function' ? children(requestClose) : children}</div></div>;
+  return createPortal(<div className={`sheet-backdrop ${visible ? 'is-open' : ''} ${closing ? 'is-closing' : ''}`} onClick={(event) => { if (event.target === event.currentTarget) requestClose(); }}><div className="sheet" role="dialog" aria-modal="true" aria-labelledby={titleId} ref={panelRef} tabIndex={-1}><div className="sheet-handle" /><header className="sheet-header"><h2 id={titleId}>{title}</h2><button type="button" className="icon-button" aria-label="关闭弹窗" onClick={requestClose}><X size={19} /></button></header>{typeof children === 'function' ? children(requestClose) : children}</div></div>, document.querySelector('.app-shell') ?? document.body);
 }

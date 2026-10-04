@@ -1,80 +1,124 @@
-import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useLayoutEffect, useRef, useState } from 'react'
+import { Sheet } from './Sheet'
 import './DatePicker.css'
 
-interface Props { id: string; value: string; onChange: (value: string) => void; allowFuture?: boolean; disabled?: boolean; placement?: 'above' | 'below' }
+interface Props { id: string; value: string; onChange: (value: string) => void; title?: string; clearLabel?: string; allowFuture?: boolean; disabled?: boolean }
 
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
 const pad = (n: number) => String(n).padStart(2, '0')
-const stamp = (year: number, month: number, day: number) => `${year}.${pad(month + 1)}.${pad(day)}`
+const stamp = (date: Date) => `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())}`
+const dateLabel = (date: Date) => `${date.getFullYear()} 年 ${date.getMonth() + 1} 月 ${date.getDate()} 日`
 
-/** 只留数字并按 YYYY.MM.DD 补点，边敲边成型。 */
-function mask(raw: string) {
-  const digits = raw.replace(/\D/g, '').slice(0, 8)
-  if (digits.length > 6) return `${digits.slice(0, 4)}.${digits.slice(4, 6)}.${digits.slice(6)}`
-  return digits.length > 4 ? `${digits.slice(0, 4)}.${digits.slice(4)}` : digits
+function parseDate(value: string) {
+  const match = /^(\d{4})\.(\d{2})\.(\d{2})$/.exec(value)
+  if (!match) return null
+  const [year, month, day] = match.slice(1).map(Number)
+  const date = new Date(year, month - 1, day)
+  date.setFullYear(year)
+  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day ? date : null
 }
 
-/** 文本框可直接敲数字；右侧图标展开浮动月历，不改变表单高度。 */
-export function DatePicker({ id, value, onChange, allowFuture = false, disabled = false, placement = 'below' }: Props) {
-  const root = useRef<HTMLDivElement>(null)
-  const [open, setOpen] = useState(false)
-  const [cursor, setCursor] = useState(() => new Date())
+function DateDialog({ id, title, value, clearLabel, allowFuture, onClose, onConfirm }: {
+  id: string; title: string; value: string; clearLabel?: string; allowFuture: boolean; onClose: () => void; onConfirm: (value: string) => void
+}) {
   const today = new Date()
-  const selected = /^(\d{4})\.(\d{2})\.(\d{2})$/.exec(value)
+  today.setHours(0, 0, 0, 0)
+  const parsed = parseDate(value)
+  const initial = parsed && (allowFuture || parsed <= today) ? parsed : today
+  const [draft, setDraft] = useState<Date | null>(clearLabel && !value ? null : initial)
+  const [cursor, setCursor] = useState(initial)
+  const [view, setView] = useState<'days' | 'years' | 'months'>('days')
+  const yearsRoot = useRef<HTMLDivElement>(null)
+  const monthHeading = useRef<HTMLButtonElement>(null)
+  const restoreHeadingFocus = useRef(false)
   const year = cursor.getFullYear()
   const month = cursor.getMonth()
-  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const firstYear = Math.min(1900, initial.getFullYear())
+  const lastYear = allowFuture ? Math.max(today.getFullYear() + 100, year) : today.getFullYear()
   const lead = new Date(year, month, 1).getDay()
-  const atThisMonth = year === today.getFullYear() && month === today.getMonth()
-  const lastMonth = !allowFuture && (year > today.getFullYear() || year === today.getFullYear() && month >= today.getMonth())
+  const daysInMonth = new Date(year, month + 1, 0).getDate()
+  const lastMonth = !allowFuture && year === today.getFullYear() && month === today.getMonth()
 
-  useEffect(() => {
-    if (!open) return
-    setCursor(selected ? new Date(Number(selected[1]), Number(selected[2]) - 1, Number(selected[3])) : new Date())
-    const onDown = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) setOpen(false) }
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return
-      event.preventDefault()
-      event.stopPropagation()
-      setOpen(false)
-      root.current?.querySelector<HTMLButtonElement>('.date-picker-toggle')?.focus({ preventScroll: true })
+  useLayoutEffect(() => {
+    if (restoreHeadingFocus.current) {
+      monthHeading.current?.focus({ preventScroll: true })
+      restoreHeadingFocus.current = false
     }
-    document.addEventListener('pointerdown', onDown)
-    document.addEventListener('keydown', onKey, true)
-    return () => { document.removeEventListener('pointerdown', onDown); document.removeEventListener('keydown', onKey, true) }
-  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (view !== 'years') return
+    const root = yearsRoot.current
+    const selected = root?.querySelector<HTMLElement>('[aria-pressed="true"]')
+    if (root && selected) root.scrollTop = selected.offsetTop - (root.clientHeight - selected.offsetHeight) / 2
+  }, [view])
 
-  const pick = (day: number) => { onChange(stamp(year, month, day)); setOpen(false) }
-  const shift = (delta: number) => setCursor(new Date(year, month + delta, 1))
+  const selectYear = (nextYear: number) => {
+    const nextMonth = !allowFuture && nextYear === today.getFullYear() ? Math.min(month, today.getMonth()) : month
+    setCursor(new Date(nextYear, nextMonth, 1))
+    restoreHeadingFocus.current = true
+    setView('months')
+  }
 
-  return <div className={`date-picker ${placement === 'above' ? 'opens-above' : ''}`} ref={root} onKeyDown={(event) => {
-    if (!disabled && event.altKey && event.key === 'ArrowDown') { event.preventDefault(); setOpen(true) }
-  }}>
+  return <Sheet title={title} onClose={onClose}>{(close) => <div className="date-picker-dialog" id={`${id}-calendar`}>
+    <div className="date-picker-summary">
+      <span>已选日期</span>
+      <strong aria-live="polite">{draft ? stamp(draft) : '未设置'}</strong>
+    </div>
+    <div className="date-picker-panel">
+      <div className="date-picker-head">
+        <button type="button" className="date-picker-nav" aria-label={view === 'days' ? '上一个月' : '返回日历'}
+          disabled={view === 'days' && year === firstYear && month === 0}
+          onClick={() => view === 'days' ? setCursor(new Date(year, month - 1, 1)) : setView('days')}>
+          <ChevronLeft size={18} aria-hidden="true" />
+        </button>
+        <div className="date-picker-heading">
+          <button type="button" className={view === 'years' ? 'is-active' : ''} aria-label={`选择年份，当前 ${year} 年`} aria-expanded={view === 'years'} onClick={() => setView(view === 'years' ? 'days' : 'years')}>{year} 年<ChevronDown size={13} aria-hidden="true" /></button>
+          <button type="button" ref={monthHeading} className={view === 'months' ? 'is-active' : ''} aria-label={`选择月份，当前 ${month + 1} 月`} aria-expanded={view === 'months'} onClick={() => setView(view === 'months' ? 'days' : 'months')}>{month + 1} 月<ChevronDown size={13} aria-hidden="true" /></button>
+        </div>
+        <button type="button" className="date-picker-nav" aria-label={view === 'days' ? '下一个月' : '返回日历'} disabled={view === 'days' && lastMonth}
+          onClick={() => view === 'days' ? setCursor(new Date(year, month + 1, 1)) : setView('days')}>
+          {view === 'days' ? <ChevronRight size={18} aria-hidden="true" /> : <CalendarDays size={17} aria-hidden="true" />}
+        </button>
+      </div>
+      <div className="date-picker-body">
+        {view === 'years' ? <div className="date-picker-options" ref={yearsRoot} role="group" aria-label="选择年份">
+          {Array.from({ length: lastYear - firstYear + 1 }, (_, index) => firstYear + index).map((option) => <button type="button" key={option} aria-label={`${option} 年`} aria-pressed={option === year} className={option === year ? 'is-selected' : ''} onClick={() => selectYear(option)}>{option} 年</button>)}
+        </div> : view === 'months' ? <div className="date-picker-options date-picker-months" role="group" aria-label="选择月份">
+          {Array.from({ length: 12 }, (_, option) => <button type="button" key={option} aria-label={`${option + 1} 月`} aria-pressed={option === month} className={option === month ? 'is-selected' : ''}
+            disabled={!allowFuture && year === today.getFullYear() && option > today.getMonth()} onClick={() => { setCursor(new Date(year, option, 1)); restoreHeadingFocus.current = true; setView('days') }}>{option + 1} 月</button>)}
+        </div> : <div role="group" aria-label={`选择日期，${year} 年 ${month + 1} 月`}>
+          <div className="date-picker-week">{WEEKDAYS.map((day) => <span key={day}>{day}</span>)}</div>
+          <div className="date-picker-days">
+            {Array.from({ length: 42 }, (_, index) => {
+              const day = index - lead + 1
+              if (day < 1 || day > daysInMonth) return <span className="is-blank" key={index} />
+              const date = new Date(year, month, day)
+              const selected = draft !== null && stamp(draft) === stamp(date)
+              const isToday = stamp(today) === stamp(date)
+              return <button type="button" key={index} disabled={!allowFuture && date > today}
+                className={`${selected ? 'is-selected' : ''} ${isToday ? 'is-today' : ''}`} aria-label={dateLabel(date)} aria-pressed={selected} onClick={() => setDraft(date)}>{day}</button>
+            })}
+          </div>
+        </div>}
+      </div>
+    </div>
+    {clearLabel && <button type="button" className="secondary-button date-picker-clear" onClick={() => setDraft(null)}>{clearLabel}</button>}
+    <button type="button" className="primary-button date-picker-confirm" onClick={() => { onConfirm(draft ? stamp(draft) : ''); close() }}>确定</button>
+  </div>}</Sheet>
+}
+
+/** 日期统一在弹窗内选择，确认后才更新表单。 */
+export function DatePicker({ id, title = '选择日期', clearLabel, value, onChange, allowFuture = false, disabled = false }: Props) {
+  const [open, setOpen] = useState(false)
+  const show = () => { if (!disabled) setOpen(true) }
+  return <div className="date-picker">
     <div className="date-picker-field">
-      <input className="line-input" id={id} type="text" inputMode="numeric" autoComplete="off" placeholder="YYYY.MM.DD" maxLength={10}
-        disabled={disabled} value={value} onChange={(event) => onChange(mask(event.target.value))} />
-      <button type="button" className="date-picker-toggle" disabled={disabled} aria-label={open ? '收起日历' : '展开日历'} aria-controls={`${id}-calendar`} aria-expanded={open} onClick={() => setOpen((v) => !v)}>
-        <CalendarDays size={16} aria-hidden="true" />
+      <input className="line-input" id={id} type="text" readOnly inputMode="none" autoComplete="off" placeholder="YYYY.MM.DD"
+        disabled={disabled} value={value} aria-haspopup="dialog" aria-expanded={open} aria-controls={`${id}-calendar`} onClick={show}
+        onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ' || event.altKey && event.key === 'ArrowDown') { event.preventDefault(); show() } }} />
+      <button type="button" className="date-picker-toggle" disabled={disabled} aria-label={title} aria-haspopup="dialog" aria-controls={`${id}-calendar`} aria-expanded={open} onClick={show}>
+        <CalendarDays size={17} aria-hidden="true" />
       </button>
     </div>
-    {open && <div id={`${id}-calendar`} className="date-picker-panel" role="group" aria-label={`选择日期，${year} 年 ${month + 1} 月`}>
-      <div className="date-picker-head">
-        <button type="button" aria-label="上一个月" disabled={disabled} onClick={() => shift(-1)}><ChevronLeft size={17} aria-hidden="true" /></button>
-        <strong>{year} 年 {month + 1} 月</strong>
-        <button type="button" aria-label="下一个月" disabled={disabled || lastMonth} onClick={() => shift(1)}><ChevronRight size={17} aria-hidden="true" /></button>
-      </div>
-      <div className="date-picker-week">{WEEKDAYS.map((day) => <span key={day}>{day}</span>)}</div>
-      <div className="date-picker-days">
-        {Array.from({ length: lead }, (_, i) => <span className="is-blank" key={`blank-${i}`} />)}
-        {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((day) => {
-          const isToday = atThisMonth && day === today.getDate()
-          const isSelected = !!selected && Number(selected[1]) === year && Number(selected[2]) === month + 1 && Number(selected[3]) === day
-          const future = year > today.getFullYear() || year === today.getFullYear() && (month > today.getMonth() || atThisMonth && day > today.getDate())
-          return <button type="button" key={day} disabled={disabled || !allowFuture && future}
-            className={`${isSelected ? 'is-selected' : ''} ${isToday ? 'is-today' : ''}`} aria-pressed={isSelected} onClick={() => pick(day)}>{day}</button>
-        })}
-      </div>
-    </div>}
+    {open && <DateDialog id={id} title={title} clearLabel={clearLabel} value={value} allowFuture={allowFuture} onClose={() => setOpen(false)} onConfirm={onChange} />}
   </div>
 }

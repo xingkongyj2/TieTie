@@ -58,11 +58,10 @@
 .mine-footer-actions { display: flex; gap: 10px; }
 .mine-footer-actions button { flex: 1; min-width: 0; }
 
-.mine-exit-sheet p { margin: 0 0 10px; color: var(--mine-muted); font-size: 13px; line-height: 1.7; }
+.mine-exit-sheet p { margin: 0 0 10px; color: var(--mine-muted, #7a8391); font-size: 13px; line-height: 1.7; }
 .mine-exit-actions { display: flex; gap: 10px; margin-top: 18px; }
 .mine-exit-actions button { flex: 1; width: auto; }
 
-.mine-page .sheet-header .icon-button { width: 44px; height: 44px; }
 .mine-profile-editor .field-label { font-size: 14px; }
 .mine-profile-editor .gender-options button { min-height: 44px; font-size: 13px; }
 .mine-profile-editor .hobby-tags button { max-width: 100%; min-height: 44px; font-size: 13px; overflow-wrap: anywhere; }

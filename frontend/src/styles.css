@@ -356,7 +356,7 @@ h1, h2, h3, p { margin: 0; }
 .sheet-handle { width: 32px; height: 4px; background: #dce1ea; border-radius: 4px; margin: 0 auto 23px; }
 .sheet-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 22px; }
 .sheet-header h2 { font-size: 20px; font-weight: 600; letter-spacing: -.5px; }
-.sheet-header .icon-button { width: 33px; height: 33px; border-radius: 50%; color: #8d97a8; background: #f0f2f5; box-shadow: none; border: 0; }
+.sheet-header .icon-button { width: 44px; height: 44px; border-radius: 50%; color: #8d97a8; background: #f0f2f5; box-shadow: none; border: 0; }
 .character-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; }
 .character-option { display: flex; flex-direction: column; align-items: stretch; min-width: 0; padding: 5px 5px 10px; border: 0; border-radius: 14px; background: white; text-align: center; }
 .character-option.selected { background: #edf4ff; }
