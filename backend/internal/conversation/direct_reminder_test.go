@@ -49,6 +49,8 @@ func TestSingleReminderDoesNotGuessAmbiguousOrMultipleTimes(t *testing.T) {
 		"明天8点提醒我喝水", "明天上午提醒我喝水", "明天晚上12点提醒我睡觉",
 		"明天上午13点提醒我喝水", "明天上午8点60分提醒我喝水",
 		"每天明天上午8点提醒我喝水", "明天上午8点提醒我喝水，每天重复",
+		"明天上午8点提醒我喝水每年", "明天上午8点提醒我喝水，每星期一",
+		"明天上午8点提醒我喝水周一周三", "明天上午8点提醒我喝水隔三天",
 		"明天上午8点提醒我喝水，9点吃药", "明天上午8点提醒我喝水，半小时后吃药",
 		"明天上午8点提醒我喝水，晚上吃药", "明天上午8点提醒我喝水，可以吗？",
 		"如果我说明天上午8点提醒我喝水", "明天上午8点提醒我“喝水”",
@@ -88,6 +90,20 @@ func TestDirectReminderKeepsExistingRelativeBehavior(t *testing.T) {
 		parsed, ok := ParseDirectReminder(test.text, ctx)
 		if !ok || !parsed.DueAt.Equal(ctx.Now.Add(test.wait)) || !reflect.DeepEqual(parsed.RecipientIDs, test.ids) {
 			t.Fatalf("relative behavior changed: text=%s parsed=%+v ok=%v", test.text, parsed, ok)
+		}
+	}
+}
+
+func TestDirectReminderRoutesRecurringRequestsToAI(t *testing.T) {
+	ctx := reminderTestContext(time.Date(2026, 10, 4, 8, 8, 0, 0, time.FixedZone("CST", 8*60*60)))
+	for _, text := range []string{
+		"每天上午8点提醒我喝水",
+		"每周一和周三上午8点提醒我喝水",
+		"三天后提醒我喝水，每隔三天重复",
+		"明天上午8点提醒我喝水，指定10月8日和12日再提醒",
+	} {
+		if parsed, ok := ParseDirectReminder(text, ctx); ok {
+			t.Errorf("recurring request must not create a one-time reminder: %q => %+v", text, parsed)
 		}
 	}
 }

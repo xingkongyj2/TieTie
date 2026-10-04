@@ -1,6 +1,6 @@
-import { ChevronDown, Clock3, Plus } from 'lucide-react';
+import { ChevronDown, Clock3, Plus, Repeat2, X } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
-import type { RelationshipState, Reminder } from '../types';
+import type { RelationshipState, Reminder, ReminderRecurrence } from '../types';
 import { Anniversaries } from './Anniversaries';
 import type { AnniversaryState } from '../hooks/useAnniversaries';
 import { ReminderCard } from './ReminderCard';
@@ -12,6 +12,28 @@ import { compareReminderTime, reminderPhase } from '../lib/reminders';
 export type ToolName = 'reminders' | 'anniversary';
 interface Props { tool: ToolName; state: RelationshipState; anniversaries: AnniversaryState; onClose: () => void; onAdd: (input: Omit<Reminder, 'id' | 'completed'>) => Promise<void>; notify: (text: string) => void }
 interface ReminderBoardProps { state: RelationshipState; onToggle: (id: string) => Promise<void>; onCancel?: (id: string) => Promise<void>; onDelete?: (id: string) => Promise<void>; notify: (text: string) => void; pendingAssignee?: 'both' | 'self' | 'partner' | null }
+
+type RepeatMode = 'none' | ReminderRecurrence['type'];
+const weekdayOptions = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+const shanghaiOffsetMs = 8 * 60 * 60_000;
+
+function dateInShanghai(date: Date): string {
+  return new Date(date.getTime() + shanghaiOffsetMs).toISOString().slice(0, 10);
+}
+
+function shanghaiDateTime(day: string, time: string): Date {
+  return new Date(`${day}T${time}:00+08:00`);
+}
+
+function isoWeekday(day: string): number {
+  return new Date(`${day}T12:00:00Z`).getUTCDay() || 7;
+}
+
+function addCalendarDays(day: string, count: number): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + count);
+  return date.toISOString().slice(0, 10);
+}
 
 function finishedTime(reminder: Reminder): number {
   const value = reminder.taskCompletedAt || reminder.deliveredAt || reminder.updatedAt || reminder.time;
@@ -59,19 +81,61 @@ function ReminderCompose({ state, onAdd, onClose, notify, onPickTime }: Pick<Pro
   const [assignee, setAssignee] = useState<'both' | 'self' | 'partner'>('both');
   const [time, setTime] = useState('');
   const [date, setDate] = useState('');
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>('none');
+  const [intervalDays, setIntervalDays] = useState(2);
+  const [weekdays, setWeekdays] = useState<number[]>([]);
+  const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const chooseRepeatMode = (mode: RepeatMode) => {
+    setRepeatMode(mode);
+    if (mode === 'weekdays' && !weekdays.length && date) setWeekdays([isoWeekday(date.replaceAll('.', '-'))]);
+    if (mode === 'dates' && date && !selectedDates.length) setSelectedDates([date.replaceAll('.', '-')]);
+    setError('');
+  };
+  const chooseDate = (value: string) => {
+    if (repeatMode === 'dates' && value) {
+      const day = value.replaceAll('.', '-');
+      if (!selectedDates.includes(day) && selectedDates.length >= 100) { setError('最多指定 100 个日期。'); return; }
+      setSelectedDates((current) => current.includes(day) ? current : [...current, day].sort());
+    }
+    setDate(value);
+    setError('');
+  };
+  const toggleWeekday = (day: number) => {
+    setWeekdays((current) => current.includes(day) ? current.filter((item) => item !== day) : [...current, day].sort((a, b) => a - b));
+    setError('');
+  };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const title = content.trim();
     if (!title || busy) return;
     const isoDate = date.replaceAll('.', '-');
-    const due = new Date(`${isoDate}T${time}:00`);
-    const localDate = Number.isNaN(due.getTime()) ? '' : `${String(due.getFullYear()).padStart(4, '0')}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate) || !/^\d{2}:\d{2}$/.test(time) || localDate !== isoDate || due.getHours() !== Number(time.slice(0, 2)) || due.getMinutes() !== Number(time.slice(3, 5)) || due.getTime() <= Date.now()) { setError('请选择一个有效且未来的提醒时间。'); return; }
+    if (!/^\d{2}:\d{2}$/.test(time)) { setError('请选择提醒时刻。'); return; }
+    if (repeatMode === 'interval' && (!Number.isInteger(intervalDays) || intervalDays < 1 || intervalDays > 3650)) { setError('间隔天数请选择 1 到 3650 天。'); return; }
+    if (repeatMode === 'weekdays' && !weekdays.length) { setError('请至少选择一个星期。'); return; }
+    if (repeatMode === 'dates' && !selectedDates.length) { setError('请至少添加一个指定日期。'); return; }
+    if (repeatMode !== 'dates' && !/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) { setError('请选择提醒日期。'); return; }
+    let firstDay = repeatMode === 'dates' ? selectedDates[0] : isoDate;
+    if (repeatMode === 'weekdays') {
+      const today = dateInShanghai(new Date());
+      const start = isoDate > today ? isoDate : today;
+      for (let offset = 0; offset <= 7; offset++) {
+        const candidate = addCalendarDays(start, offset);
+        if (weekdays.includes(isoWeekday(candidate)) && shanghaiDateTime(candidate, time).getTime() > Date.now()) { firstDay = candidate; break; }
+      }
+    }
+    if (repeatMode === 'dates' && selectedDates.some((day) => shanghaiDateTime(day, time).getTime() <= Date.now())) { setError('有指定日期已经过去，请调整或移除。'); return; }
+    const due = shanghaiDateTime(firstDay, time);
+    if (Number.isNaN(due.getTime()) || dateInShanghai(due) !== firstDay || due.getTime() <= Date.now()) { setError('请选择一个有效且未来的提醒时间。'); return; }
+    const recurrence: ReminderRecurrence | undefined = repeatMode === 'none' ? undefined
+      : repeatMode === 'interval' ? { type: 'interval', intervalDays }
+        : repeatMode === 'weekdays' ? { type: 'weekdays', weekdays }
+          : repeatMode === 'dates' ? { type: 'dates', dates: selectedDates }
+            : { type: repeatMode };
     setBusy(true);
     setError('');
-    try { await onAdd({ title, assignee, time: due.toISOString() }); notify('共享提醒已安排，到点会在聊天里提醒'); onClose(); }
+    try { await onAdd({ title, assignee, time: due.toISOString(), recurrence }); notify(recurrence ? '重复提醒已安排，到点会在聊天里提醒' : '共享提醒已安排，到点会在聊天里提醒'); onClose(); }
     catch (error) { setError(error instanceof Error ? error.message : '提醒添加失败，请再试一次。'); }
     finally { setBusy(false); }
   };
@@ -83,16 +147,26 @@ function ReminderCompose({ state, onAdd, onClose, notify, onPickTime }: Pick<Pro
         <label className="reminder-mention"><span className="sr-only">提醒对象</span><select value={assignee} disabled={busy} onChange={(event) => setAssignee(event.target.value as typeof assignee)}><option value="both">@我们两人</option><option value="self">@我</option><option value="partner">@{state.members.find((member) => member.id === 'partner')?.name || '另一位成员'}</option></select><ChevronDown size={14} aria-hidden="true" /></label>
       </div>
     </div>
-    <div className="reminder-time-field"><span>提醒时间</span><div className="reminder-date-time">
-      <div><label className="sr-only" htmlFor="quick-reminder-date">提醒日期</label><DatePicker id="quick-reminder-date" title="选择提醒日期" value={date} allowFuture disabled={busy} onChange={(value) => { setDate(value); setError(''); }} /></div>
+    <div className="reminder-time-field"><span>{repeatMode === 'dates' ? '指定日期与时间' : '提醒时间'}</span><div className="reminder-date-time">
+      <div><label className="sr-only" htmlFor="quick-reminder-date">{repeatMode === 'dates' ? '添加指定日期' : repeatMode === 'weekdays' ? '开始日期' : '提醒日期'}</label><DatePicker id="quick-reminder-date" title={repeatMode === 'dates' ? '添加指定日期' : repeatMode === 'weekdays' ? '选择开始日期' : '选择提醒日期'} placeholder={repeatMode === 'dates' ? '点这里添加日期' : 'YYYY.MM.DD'} value={date} allowFuture disabled={busy} onChange={chooseDate} /></div>
       <button type="button" className="reminder-clock" disabled={busy} aria-label={time ? `提醒时刻 ${time}` : '选择提醒时刻'} aria-haspopup="dialog" onClick={() => {
-        const next = new Date(Date.now() + 60 * 60_000);
-        const initial = time || `${String(next.getHours()).padStart(2, '0')}:${String(next.getMinutes()).padStart(2, '0')}`;
+        const initial = time || new Date(Date.now() + 60 * 60_000 + shanghaiOffsetMs).toISOString().slice(11, 16);
         onPickTime(initial, (value) => { setTime(value); setError(''); });
       }}><Clock3 size={15} aria-hidden="true" /><span>{time || '选择时间'}</span></button>
-    </div><small>按设备当前时区设置，到点会在共享聊天里提醒所选的人。</small></div>
+    </div><small>按北京时间设置，到点会在共享聊天里提醒所选的人。</small></div>
+    <div className="reminder-repeat-field">
+      <label htmlFor="quick-reminder-repeat"><Repeat2 size={15} aria-hidden="true" />重复提醒</label>
+      <div className="reminder-repeat-select"><select id="quick-reminder-repeat" value={repeatMode} disabled={busy} onChange={(event) => chooseRepeatMode(event.target.value as RepeatMode)}>
+        <option value="none">不重复</option><option value="daily">每天</option><option value="interval">每隔几天</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="yearly">每年</option><option value="weekdays">指定每周星期</option><option value="dates">指定几个日期</option>
+      </select><ChevronDown size={15} aria-hidden="true" /></div>
+      {repeatMode === 'interval' && <label className="reminder-interval">每隔 <input type="number" min={1} max={3650} step={1} value={intervalDays} disabled={busy} onChange={(event) => { setIntervalDays(Number(event.target.value)); setError(''); }} /> 天提醒一次</label>}
+      {repeatMode === 'weekdays' && <div className="reminder-weekday-options" role="group" aria-label="指定每周星期">{weekdayOptions.map((label, index) => <button type="button" key={label} aria-pressed={weekdays.includes(index + 1)} className={weekdays.includes(index + 1) ? 'is-selected' : ''} disabled={busy} onClick={() => toggleWeekday(index + 1)}>{label}</button>)}</div>}
+      {repeatMode === 'dates' && <div className="reminder-date-options" aria-label="已选指定日期">{selectedDates.length ? selectedDates.map((day) => <span className="reminder-date-chip" key={day}>{day.replaceAll('-', '.')}<button type="button" disabled={busy} aria-label={`移除 ${day}`} onClick={() => { const remaining = selectedDates.filter((item) => item !== day); setSelectedDates(remaining); if (date.replaceAll('.', '-') === day) setDate(remaining.at(-1)?.replaceAll('-', '.') ?? ''); setError(''); }}><X size={13} aria-hidden="true" /></button></span>) : <small>从上方日历添加日期，可选多个。</small>}</div>}
+      {repeatMode === 'weekdays' && <small>从开始日期起，按选中的星期提醒。</small>}
+      {repeatMode === 'dates' && selectedDates.length > 0 && <small>点上方日期可继续添加；每个日期都会在选定时间提醒。</small>}
+    </div>
     {error && <p className="form-error" role="alert">{error}</p>}
-    <button className="primary-button" type="submit" disabled={busy || !content.trim() || !date || !time}>{busy ? '正在添加…' : '添加提醒'}<Plus size={17} /></button>
+    <button className="primary-button" type="submit" disabled={busy || !content.trim() || !time || (repeatMode === 'dates' ? !selectedDates.length : !date)}>{busy ? '正在添加…' : '添加提醒'}<Plus size={17} /></button>
   </form>;
 }
 

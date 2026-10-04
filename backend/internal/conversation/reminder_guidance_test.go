@@ -80,6 +80,7 @@ func TestReminderGuidanceNeverShortcutsUnconfirmedResults(t *testing.T) {
 		{"unknown reply member", func(e *EnvelopeV2) { e.ReplyTo.ID = 3 }},
 		{"different owner", func(e *EnvelopeV2) { e.Results[0].Reminder.CreatedBy = 2 }},
 		{"mixed actions", func(e *EnvelopeV2) { e.Results = append(e.Results, ActionResult{Type: "save_memory"}) }},
+		{"recurring reminder", func(e *EnvelopeV2) { e.Results[0].Reminder.Recurrence = &Recurrence{Type: "daily"} }},
 		{"silent", func(e *EnvelopeV2) { e.ReplyMode = SilentReply }},
 	} {
 		t.Run(test.name, func(t *testing.T) {

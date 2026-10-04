@@ -78,6 +78,7 @@
 .things-page .reminder-title-row { flex-direction: column-reverse; align-items: flex-start; gap: 9px; margin-bottom: 8px; }
 .things-page .reminder-main h3 { font-size: 14px; font-weight: 550; line-height: 1.65; color: #202b40; }
 .things-page .reminder-main p { color: #75859e; font-size: 11px; line-height: 1.5; }
+.things-page .reminder-main p.reminder-recurrence { display: flex; align-items: center; gap: 5px; margin-top: 5px; color: #6288bf; }
 .things-page .reminder-check { margin: 12px -3px 0 0; width: 44px; height: 44px; border: none; border-radius: 14px; background: #fff; color: #2864ef; }
 .things-page .reminder-check::before { position: absolute; inset: 11px; border: 1.5px solid #99b4db; border-radius: 7px; pointer-events: none; }
 .things-page .reminder-check:hover { background: #e2edff; }

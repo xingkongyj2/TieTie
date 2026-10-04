@@ -10,7 +10,7 @@ import (
 	"strings"
 )
 
-const Version = 2
+const Version = 3
 const TodoPath = "tasks/todo-board.json"
 const BehaviorPath = "rules/assistant-behavior.json"
 

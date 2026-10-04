@@ -24,7 +24,7 @@ func ReminderGuidance(e EnvelopeV2) EnvelopeV2 {
 	result := e.Results[0]
 	reminder := result.Reminder
 	if result.Type != "create_reminder" || result.Status != "succeeded" || result.DatabaseStatus != "saved" || result.MemoryStatus != "synced" ||
-		reminder == nil || reminder.ID == "" || reminder.ID != result.ReminderID || reminder.Title == "" || reminder.DueAt.IsZero() || reminder.Status != "scheduled" || len(reminder.RecipientIDs) == 0 || len(reminder.RecipientIDs) > 2 || reminder.CreatedBy != e.ReplyTo.ID {
+		reminder == nil || reminder.ID == "" || reminder.ID != result.ReminderID || reminder.Title == "" || reminder.DueAt.IsZero() || reminder.Recurrence != nil || reminder.Status != "scheduled" || len(reminder.RecipientIDs) == 0 || len(reminder.RecipientIDs) > 2 || reminder.CreatedBy != e.ReplyTo.ID {
 		return e
 	}
 	members := make(map[int64]bool, len(e.Members))

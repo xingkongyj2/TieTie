@@ -385,6 +385,22 @@ h1, h2, h3, p { margin: 0; }
 .reminder-clock svg { color: #a2aec6; }
 .reminder-clock:hover:not(:disabled) { background: var(--blue-pale); color: var(--blue); }
 .reminder-time-field small { color: #97a2b6; line-height: 1.7; font-size: 10px; }
+.reminder-repeat-field { display: flex; flex-direction: column; gap: 9px; color: #667798; font-size: 12px; }
+.reminder-repeat-field > label:first-child { display: inline-flex; align-items: center; gap: 7px; }
+.reminder-repeat-field > label:first-child svg { color: #7fa1d7; }
+.reminder-repeat-select { position: relative; }
+.reminder-repeat-select select { appearance: none; width: 100%; min-height: 45px; padding: 0 38px 0 14px; border: 0; border-radius: 13px; outline-color: #7da7ed; background: #fff; color: #516989; font: inherit; font-size: 13px; }
+.reminder-repeat-select svg { position: absolute; top: 50%; right: 14px; color: #9badd0; pointer-events: none; transform: translateY(-50%); }
+.reminder-interval { display: inline-flex; align-items: center; gap: 9px; align-self: flex-start; color: #657999; }
+.reminder-interval input { width: 62px; height: 38px; padding: 0 8px; border: 1px solid #e1e9f7; border-radius: 10px; outline-color: #7da7ed; background: #fff; color: #426cac; font-size: 14px; text-align: center; }
+.reminder-weekday-options { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.reminder-weekday-options button { min-width: 0; min-height: 36px; padding: 0 1px; border: 1px solid #e4ebf7; border-radius: 10px; background: #fff; color: #8799b4; font-size: 11px; }
+.reminder-weekday-options button.is-selected { border-color: #94b7f5; background: #eaf2ff; color: #2864ef; font-weight: 650; }
+.reminder-date-options { display: flex; flex-wrap: wrap; gap: 7px; }
+.reminder-date-options > small, .reminder-repeat-field > small { color: #97a2b6; font-size: 10px; line-height: 1.6; }
+.reminder-date-chip { display: inline-flex; align-items: center; gap: 4px; min-height: 30px; padding: 3px 5px 3px 10px; border-radius: 10px; background: #eaf2ff; color: #4a79c7; font-size: 11px; font-variant-numeric: tabular-nums; }
+.reminder-date-chip button { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 7px; color: #7394c8; }
+.reminder-date-chip button:hover:not(:disabled) { background: #d8e7ff; }
 .reminder-editor { overflow: hidden; border: 0; border-radius: 16px; background: #fff; }
 .reminder-editor textarea { display: block; width: 100%; min-height: 146px; padding: 16px; border: 0; background: transparent; resize: vertical; font-size: 14px; line-height: 1.6; }
 .reminder-editor textarea:focus { outline: none; }

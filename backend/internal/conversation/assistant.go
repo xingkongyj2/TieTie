@@ -31,6 +31,7 @@ type Action struct {
 	Key             string            `json:"key"`
 	Title           string            `json:"title,omitempty"`
 	DueAt           string            `json:"dueAt,omitempty"`
+	Recurrence      *Recurrence       `json:"recurrence,omitempty"`
 	RecipientIDs    []int64           `json:"recipientIds"`
 	ReminderID      string            `json:"reminderId,omitempty"`
 	ReminderIDs     []string          `json:"reminderIds,omitempty"`
@@ -250,9 +251,13 @@ func validateAction(action Action) error {
 		if _, err := time.Parse(time.RFC3339, action.DueAt); err != nil {
 			return fmt.Errorf("dueAt must be RFC3339 with timezone")
 		}
+		due, _ := time.Parse(time.RFC3339, action.DueAt)
+		if err := ValidateRecurrence(action.Recurrence, due); err != nil {
+			return err
+		}
 	case "cancel_reminder":
 		if strings.TrimSpace(action.ReminderID) == "" || len(action.ReminderID) > 160 ||
-			!validRecipients(action.RecipientIDs, true) || action.Title != "" || action.DueAt != "" {
+			!validRecipients(action.RecipientIDs, true) || action.Title != "" || action.DueAt != "" || action.Recurrence != nil {
 			return fmt.Errorf("invalid cancellation")
 		}
 	default:

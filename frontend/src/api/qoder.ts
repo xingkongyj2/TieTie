@@ -1,5 +1,5 @@
 import { isAccountTokenInvalid, request } from './client'
-import type { CloudMember, CloudReminder, Message } from '../types'
+import type { CloudMember, CloudReminder, Message, ReminderRecurrence } from '../types'
 import uploadTypes from './upload-types.json'
 import { clearToken, getToken } from '../lib/token'
 
@@ -204,7 +204,7 @@ export const qoderApi = {
   getReminders(id: string, signal?: AbortSignal): Promise<{ reminders: CloudReminder[] }> {
     return request(remindersPath(id), { signal })
   },
-  createReminder(id: string, input: { title: string; dueAt: string; recipientIds: number[] }): Promise<{ reminder: CloudReminder }> {
+  createReminder(id: string, input: { title: string; dueAt: string; recipientIds: number[]; recurrence?: ReminderRecurrence }): Promise<{ reminder: CloudReminder }> {
     return request(remindersPath(id), { method: 'POST', body: input })
   },
   updateReminder(id: string, reminderId: string, status: 'completed' | 'scheduled' | 'cancelled'): Promise<{ reminder: CloudReminder }> {

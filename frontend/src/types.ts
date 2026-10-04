@@ -47,6 +47,16 @@ export interface Reminder {
   taskCompletedAt?: string
   deliveredAt?: string
   updatedAt?: string
+  recurrence?: ReminderRecurrence
+}
+
+/** Repeating reminder schedule. Weekdays use ISO numbering: Monday = 1, Sunday = 7. */
+export interface ReminderRecurrence {
+  type: 'daily' | 'interval' | 'weekly' | 'monthly' | 'yearly' | 'weekdays' | 'dates'
+  intervalDays?: number
+  weekdays?: number[]
+  /** A finite list of dates in YYYY-MM-DD format, interpreted in Asia/Shanghai. */
+  dates?: string[]
 }
 
 export type CloudReminderStatus = 'scheduled' | 'dispatching' | 'delivered' | 'completed' | 'cancelled' | 'failed' | 'uncertain'
@@ -68,6 +78,7 @@ export interface CloudReminder {
   taskCompletedAt?: string
   deliveredAt?: string
   updatedAt?: string
+  recurrence?: ReminderRecurrence
 }
 
 /** Agent 通过云端自定义工具（AskUserQuestion）抛出的选择题。 */

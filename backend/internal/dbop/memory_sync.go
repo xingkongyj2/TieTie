@@ -208,7 +208,7 @@ func (db *DB) RecoverMemorySync(ctx context.Context) error {
 	return db.gdb.WithContext(ctx).Model(&MemoryRecord{}).Where("state='syncing'").Updates(map[string]any{"state": "pending", "run_at": time.Now().UTC()}).Error
 }
 func reminderCloudContent(r *Reminder) string {
-	b, _ := json.Marshal(map[string]any{"schemaVersion": 1, "id": r.ID, "reminderId": r.ID, "title": r.Title, "dueAt": r.DueAt, "recipientIds": r.RecipientIDs, "createdBy": r.CreatedBy, "status": reminderBoardStatus(r), "deliveryStatus": r.Status, "activityStatus": reminderActivityStatus(r), "taskStatus": r.TaskStatus, "taskCompletedAt": r.TaskCompletedAt, "deliveredAt": r.DeliveredAt, "completedBy": r.CompletedBy, "createdAt": r.CreatedAt, "updatedAt": r.UpdatedAt, "visibility": r.Visibility})
+	b, _ := json.Marshal(map[string]any{"schemaVersion": 1, "id": r.ID, "reminderId": r.ID, "title": r.Title, "dueAt": r.DueAt, "recurrence": r.Recurrence, "seriesId": r.SeriesID, "occurrence": r.Occurrence, "recipientIds": r.RecipientIDs, "createdBy": r.CreatedBy, "status": reminderBoardStatus(r), "deliveryStatus": r.Status, "activityStatus": reminderActivityStatus(r), "taskStatus": r.TaskStatus, "taskCompletedAt": r.TaskCompletedAt, "deliveredAt": r.DeliveredAt, "completedBy": r.CompletedBy, "createdAt": r.CreatedAt, "updatedAt": r.UpdatedAt, "visibility": r.Visibility})
 	return string(b)
 }
 

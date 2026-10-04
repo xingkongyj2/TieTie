@@ -154,7 +154,7 @@ export default function App() {
   const reminders: Reminder[] = chat.reminders.map((reminder) => ({
     id: reminder.id, title: reminder.title, time: reminder.dueAt,
     recipientIds: reminder.recipientIds, status: reminder.status,
-    deliveredAt: reminder.deliveredAt, taskStatus: reminder.taskStatus, taskCompletedAt: reminder.taskCompletedAt, updatedAt: reminder.updatedAt,
+    deliveredAt: reminder.deliveredAt, taskStatus: reminder.taskStatus, taskCompletedAt: reminder.taskCompletedAt, updatedAt: reminder.updatedAt, recurrence: reminder.recurrence,
     assignee: reminder.recipientIds.length > 1 ? 'both' : reminder.recipientIds.includes(selfId) ? 'self' : 'partner',
     completed: reminderPhase(reminder) === 'completed',
   }));
@@ -177,7 +177,7 @@ export default function App() {
     if (Number.isNaN(due.getTime()) || due.getTime() <= Date.now()) throw new Error('请选择一个未来的提醒时间。');
     const recipientIds = input.assignee === 'both' ? [selfId, account.account.binding.partnerId]
       : [input.assignee === 'self' ? selfId : account.account.binding.partnerId];
-    await chat.saveReminder({ title: input.title, dueAt: due.toISOString(), recipientIds });
+    await chat.saveReminder({ title: input.title, dueAt: due.toISOString(), recipientIds, recurrence: input.recurrence });
   };
   const sendMessage = async (text: string, files: File[] = [], visibility: 'shared' | 'private' = 'shared') => {
     if (!chat.canSend) throw new Error(chat.error || (chat.awaitingAsk ? '云端助手在等你回答上面那道选择题，先选一个才能继续。' : chat.busy ? '伙伴还在回复，等这一轮结束后再发送吧。' : '请先加载一个可聊天的云端会话。'));

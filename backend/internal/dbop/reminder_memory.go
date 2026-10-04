@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"tietie/backend/internal/conversation"
 	"tietie/backend/internal/memoryspace"
 	"time"
 )
@@ -14,17 +15,20 @@ import (
 // updated in the same transaction as the reminder; it never claims the activity
 // itself is done just because a notification was delivered.
 type ReminderMemory struct {
-	ReminderID   string     `json:"reminderId" gorm:"primaryKey;size:64"`
-	SessionID    string     `json:"-" gorm:"not null;index:idx_reminder_memory_space,priority:1;size:160"`
-	Title        string     `json:"title"`
-	DueAt        time.Time  `json:"dueAt" gorm:"type:datetime(6)"`
-	RecipientIDs []int64    `json:"recipientIds" gorm:"serializer:json;type:mediumtext"`
-	CreatedBy    int64      `json:"createdBy"`
-	Status       string     `json:"status"`
-	TaskStatus   string     `json:"taskStatus"`
-	DeliveredAt  *time.Time `json:"deliveredAt,omitempty" gorm:"type:datetime(6)"`
-	CompletedBy  *int64     `json:"completedBy,omitempty"`
-	UpdatedAt    time.Time  `json:"updatedAt" gorm:"index:idx_reminder_memory_space,priority:2;type:datetime(6)"`
+	ReminderID   string                   `json:"reminderId" gorm:"primaryKey;size:64"`
+	SessionID    string                   `json:"-" gorm:"not null;index:idx_reminder_memory_space,priority:1;size:160"`
+	Title        string                   `json:"title"`
+	DueAt        time.Time                `json:"dueAt" gorm:"type:datetime(6)"`
+	Recurrence   *conversation.Recurrence `json:"recurrence,omitempty" gorm:"serializer:json;type:mediumtext"`
+	SeriesID     string                   `json:"seriesId,omitempty" gorm:"size:64"`
+	Occurrence   int                      `json:"occurrence,omitempty"`
+	RecipientIDs []int64                  `json:"recipientIds" gorm:"serializer:json;type:mediumtext"`
+	CreatedBy    int64                    `json:"createdBy"`
+	Status       string                   `json:"status"`
+	TaskStatus   string                   `json:"taskStatus"`
+	DeliveredAt  *time.Time               `json:"deliveredAt,omitempty" gorm:"type:datetime(6)"`
+	CompletedBy  *int64                   `json:"completedBy,omitempty"`
+	UpdatedAt    time.Time                `json:"updatedAt" gorm:"index:idx_reminder_memory_space,priority:2;type:datetime(6)"`
 }
 
 func (ReminderMemory) TableName() string { return "reminder_memories" }
@@ -36,6 +40,7 @@ func syncReminderMemory(tx *gorm.DB, r *Reminder) error {
 		return syncReminderHistory(tx, r)
 	}
 	m := ReminderMemory{ReminderID: r.ID, SessionID: r.SessionID, Title: r.Title, DueAt: r.DueAt,
+		Recurrence: r.Recurrence, SeriesID: r.SeriesID, Occurrence: r.Occurrence,
 		RecipientIDs: r.RecipientIDs, CreatedBy: r.CreatedBy, Status: r.Status, TaskStatus: r.TaskStatus,
 		DeliveredAt: r.DeliveredAt, CompletedBy: r.CompletedBy, UpdatedAt: time.Now().UTC()}
 	if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "reminder_id"}}, UpdateAll: true}).Create(&m).Error; err != nil {
@@ -148,7 +153,7 @@ func boardItems(tx *gorm.DB, locations []ReminderHistoryLocation) ([]map[string]
 		if !ok {
 			return nil, fmt.Errorf("missing board reminder %s", l.ReminderID)
 		}
-		items = append(items, map[string]any{"id": r.ID, "title": r.Title, "dueAt": r.DueAt, "status": reminderBoardStatus(&r), "createdBy": r.CreatedBy, "recipientIds": r.RecipientIDs, "deliveryStatus": r.Status, "taskStatus": r.TaskStatus, "completedBy": r.CompletedBy, "historyPath": l.Path()})
+		items = append(items, map[string]any{"id": r.ID, "title": r.Title, "dueAt": r.DueAt, "recurrence": r.Recurrence, "seriesId": r.SeriesID, "occurrence": r.Occurrence, "status": reminderBoardStatus(&r), "createdBy": r.CreatedBy, "recipientIds": r.RecipientIDs, "deliveryStatus": r.Status, "taskStatus": r.TaskStatus, "completedBy": r.CompletedBy, "historyPath": l.Path()})
 	}
 	return items, nil
 }

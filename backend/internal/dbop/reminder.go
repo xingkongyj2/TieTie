@@ -40,30 +40,34 @@ var (
 
 // Reminder 是可恢复的提醒队列。绑定创建时间隔离解绑后重新使用同一云会话的旧任务。
 type Reminder struct {
-	DeliverySessionID string     `json:"-" gorm:"size:160"`
-	MemorySessionID   string     `json:"-" gorm:"size:160"`
-	Visibility        string     `json:"visibility,omitempty" gorm:"size:32"`
-	MemoryBucket      string     `json:"-" gorm:"index:idx_reminders_board,priority:2;size:160"`
-	ID                string     `json:"id" gorm:"primaryKey;size:64;index:idx_reminders_board,priority:3;index:idx_reminders_created,priority:3;index:idx_reminders_space_status,priority:4;index:idx_reminders_ready,priority:3"`
-	SessionID         string     `json:"sessionId" gorm:"not null;index:idx_reminders_session;index:idx_reminders_space_status,priority:1;index:idx_reminders_board,priority:1;index:idx_reminders_created,priority:1;size:160"`
-	Title             string     `json:"title" gorm:"not null;size:500"`
-	DueAt             time.Time  `json:"dueAt" gorm:"not null;type:datetime(6)"`
-	RunAt             time.Time  `json:"-" gorm:"index:idx_reminders_ready,priority:2;index:idx_reminders_space_status,priority:3;type:datetime(6)"`
-	RecipientIDs      []int64    `json:"recipientIds" gorm:"serializer:json;not null;type:mediumtext"`
-	CreatedBy         int64      `json:"createdBy"`
-	SourceEventID     string     `json:"sourceEventId" gorm:"not null;size:160"`
-	Status            string     `json:"status" gorm:"not null;index:idx_reminders_ready,priority:1;index:idx_reminders_space_status,priority:2;size:32"`
-	TaskStatus        string     `json:"taskStatus" gorm:"not null;default:pending;size:32"`
-	TaskCompletedAt   *time.Time `json:"taskCompletedAt,omitempty" gorm:"type:datetime(6)"`
-	DeliveredAt       *time.Time `json:"deliveredAt,omitempty" gorm:"type:datetime(6)"`
-	CompletedBy       *int64     `json:"completedBy,omitempty"`
-	CreatedAt         time.Time  `json:"createdAt" gorm:"autoCreateTime;index:idx_reminders_created,priority:2;type:datetime(6)"`
-	UpdatedAt         time.Time  `json:"updatedAt" gorm:"autoUpdateTime;type:datetime(6)"`
-	BindingCreatedAt  time.Time  `json:"-" gorm:"not null;type:datetime(6)"`
-	ActionIndex       int        `json:"-"`
-	Attempts          int        `json:"-"`
-	NextAttemptAt     *time.Time `json:"-" gorm:"type:datetime(6)"`
-	DispatchEventIDs  []string   `json:"-" gorm:"serializer:json;type:mediumtext"`
+	DeliverySessionID string                   `json:"-" gorm:"size:160"`
+	MemorySessionID   string                   `json:"-" gorm:"size:160"`
+	Visibility        string                   `json:"visibility,omitempty" gorm:"size:32"`
+	MemoryBucket      string                   `json:"-" gorm:"index:idx_reminders_board,priority:2;size:160"`
+	ID                string                   `json:"id" gorm:"primaryKey;size:64;index:idx_reminders_board,priority:3;index:idx_reminders_created,priority:3;index:idx_reminders_space_status,priority:4;index:idx_reminders_ready,priority:3"`
+	SessionID         string                   `json:"sessionId" gorm:"not null;index:idx_reminders_session;index:idx_reminders_space_status,priority:1;index:idx_reminders_board,priority:1;index:idx_reminders_created,priority:1;size:160"`
+	Title             string                   `json:"title" gorm:"not null;size:500"`
+	DueAt             time.Time                `json:"dueAt" gorm:"not null;type:datetime(6)"`
+	Recurrence        *conversation.Recurrence `json:"recurrence,omitempty" gorm:"serializer:json;type:mediumtext"`
+	SeriesID          string                   `json:"seriesId,omitempty" gorm:"index:idx_reminders_series,priority:1;size:64"`
+	Occurrence        int                      `json:"occurrence,omitempty" gorm:"index:idx_reminders_series,priority:2"`
+	RecurrenceStartAt *time.Time               `json:"-" gorm:"type:datetime(6)"`
+	RunAt             time.Time                `json:"-" gorm:"index:idx_reminders_ready,priority:2;index:idx_reminders_space_status,priority:3;type:datetime(6)"`
+	RecipientIDs      []int64                  `json:"recipientIds" gorm:"serializer:json;not null;type:mediumtext"`
+	CreatedBy         int64                    `json:"createdBy"`
+	SourceEventID     string                   `json:"sourceEventId" gorm:"not null;size:160"`
+	Status            string                   `json:"status" gorm:"not null;index:idx_reminders_ready,priority:1;index:idx_reminders_space_status,priority:2;size:32"`
+	TaskStatus        string                   `json:"taskStatus" gorm:"not null;default:pending;size:32"`
+	TaskCompletedAt   *time.Time               `json:"taskCompletedAt,omitempty" gorm:"type:datetime(6)"`
+	DeliveredAt       *time.Time               `json:"deliveredAt,omitempty" gorm:"type:datetime(6)"`
+	CompletedBy       *int64                   `json:"completedBy,omitempty"`
+	CreatedAt         time.Time                `json:"createdAt" gorm:"autoCreateTime;index:idx_reminders_created,priority:2;type:datetime(6)"`
+	UpdatedAt         time.Time                `json:"updatedAt" gorm:"autoUpdateTime;type:datetime(6)"`
+	BindingCreatedAt  time.Time                `json:"-" gorm:"not null;type:datetime(6)"`
+	ActionIndex       int                      `json:"-"`
+	Attempts          int                      `json:"-"`
+	NextAttemptAt     *time.Time               `json:"-" gorm:"type:datetime(6)"`
+	DispatchEventIDs  []string                 `json:"-" gorm:"serializer:json;type:mediumtext"`
 }
 
 func (Reminder) TableName() string { return "reminders" }
@@ -90,6 +94,7 @@ type ReminderAction struct {
 	ReminderID   string
 	Title        string
 	DueAt        time.Time
+	Recurrence   *conversation.Recurrence
 	RecipientIDs []int64
 	CreatedBy    int64
 	RequestKey   string
@@ -141,7 +146,7 @@ func (db *DB) ApplyReminderAction(ctx context.Context, sessionID, sourceEventID 
 				return err
 			}
 			title := strings.TrimSpace(action.Title)
-			if title == "" || len([]rune(title)) > 500 || action.DueAt.IsZero() || len(action.RecipientIDs) == 0 || len(action.RecipientIDs) > 2 {
+			if title == "" || len([]rune(title)) > 500 || action.DueAt.IsZero() || len(action.RecipientIDs) == 0 || len(action.RecipientIDs) > 2 || conversation.ValidateRecurrence(action.Recurrence, action.DueAt) != nil {
 				return ErrReminderInvalid
 			}
 			recipients := slices.Clone(action.RecipientIDs)
@@ -162,6 +167,13 @@ func (db *DB) ApplyReminderAction(ctx context.Context, sessionID, sourceEventID 
 			reminder = &Reminder{ID: "rem_" + hex.EncodeToString(randomID[:]), SessionID: sessionID, RunAt: action.DueAt.UTC(),
 				Title: title, DueAt: action.DueAt.UTC(), RecipientIDs: recipients, CreatedBy: action.CreatedBy,
 				SourceEventID: sourceEventID, ActionIndex: actionIndex, Status: ReminderScheduled, TaskStatus: "pending", BindingCreatedAt: binding.CreatedAt}
+			if action.Recurrence != nil {
+				anchor := action.DueAt.UTC()
+				copyRule := *action.Recurrence
+				copyRule.Weekdays = slices.Clone(copyRule.Weekdays)
+				copyRule.Dates = slices.Clone(copyRule.Dates)
+				reminder.Recurrence, reminder.SeriesID, reminder.Occurrence, reminder.RecurrenceStartAt = &copyRule, reminder.ID, 1, &anchor
+			}
 			var channel PrivateChannel
 			if err := tx.Where("session_id=?", sessionID).First(&channel).Error; err == nil {
 				reminder.MemorySessionID, reminder.Visibility = channel.SessionID, "private"
@@ -374,6 +386,9 @@ func completeReminder(tx *gorm.DB, sessionID, id string, userID int64) (*Reminde
 	if err := syncReminderMemory(tx, &reminder); err != nil {
 		return nil, false, err
 	}
+	if err := advanceReminderSeries(tx, &reminder, time.Now().UTC()); err != nil {
+		return nil, false, err
+	}
 	return &reminder, true, nil
 }
 
@@ -434,6 +449,24 @@ func restoreCompletedReminder(tx *gorm.DB, sessionID, id string, userID int64) (
 	}
 	if reminder.Status != ReminderCompleted || !reminder.DueAt.After(time.Now()) || reminder.hasCompletedDelivery() {
 		return nil, ErrReminderState
+	}
+	if reminder.SeriesID != "" {
+		var next Reminder
+		err := tx.Where("series_id=? AND occurrence=?", reminder.SeriesID, reminder.Occurrence+1).First(&next).Error
+		if err == nil {
+			if next.Status != ReminderScheduled || next.TaskStatus != "pending" {
+				return nil, ErrReminderState
+			}
+			if err := tx.Model(&next).Updates(map[string]any{"status": ReminderDeleted, "task_status": "undo_hidden"}).Error; err != nil {
+				return nil, err
+			}
+			next.Status, next.TaskStatus = ReminderDeleted, "undo_hidden"
+			if err := syncReminderMemory(tx, &next); err != nil {
+				return nil, err
+			}
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
+		}
 	}
 	result := tx.Model(&Reminder{}).Where("id = ? AND status = ?", id, ReminderCompleted).
 		Updates(map[string]any{"status": ReminderScheduled, "completed_by": nil, "run_at": reminder.DueAt, "task_status": "pending"})
@@ -642,7 +675,17 @@ func (db *DB) updateReminderStates(ctx context.Context, id string, allowedStates
 			}
 			reminder.SessionID, reminder.Visibility = reminder.DeliverySessionID, "shared"
 		}
-		return syncReminderMemory(tx, &reminder)
+		if err := syncReminderMemory(tx, &reminder); err != nil {
+			return err
+		}
+		if reminder.Status == ReminderDelivered {
+			delivered := time.Now().UTC()
+			if reminder.DeliveredAt != nil {
+				delivered = *reminder.DeliveredAt
+			}
+			return advanceReminderSeries(tx, &reminder, delivered)
+		}
+		return nil
 	})
 	if err == nil {
 		message := "提醒执行状态已保存，本地事实已更新，云端记忆等待同步"

@@ -15,6 +15,7 @@ const clockNumber = `(?:[0-9]{1,2}|[零〇一二两三四五六七八九十]{1,3
 
 var explicitRequest = regexp.MustCompile(`^(?:请|麻烦你|帮我)?(今天|明天|后天)\s*(凌晨|早上|上午|中午|下午|晚上)?\s*(` + clockNumber + `)(?:点|时)(半|` + clockNumber + `分)?[，,\s]*(?:请)?提醒(我们俩|我们|两个人|我俩|我|对方|他|她|TA|ta)[，,、：:\s]*(.+?)[。！!～~]*$`)
 var additionalReminderTime = regexp.MustCompile(`(?:[0-9零〇一二两三四五六七八九十半]+(?:点|时|[:：][0-9]{2}|分钟后|秒钟?后|小时后|天后)|今天|明天|后天|今晚|凌晨|早上|上午|中午|下午|晚上|傍晚|每年|每日|每星期|每个)`)
+var recurrenceIntent = regexp.MustCompile(`每(?:个)?(?:天|日|周|星期|礼拜|月|年|隔)|每晚|每早|每逢|间隔|隔[0-9几一二两三四五六七八九十]+天|指定(?:日期|日子|几天|星期|周)|周[一二三四五六日天].*周[一二三四五六日天]|周[一二三四五六日天]{2,}`)
 
 type DirectReminder struct {
 	Title        string    `json:"title"`
@@ -26,6 +27,9 @@ type DirectReminder struct {
 // It also returns an explicit elapsed time so the caller can reject it instead
 // of accepting the model's replacement date. Legacy relative parsing is kept.
 func ParseSingleReminder(text string, ctx Context) (DirectReminder, bool) {
+	if recurrenceIntent.MatchString(text) {
+		return DirectReminder{}, false
+	}
 	parsed, ok := ParseExplicitReminder(text, ctx)
 	if !ok {
 		parsed, ok = ParseDirectReminder(text, ctx)
@@ -42,6 +46,9 @@ func ParseSingleReminder(text string, ctx Context) (DirectReminder, bool) {
 }
 
 func ParseDirectReminder(text string, ctx Context) (DirectReminder, bool) {
+	if recurrenceIntent.MatchString(text) {
+		return DirectReminder{}, false
+	}
 	m := relativeRequest.FindStringSubmatch(strings.TrimSpace(text))
 	if m == nil {
 		parsed, ok := ParseExplicitReminder(text, ctx)

@@ -1,4 +1,4 @@
-import type { Reminder } from '../types';
+import type { Reminder, ReminderRecurrence } from '../types';
 
 interface Lifecycle {
   status?: Reminder['status'];
@@ -49,4 +49,21 @@ export function reminderStatusText(reminder: Lifecycle): string {
   if (phase === 'cancelled') return '已取消';
   if (phase === 'completed') return hasCompletedDelivery(reminder) ? '已提醒' : '已完成';
   return reminder.status ? { scheduled: '待提醒', dispatching: '正在提醒', failed: '提醒失败', uncertain: '提醒状态待确认', delivered: '', completed: '', cancelled: '' }[reminder.status] : '';
+}
+
+export function reminderRecurrenceText(recurrence?: ReminderRecurrence): string {
+  if (!recurrence) return '';
+  switch (recurrence.type) {
+    case 'daily': return '每天重复';
+    case 'interval': return `每隔 ${recurrence.intervalDays ?? 1} 天`;
+    case 'weekly': return '每周重复';
+    case 'monthly': return '每月重复';
+    case 'yearly': return '每年重复';
+    case 'weekdays': return recurrence.weekdays?.length
+      ? `每周${recurrence.weekdays.map((day) => '一二三四五六日'[day - 1]).join('、')}`
+      : '指定每周星期';
+    case 'dates': return recurrence.dates?.length
+      ? `指定 ${recurrence.dates.length} 个日期`
+      : '指定日期';
+  }
 }

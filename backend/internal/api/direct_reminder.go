@@ -11,8 +11,8 @@ import (
 // The key belongs to the authenticated input, independent of cloud event IDs
 // or the assistant's wording. History replay and background sync share it.
 func (s *Server) saveDirectReminder(ctx context.Context, space conversation.Context, text string) (*dbop.Reminder, error) {
-	parsed, ok := conversation.ParseDirectReminder(text, space)
-	if !ok {
+	parsed, ok := conversation.ParseSingleReminder(text, space)
+	if !ok || !parsed.DueAt.After(space.Now) {
 		return nil, nil
 	}
 	key := fmt.Sprintf("%d/%s/direct", space.AuthorID, space.Now.Format(time.RFC3339Nano))

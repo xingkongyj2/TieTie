@@ -96,7 +96,7 @@ func (s *Server) conversationContext(ctx context.Context, id string, authorID in
 		return out, binding, err
 	}
 	for _, m := range memories {
-		out.Memories = append(out.Memories, conversation.Memory{ReminderID: m.ReminderID, Title: m.Title, DueAt: m.DueAt, RecipientIDs: m.RecipientIDs, Status: m.Status, TaskStatus: m.TaskStatus, DeliveredAt: m.DeliveredAt, CompletedBy: m.CompletedBy})
+		out.Memories = append(out.Memories, conversation.Memory{ReminderID: m.ReminderID, Title: m.Title, DueAt: m.DueAt, Recurrence: m.Recurrence, SeriesID: m.SeriesID, Occurrence: m.Occurrence, RecipientIDs: m.RecipientIDs, Status: m.Status, TaskStatus: m.TaskStatus, DeliveredAt: m.DeliveredAt, CompletedBy: m.CompletedBy})
 	}
 	index, err := s.DB.MemoryIndex(ctx, id)
 	if err != nil {
@@ -110,6 +110,7 @@ func (s *Server) conversationContext(ctx context.Context, id string, authorID in
 
 func protocolReminder(reminder dbop.Reminder) conversation.Reminder {
 	return conversation.Reminder{ID: reminder.ID, Title: reminder.Title, DueAt: reminder.DueAt,
+		Recurrence: reminder.Recurrence, SeriesID: reminder.SeriesID, Occurrence: reminder.Occurrence,
 		RecipientIDs: reminder.RecipientIDs, CreatedBy: reminder.CreatedBy, Status: reminder.Status}
 }
 
@@ -377,7 +378,7 @@ func (s *Server) processConversationFrom(ctx context.Context, id string, result 
 					addWarning("提醒时间或对象无效，提醒未保存。可重新说明具体时间和提醒对象。")
 					continue
 				}
-				proposal.Type, proposal.Title, proposal.DueAt, proposal.RecipientIDs = "create", action.Title, dueAt, action.RecipientIDs
+				proposal.Type, proposal.Title, proposal.DueAt, proposal.RecipientIDs, proposal.Recurrence = "create", action.Title, dueAt, action.RecipientIDs, action.Recurrence
 			case "cancel_reminder":
 				proposal.Type, proposal.ReminderID = "cancel", action.ReminderID
 			default:

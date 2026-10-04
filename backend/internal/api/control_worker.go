@@ -215,7 +215,7 @@ func (s *Server) runControl(ctx context.Context, j dbop.ControlJob) (workErr err
 		} else if reminder.Status != dbop.ReminderCancelled {
 			return errors.New("manual cancellation was not committed")
 		}
-		frame.Reminder = &conversation.Reminder{ID: reminder.ID, Title: reminder.Title, DueAt: reminder.DueAt, Status: reminder.Status, RecipientIDs: reminder.RecipientIDs}
+		frame.Reminder = &conversation.Reminder{ID: reminder.ID, Title: reminder.Title, DueAt: reminder.DueAt, Recurrence: reminder.Recurrence, SeriesID: reminder.SeriesID, Occurrence: reminder.Occurrence, Status: reminder.Status, RecipientIDs: reminder.RecipientIDs}
 		if results[0].Type == "cancel_reminder" {
 			if memory, err := s.DB.GetReminderMemory(ctx, *reminder); err == nil && memory != nil && memory.State == "synced" {
 				frame.Results[0].MemoryStatus = "synced"
@@ -471,6 +471,7 @@ func (s *Server) executeAction(ctx context.Context, j dbop.ControlJob, input con
 			proposal.Title = a.Title
 			proposal.DueAt = due
 			proposal.RecipientIDs = a.RecipientIDs
+			proposal.Recurrence = a.Recurrence
 		} else {
 			proposal.Type = "cancel"
 			proposal.ReminderID = a.ReminderID

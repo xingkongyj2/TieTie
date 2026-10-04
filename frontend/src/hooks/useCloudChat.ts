@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError } from '../api/client'
 import { qoderApi, type CloudHistory, type CloudSession, type CloudStreamEvent } from '../api/qoder'
-import type { CloudMember, CloudReminder, Message } from '../types'
+import type { CloudMember, CloudReminder, Message, ReminderRecurrence } from '../types'
 import { isVisibleChatMessage } from '../lib/chatMessages'
 
 const isRemoteBusy = (session: CloudSession | null) =>
@@ -225,7 +225,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
 
   const reload = useCallback(() => readCloud({ full: true }), [readCloud])
 
-  const saveReminder = useCallback(async (input: { title: string; dueAt: string; recipientIds: number[] }) => {
+  const saveReminder = useCallback(async (input: { title: string; dueAt: string; recipientIds: number[]; recurrence?: ReminderRecurrence }) => {
     const id = current.current.selectedId
     if (!id || !current.current.loaded) throw new Error('请先绑定并加载共享空间，再添加提醒。')
     const { reminder } = await qoderApi.createReminder(id, input)

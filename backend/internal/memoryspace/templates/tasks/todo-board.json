@@ -6,6 +6,8 @@
     "id": "真实提醒 ID",
     "title": "事项 / 待办内容",
     "dueAt": "截止时间，带时区 RFC3339",
+    "seriesId": "重复提醒所属系列；同系列的每次触发保留独立记录",
+    "recurrence": "经后台确认的重复规则；仅后台计算下一次触发",
     "status": "提醒状态：pending=待完成、completed=已提醒或手动完成、cancelled=已取消；已提醒自动归入提醒已完成",
     "activityStatus": "实际事项状态，仅明确确认才为 completed；发出提醒不代表用户已经做完事项",
     "createdBy": "发布人 userId；0=系统，自己/对方按当前查看者解释",
@@ -17,7 +19,7 @@
   "reminders": [],
   "maintenance": [
     "纪念日、贴贴与普通提醒走同一后台链路。",
-    "数据库是时间、执行状态和完成确认的事实来源；后台事务生成此投影，AI 不直接改写。",
+    "数据库是时间、执行状态、重复规则和完成确认的事实来源；后台事务生成此投影，AI 不直接改写。",
     "当前待办最多16条，recentReminders保留最近8条；完整提醒历史按 tasks/todo-board/YYYY-MM/NNNNNN.json 分页，每页最多16条，使用相同的待办板模板和字段。完成与取消不删除历史，history 列出最近12个有记录的月份，更早月份仍完整保留。"
   ],
   "recentReminders": [],
