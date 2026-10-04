@@ -2,6 +2,21 @@ import { useCallback, useEffect, useState } from 'react'
 import { authApi, type AccountResult } from '../api/auth'
 import { clearToken, getToken } from '../lib/token'
 
+type OnboardingStep = 'profile' | 'usage'
+const onboardingKey = (userId: number) => `tietie.onboarding.${userId}`
+const readOnboarding = (userId: number): OnboardingStep | null => {
+  try {
+    const value = localStorage.getItem(onboardingKey(userId))
+    return value === 'profile' || value === 'usage' ? value : null
+  } catch { return null }
+}
+const writeOnboarding = (userId: number, step: OnboardingStep | null) => {
+  try {
+    if (step) localStorage.setItem(onboardingKey(userId), step)
+    else localStorage.removeItem(onboardingKey(userId))
+  } catch { /* Onboarding still works for this session when storage is unavailable. */ }
+}
+
 /**
  * 账号状态：启动时用本地 JWT 拉取 me；未登录/令牌失效则 account 为 null，
  * 界面显示登录页。登录、注册、绑定、解绑、退出都收敛在这里。
@@ -10,6 +25,7 @@ export function useAccount() {
   const [account, setAccount] = useState<AccountResult | null>(null)
   const [ready, setReady] = useState(false)
   const [error, setError] = useState('')
+  const [onboardingStep, setOnboardingStep] = useState<OnboardingStep | null>(null)
 
   const bootstrap = useCallback(async () => {
     if (!getToken()) {
@@ -18,7 +34,9 @@ export function useAccount() {
     }
     setError('')
     try {
-      setAccount(await authApi.me())
+      const result = await authApi.me()
+      setOnboardingStep(readOnboarding(result.user.userId))
+      setAccount(result)
     } catch (e) {
       clearToken()
       setAccount(null)
@@ -31,12 +49,29 @@ export function useAccount() {
   useEffect(() => { void bootstrap() }, [bootstrap])
 
   const login = useCallback(async (username: string, password: string) => {
-    setAccount(await authApi.login(username, password))
+    const result = await authApi.login(username, password)
+    setOnboardingStep(readOnboarding(result.user.userId))
+    setAccount(result)
   }, [])
 
   const register = useCallback(async (username: string, password: string) => {
-    setAccount(await authApi.register(username, password))
+    const result = await authApi.register(username, password)
+    writeOnboarding(result.user.userId, 'profile')
+    setOnboardingStep('profile')
+    setAccount(result)
   }, [])
+
+  const advanceOnboarding = useCallback(() => {
+    if (!account) return
+    writeOnboarding(account.user.userId, 'usage')
+    setOnboardingStep('usage')
+  }, [account])
+
+  const finishOnboarding = useCallback(() => {
+    if (!account) return
+    writeOnboarding(account.user.userId, null)
+    setOnboardingStep(null)
+  }, [account])
 
   /** 绑定成功后就地更新绑定状态，聊天页随之加载共享会话。 */
   const bind = useCallback(async (code: string) => {
@@ -53,7 +88,8 @@ export function useAccount() {
   const logout = useCallback(() => {
     clearToken()
     setAccount(null)
+    setOnboardingStep(null)
   }, [])
 
-  return { account, ready, error, reload: bootstrap, login, register, bind, unbind, logout }
+  return { account, ready, error, onboardingStep, advanceOnboarding, finishOnboarding, reload: bootstrap, login, register, bind, unbind, logout }
 }

@@ -11,11 +11,11 @@
 .mine-header h1 { font-size: 20px; }
 .mine-header-sparkle { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 50%; background: #f6f8fb; color: var(--mine-accent); }
 
-.mine-identity-card { position: relative; isolation: isolate; padding: 24px; overflow: hidden; border: 0; border-radius: 28px; background: #f7f8fa; }
+.mine-identity-card { position: relative; isolation: isolate; padding: 16px 24px 24px; overflow: hidden; border: 0; border-radius: 28px; background: #f7f8fa; }
 .mine-buddies { position: absolute; z-index: -1; top: 15px; right: 2px; width: 177px; height: 144px; pointer-events: none; filter: drop-shadow(0 8px 9px #7ba9df17); }
 .mine-buddy-back { transform-origin: 141px 89px; animation: mine-buddy-arrive .7s .08s both; }
 .mine-buddy-front { transform-origin: 80px 104px; animation: mine-buddy-arrive .7s .18s both; }
-.mine-identity { position: relative; margin-top: 8px; }
+.mine-identity { position: relative; }
 .mine-avatar-edit { position: relative; display: flex; justify-content: center; align-items: center; width: 66px; height: 66px; padding: 5px; border: 0; border-radius: 22px; background: #eaf1fb; }
 .mine-avatar-edit .avatar-large { width: 55px; height: 55px; }
 .mine-avatar-pencil { position: absolute; right: -5px; bottom: -3px; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; border: 0; background: var(--mine-accent); color: white; }

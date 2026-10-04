@@ -1,4 +1,4 @@
-import { ArrowUp, AtSign, Bell, CalendarDays, CloudSun, EyeOff, FileSpreadsheet, FileText, Mic, Paperclip, X } from 'lucide-react';
+import { ArrowUp, AtSign, CalendarDays, CloudSun, EyeOff, FileSpreadsheet, FileText, Mic, Paperclip, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { MentionText } from './MentionText';
 import type { Member } from '../types';
@@ -332,7 +332,6 @@ export function Composer({ members, sending, disabled = false, placeholder = '�
     <input ref={fileRef} type="file" className="visually-hidden" aria-label="选择文件或图片" multiple onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = ''; }} />
     <div className="quick-actions">
       <button type="button" aria-label="@TA" aria-pressed={toPartner} disabled={sending || !partner} onMouseDown={(event) => event.preventDefault()} onClick={mentionPartner}><AtSign size={14} /><span>TA</span></button>
-      <button onClick={() => onTool('reminders')}><Bell size={14} /><span>添加提醒</span></button>
       <button onClick={() => onTool('anniversary')}><CalendarDays size={14} /><span>小纪念</span></button>
       <button type="button" disabled={queryingWeather || sending || disabled} onClick={() => void queryWeather()}><CloudSun size={14} /><span>{queryingWeather ? '查询中' : '查天气'}</span></button>
     </div>

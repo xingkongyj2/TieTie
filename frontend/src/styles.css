@@ -471,7 +471,7 @@ h1, h2, h3, p { margin: 0; }
 .bind-header { width: 100%; text-align: center; }
 .bind-header h1 { font-size: 20px; }
 /* 页面品牌标题的艺术字：聊天页、绑定引导页、「我的」页、登录页和加载页共用，各页只定自己的字号。 */
-.chat-heading h1, .bind-header h1, .mine-header h1, .login-page h1, .loading-screen h1 {
+.chat-heading h1, .bind-header h1, .mine-header h1, .login-page h1, .onboarding-header h1, .loading-screen h1 {
   position: relative;
   display: inline-block;
   padding: 2px 2px 6px;
@@ -482,7 +482,7 @@ h1, h2, h3, p { margin: 0; }
   letter-spacing: 2px;
   text-shadow: 0 1px 0 #fff, 0 2px 0 #c4d5f4, 0 5px 8px #537cb92e;
 }
-.chat-heading h1::after, .bind-header h1::after, .mine-header h1::after, .login-page h1::after, .loading-screen h1::after { content: ''; position: absolute; left: 8%; right: 8%; bottom: -3px; height: 5px; border-radius: 50%; background: #9bb2d538; filter: blur(3px); pointer-events: none; }
+.chat-heading h1::after, .bind-header h1::after, .mine-header h1::after, .login-page h1::after, .onboarding-header h1::after, .loading-screen h1::after { content: ''; position: absolute; left: 8%; right: 8%; bottom: -3px; height: 5px; border-radius: 50%; background: #9bb2d538; filter: blur(3px); pointer-events: none; }
 /* 标题保持在上，其余内容靠这一对 auto 外边距在剩余高度里垂直居中（内容超高时自动退化为顶对齐可滚）。 */
 .bind-welcome { margin: auto auto 24px; }
 .bind-buddy { display: block; width: min(280px, 100%); height: auto; margin: 0 auto 12px; pointer-events: none; }
@@ -514,13 +514,13 @@ h1, h2, h3, p { margin: 0; }
 .login-page { align-items: center; justify-content: flex-start; gap: 14px; padding: max(28px, env(safe-area-inset-top)) 24px max(28px, env(safe-area-inset-bottom)); overflow-y: auto; text-align: center; }
 .login-header { width: 100%; }
 .login-page h1 { font-size: 20px; }
-.login-buddies { margin-top: auto; display: block; width: min(164px, 54%); height: auto; pointer-events: none; }
+.login-buddies { margin-top: auto; display: block; width: min(136px, 46%); height: auto; pointer-events: none; }
 /* 登录/注册切换：跟提醒页的分类 tab 同一套纯文字写法，不再套灰底胶囊 */
 .login-tabs { display: flex; align-items: center; justify-content: center; gap: 20px; }
 .login-tabs button { min-width: 44px; min-height: 44px; padding: 0 2px; color: #8b929f; background: transparent; border-radius: 0; font-family: 'TieTie Reminder Titles', 'Yuanti SC', 'PingFang SC', sans-serif; font-size: 19px; font-weight: 400; letter-spacing: 1px; line-height: 30px; white-space: nowrap; text-shadow: 0 1px 0 #fff, 0 2px 0 #c4d5f4, 0 4px 6px #537cb926; transition: color .3s, text-shadow .3s; }
 .login-tabs button.is-active { color: var(--blue); text-shadow: 0 1px 0 #fff, 0 2px 0 #adc6ea, 0 6px 10px #3f6fb366; }
-/* 上下两个 auto 边距把整组居中；这里的 padding-bottom 会挤掉等量的剩余空间，使整组稳定上移一半（28px），不随屏高变化。 */
-.login-form { width: 100%; max-width: 250px; margin-bottom: auto; padding-bottom: 56px; display: flex; flex-direction: column; gap: 10px; text-align: left; }
+/* 上下两个 auto 边距让登录区域随屏高居中，底部留白让整组略微上移。 */
+.login-form { width: 100%; max-width: 250px; margin-bottom: auto; padding-bottom: 96px; display: flex; flex-direction: column; gap: 10px; text-align: left; }
 .login-form input { min-height: 46px; border-radius: 13px; border: 0; background: var(--surface); padding: 0 14px; font-size: 14px; }
 .login-form input:focus-visible { outline: none; }
 .login-form .primary-button { margin-top: 10px; }

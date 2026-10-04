@@ -12,6 +12,7 @@ import { ImageViewer } from './components/ImageViewer';
 import { LoginPage } from './components/LoginPage';
 import { LittleThings } from './components/LittleThings';
 import { Mine } from './components/Mine';
+import { Onboarding } from './components/Onboarding';
 import { SpaceBuddy } from './components/SpaceBuddies';
 import { Tools, type ToolName } from './components/Tools';
 import { useAccount } from './hooks/useAccount';
@@ -118,6 +119,7 @@ export default function App() {
   if (!account.ready) return <div className="app-shell loading-screen"><div className="brand-mark"><img src="/brand-notes.png" alt="" /></div><h1>贴贴清单</h1><p>{account.error || '正在打开贴贴清单…'}</p>{account.error && <button className="primary-button" onClick={() => void account.reload()}>再试一次</button>}</div>;
   if (!account.account) return <LoginPage onLogin={account.login} onRegister={account.register} notify={notify} />;
   if (!state) return <div className="app-shell loading-screen"><div className="brand-mark"><img src="/brand-notes.png" alt="" /></div><h1>贴贴清单</h1><p>{error || '正在打开贴贴清单…'}</p>{error && <button className="primary-button" onClick={() => void reload()}>再试一次</button>}</div>;
+  if (account.onboardingStep) return <Onboarding key={account.account.user.userId} step={account.onboardingStep} username={account.account.user.username} member={state.members.find((member) => member.id === 'self')!} onSaveMember={saveMember} onNext={account.advanceOnboarding} onDone={account.finishOnboarding} notify={notify} toast={toast} />;
 
   const ai = state.members.find((m) => m.id === 'ai')!;
   const feedback = chat.replyFeedback;

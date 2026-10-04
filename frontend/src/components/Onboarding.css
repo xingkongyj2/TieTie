@@ -1,0 +1,39 @@
+.onboarding-page { --glow-x: 92%; --glow-y: 8%; --glow-width: 300px; --glow-height: 260px; --glow-color: #e8effe; }
+.onboarding-header { display: flex; align-items: center; justify-content: space-between; flex: none; padding: max(24px, env(safe-area-inset-top)) 24px 0; }
+.onboarding-header h1 { font-size: 20px; }
+.onboarding-header > span { color: #8a9ab2; font-size: 11px; letter-spacing: .08em; }
+.onboarding-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; padding: 30px 24px max(28px, env(safe-area-inset-bottom)); scrollbar-width: none; }
+.onboarding-scroll::-webkit-scrollbar { display: none; }
+.onboarding-progress { display: flex; align-items: center; gap: 12px; max-width: 320px; margin-bottom: 32px; color: #a3adbd; font-size: 11px; }
+.onboarding-progress > span { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.onboarding-progress > span > span { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: #edf1f7; color: #97a4b9; font-size: 11px; }
+.onboarding-progress > span.is-current { color: #406cb5; font-weight: 600; }
+.onboarding-progress > span.is-current > span { color: #fff; background: var(--blue); }
+.onboarding-progress > i { flex: 1; height: 1px; background: #dce5f3; }
+.onboarding-intro { margin-bottom: 23px; }
+.onboarding-eyebrow { color: #6d89b3; font-size: 11px; letter-spacing: .09em; }
+.onboarding-intro h2 { margin-top: 9px; color: #202b40; font-size: 26px; line-height: 1.35; letter-spacing: -.4px; }
+.onboarding-intro p { margin-top: 9px; color: #8190a5; font-size: 12px; line-height: 1.7; }
+.onboarding-avatar-row { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; padding: 16px; border-radius: 21px; background: #f4f7fc; }
+.onboarding-avatar-button { position: relative; flex: none; width: 66px; height: 66px; padding: 4px; border-radius: 19px; background: #e8f0fc; }
+.onboarding-avatar-button .avatar-large { width: 58px; height: 58px; }
+.onboarding-avatar-button > span:last-child { position: absolute; right: -4px; bottom: -4px; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: #fff; background: var(--blue); }
+.onboarding-avatar-row strong { color: #34435c; font-size: 13px; font-weight: 600; }
+.onboarding-avatar-row p { margin-top: 5px; color: #8a98aa; font-size: 11px; line-height: 1.5; }
+.onboarding-profile-form .form-card { background: #f7f8fa; }
+.onboarding-profile-form .gender-options button { min-height: 44px; }
+.onboarding-profile-form .primary-button { font-size: 14px; }
+.onboarding-skip { display: flex; align-items: center; justify-content: center; gap: 4px; width: 100%; min-height: 44px; margin-top: 6px; background: transparent; color: #7287a5; font-size: 12px; }
+.onboarding-usage-art { display: flex; justify-content: center; margin: 0 0 12px; }
+.onboarding-usage-art svg { width: 150px; max-width: 45%; height: auto; }
+.onboarding-guide-list { display: grid; gap: 10px; }
+.onboarding-guide-list > div { display: flex; align-items: flex-start; gap: 13px; padding: 17px; border-radius: 20px; background: #f7f8fa; }
+.onboarding-guide-icon { display: grid; place-items: center; flex: none; width: 38px; height: 38px; border-radius: 13px; background: #eaf1fd; color: var(--blue); }
+.onboarding-guide-list strong { color: #34435c; font-size: 13px; font-weight: 600; }
+.onboarding-guide-list p { margin-top: 5px; color: #8190a5; font-size: 11px; line-height: 1.6; }
+.onboarding-done { margin-top: 23px; min-height: 48px; font-size: 14px; }
+@media (max-width: 370px) {
+  .onboarding-header { padding-left: 18px; padding-right: 18px; }
+  .onboarding-scroll { padding-left: 18px; padding-right: 18px; }
+  .onboarding-intro h2 { font-size: 23px; }
+}
