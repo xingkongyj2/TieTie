@@ -135,14 +135,16 @@ export default function App() {
   const proactiveFeedback = feedback?.phase === 'proactive_reminder' || feedback?.phase === 'proactive_update';
   const showFeedback = feedback && feedback.phase !== 'complete' && !(feedback.phase === 'sending' && chat.silent)
     && !(feedback.phase === 'delayed' && feedback.message?.startsWith('消息发送状态待确认'));
-  const processingFeedback = feedback && ['sending', 'waiting', 'thinking', 'replying', 'syncing', 'delayed', 'stopping'].includes(feedback.phase);
   const feedbackText = feedback?.phase === 'error' ? feedback.message || '这次回复遇到问题，请重试。'
     : feedback?.phase === 'sent' ? '消息已发给对方'
       : feedback?.phase === 'stopped' ? '已停止'
         : feedback?.phase === 'stopping' ? '正在停止…'
-      : feedback?.phase === 'proactive_reminder' ? `${ai.name}正在发送消息提醒`
-        : feedback?.phase === 'proactive_update' ? `${ai.name}正在告诉你提醒的变化`
-          : `${ai.name}正在处理…`;
+          : feedback?.phase === 'proactive_reminder' ? `${ai.name}正在发送消息提醒`
+            : feedback?.phase === 'proactive_update' ? `${ai.name}正在告诉你提醒的变化`
+              : feedback?.phase === 'delayed' ? '回复还需要一点时间'
+                : feedback?.phase === 'syncing' ? `${ai.name}正在整理回复`
+                  : feedback?.phase === 'thinking' || feedback?.phase === 'replying' ? `${ai.name}正在回复`
+                    : `${ai.name}正在准备回复`;
   const selfId = account.account.user.userId;
   const partnerId = account.account.binding?.partnerId;
   const sharedMembers = state.members.map((member) => {
@@ -198,7 +200,7 @@ export default function App() {
           {(index === 0 || messageDay(chat.messages[index - 1].createdAt) !== messageDay(message.createdAt)) && <div className="chat-date"><span /><strong>{messageDayLabel(message.createdAt)}</strong><span /></div>}
           <ChatMessage message={message} members={sharedMembers} onError={notify} onOpenImage={(src, alt) => setPreviewImage({ src, alt })} onAnswer={chat.answerAsk} />
         </Fragment>)}</div>
-        {showFeedback && <div className={`assistant-feedback${feedback.phase === 'error' ? ' is-error' : ''}${proactiveFeedback ? ' is-proactive' : ''}${processingFeedback ? ' is-processing' : ''}`} role={feedback.phase === 'error' ? 'alert' : 'status'} aria-live="polite"><Avatar member={ai} /><div className="assistant-feedback-bubble">{processingFeedback && <span className="assistant-feedback-glow" aria-hidden="true" />}{proactiveFeedback && <Bell size={13} aria-hidden="true" />}<span>{feedbackText}</span>{processingFeedback && <span className="typing-dots" aria-hidden="true"><i /><i /><i /></span>}{chat.error && <button className="assistant-feedback-retry" disabled={chat.loading || chat.refreshing || chat.submitting} onClick={() => void chat.reload()}>重新同步</button>}</div></div>}
+        {showFeedback && <div className={`assistant-feedback${feedback.phase === 'error' ? ' is-error' : ''}${proactiveFeedback ? ' is-proactive' : ''}`} role={feedback.phase === 'error' ? 'alert' : 'status'} aria-live="polite"><Avatar member={ai} /><div className="assistant-feedback-bubble">{proactiveFeedback && <Bell size={13} aria-hidden="true" />}<span>{feedbackText}</span>{feedback.phase !== 'sent' && feedback.phase !== 'stopped' && feedback.phase !== 'stopping' && feedback.phase !== 'error' && <span className="typing-dots" aria-hidden="true"><i /><i /><i /></span>}{chat.error && <button className="assistant-feedback-retry" disabled={chat.loading || chat.refreshing || chat.submitting} onClick={() => void chat.reload()}>重新同步</button>}</div></div>}
         {chat.turnError && !feedback && <div className="turn-error" role="alert">{chat.turnError}</div>}
         {chat.remindersError && <div className="turn-error" role="alert">{chat.remindersError}</div>}
       </main>

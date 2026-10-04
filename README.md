@@ -61,20 +61,20 @@ BACKGROUND_WORKERS_ENABLED=true
 
 白名单在 MySQL 公开端口启动前写入 `DOCKER-USER` 顶部，按外网入口、Docker DNAT 原宿主端口和容器目标 3306 匹配；Docker 内网应用及其他端口不受影响，也不会先放行白名单之外的已有连接。规则通过专用 systemd 服务在 Docker 启动前恢复，Docker 的 drop-in 要求此服务成功后才启动；配置文件只有端口、接口和 CIDR，不保存数据库密码。部署只 reload/enable 规则服务，不重启 Docker。改回 `MYSQL_BIND_IP=127.0.0.1` 并重新部署会移除本脚本的白名单及启动依赖。Docker 使用 iptables 后端，规则依据 [Docker 防火墙说明](https://docs.docker.com/engine/network/firewall-iptables/)。
 
-本地 `backend/.env.local` 使用专用数据库账号，例如：
+本地 `backend/.env.local` 连接服务器正在使用的同一个 `tietie` 库，沿用现有数据库账号，例如：
 
 ```dotenv
 MYSQL_HOST=38.76.183.142
 MYSQL_PORT=3306
-MYSQL_USER=tietie_local
-MYSQL_PASSWORD=专用账号密码
+MYSQL_USER=root
+MYSQL_PASSWORD=服务器现有数据库密码
 MYSQL_DATABASE=tietie
 MYSQL_TLS_CA_FILE=/本地绝对路径/mysql-ca.pem
 MYSQL_TLS_SERVER_NAME=38.76.183.142
 BACKGROUND_WORKERS_ENABLED=false
 ```
 
-数据库管理员需给此专用账号授权 `tietie` 数据库并要求 SSL，服务器证书的 SAN 需包含连接 IP。把服务器 CA 放到本地指定路径，应用会校验 CA 和服务器身份；不要提交密码、CA 私钥或 `.env.local`。本地禁用后台 worker 后仍会读写同一数据库，提醒调度、后台会话同步和记忆任务由生产服务器负责；生产配置保持 `BACKGROUND_WORKERS_ENABLED=true`。公网 IP 改变时更新服务器白名单并重新部署。
+服务器证书的 SAN 需包含连接 IP。把服务器 CA 放到本地指定路径，应用会校验 CA 和服务器身份；不要提交密码、CA 私钥或 `.env.local`。本地禁用后台 worker 后仍会读写同一真实数据库，提醒调度、后台会话同步和记忆任务由生产服务器负责；生产配置保持 `BACKGROUND_WORKERS_ENABLED=true`。公网 IP 改变时更新服务器白名单并重新部署。
 
 ## 登录、邀请码与绑定
 
