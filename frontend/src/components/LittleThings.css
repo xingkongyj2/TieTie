@@ -72,6 +72,21 @@
 .things-page .reminder-title-lettering, .mine-page .reminder-title-lettering { position: relative; display: inline-block; padding: 2px 0 6px; color: #6286c5; font-family: 'TieTie Reminder Titles', 'Yuanti SC', 'PingFang SC', sans-serif; font-size: 19px; font-weight: 400; line-height: 1.3; letter-spacing: 2px; text-shadow: 0 1px 0 #fff, 0 2px 0 #c4d5f4, 0 5px 8px #537cb92e; transform: translateY(-1px) rotate(-3deg); }
 .things-page .reminder-title-lettering::after, .mine-page .reminder-title-lettering::after { content: ''; position: absolute; left: 8%; right: 8%; bottom: -3px; height: 5px; border-radius: 50%; background: #9bb2d538; filter: blur(3px); pointer-events: none; }
 .things-page .reminders-list { display: flex; flex-direction: column; gap: 12px; }
+.things-page .reminder-swipe { position: relative; overflow: hidden; isolation: isolate; border-radius: 24px; }
+.things-page .reminder-swipe.has-actions { touch-action: pan-y; }
+.things-page .reminder-swipe.has-actions:is(.is-open, .is-dragging) { background: #df5355; }
+.things-page .reminder-swipe > .reminder-card { z-index: 1; transition: transform .24s cubic-bezier(.25,.8,.25,1); }
+.things-page .reminder-swipe.is-dragging > .reminder-card { transition: none; user-select: none; }
+.things-page .reminder-swipe:focus-visible { outline: 2px solid #8eb2ef; outline-offset: 3px; }
+.things-page .reminder-swipe-actions { position: absolute; inset: 0 0 0 auto; display: flex; overflow: hidden; border-radius: 0 24px 24px 0; visibility: hidden; transition: visibility 0s linear .24s; }
+.things-page .reminder-swipe:is(.is-open, .is-dragging) > .reminder-swipe-actions { visibility: visible; transition-delay: 0s; }
+.things-page .reminder-swipe-actions button { display: flex; flex: 0 0 76px; flex-direction: column; align-items: center; justify-content: center; gap: 7px; padding: 8px; border-radius: 0; font-size: 12px; font-weight: 550; }
+.things-page .reminder-swipe-cancel { background: #ffebe8; color: #b75a4d; }
+.things-page .reminder-swipe-delete { background: #df5355; color: #fff; }
+.things-page .reminder-swipe-actions button:disabled { opacity: 1; cursor: default; }
+.things-page .reminder-swipe-actions .spinner { width: 14px; height: 14px; border-color: #ffffff66; border-top-color: #fff; }
+.things-page .reminder-swipe-cancel .spinner { border-color: #e6b2ab; border-top-color: #b75a4d; }
+@media (prefers-reduced-motion: reduce) { .things-page .reminder-swipe > .reminder-card, .things-page .reminder-swipe-actions { transition: none; } }
 .things-page .reminder-card { position: relative; padding: 18px 18px 15px; border: 0; border-radius: 24px; background: #f7f8fa; }
 .things-page .reminder-main { align-items: flex-start; gap: 12px; }
 .things-page .reminder-main > div { min-width: 0; flex: 1; }
@@ -83,7 +98,6 @@
 .things-page .reminder-recurrence-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .things-page .reminder-card:not(.is-completed) .reminder-recurrence-row { margin-top: 10px; }
 .things-page .reminder-recurrence-row p.reminder-recurrence { min-width: 0; margin-top: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.things-page .reminder-recurrence-row .reminder-cancel { flex: none; padding: 2px 5px; color: #7184a0; font-size: 10px; line-height: 1.5; }
 .things-page .reminder-check { margin: 12px -3px 0 0; width: 44px; height: 44px; border: none; border-radius: 14px; background: #fff; color: #2864ef; }
 .things-page .reminder-check::before { position: absolute; inset: 11px; border: 1.5px solid #99b4db; border-radius: 7px; pointer-events: none; }
 .things-page button.reminder-check:hover { background: #e2edff; }
@@ -112,12 +126,8 @@
 .things-page .reminder-day-heading::before, .things-page .reminder-day-heading::after { content: ''; flex: none; width: 4px; height: 4px; border-radius: 50%; background: #bfd2ef; }
 .things-page .reminder-day-heading .reminder-day-count { position: absolute; top: 50%; right: 0; color: #9ca9bc; font-size: 11px; font-weight: 400; transform: translateY(-50%); }
 .things-page .reminder-action-feedback { display: flex; align-items: center; gap: 6px; margin-top: 9px; color: #5377b4; font-size: 11px; }
-.things-page .reminder-action-feedback .spinner, .things-page .reminder-check .spinner, .things-page .reminder-delete-actions .spinner { width: 14px; height: 14px; border-color: #b7cbee; border-top-color: #2864ef; }
+.things-page .reminder-action-feedback .spinner, .things-page .reminder-check .spinner { width: 14px; height: 14px; border-color: #b7cbee; border-top-color: #2864ef; }
 .things-page .reminder-check:disabled[aria-busy="true"] { opacity: 1; }
-.things-page .reminder-delete-actions { display: inline-flex; flex: none; align-items: center; gap: 5px; margin-left: auto; }
-.things-page .reminder-delete-actions button { display: inline-flex; align-items: center; justify-content: center; min-height: 28px; padding: 4px 7px; border-radius: 8px; background: #edf0f5; color: #7f8da3; font-size: 10px; }
-.things-page .reminder-delete-actions .reminder-delete, .things-page .reminder-delete-actions .reminder-cancel-icon { width: 28px; padding: 0; }
-.things-page .reminder-delete-actions .reminder-delete-confirm { background: #ffebe8; color: #b75a4d; }
 .things-page .empty-note { margin: 0; padding: 25px 18px; border: 0; border-radius: 22px; color: #75859e; background: #fafbfc; text-align: center; font-size: 12px; line-height: 1.7; }
 .things-page .anniversary-postcard { padding: 28px 16px 25px; border: 0; border-radius: 28px; background: #f8f9fb; }
 .things-page .anniversary-postcard > svg { color: #6190dc; }
