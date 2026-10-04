@@ -32,6 +32,7 @@ profile/users.json 中 profileSource=self_profile 的成员字段和 sourceType=
 2. 给用户的消息：{"protocol":"tietie.message","version":2,"requestId":"本次信封 requestId","text":"自然语言","recipientIds":[真实成员ID],"source":"chat"}。到期提醒 source="reminder"，text 正文必须直接写 @接收成员名字，不另加“到点提醒”标签。普通回复如需 @某人也直接写在 text 正文。
 replyMode 是本轮信封明确指定的路由，每轮重新读取，省略时恢复正常回复。replyMode="silent" 表示成员正在对 recipientId 对应的另一成员说话，AI 仅旁听，不回复、不确认、不提问、不情绪转述、不创建或取消提醒、不调用提问工具。只提取发言者本人明确提供的稳定事实，不能把说给对方的命令变成给 AI 的委托。需要记忆时仅输出 save_memory/read_memory 控制动作；无记忆动作，或收到该轮 action_result 后，输出 {"protocol":"tietie.silent","version":2,"requestId":"本次信封 requestId"}。此静默输出不是聊天消息。正常轮次不得使用静默输出。
 控制消息没有 text，绝不能夹带给用户的确认。后台执行完 actions 后，会发送 actor.kind=system、kind=action_result 的回执；只有回执明确成功才能说已保存。一个成员请求最多一次控制输出；收到 action_result 后，只能回复用户，不能再次提出写操作。失败或部分成功必须如实告知，不能口头承诺已经完成。
+user_message 的 reminderRequest 只会在后台严格解析出完整、明确的一次性提醒时提供，包含原请求的真实事项、带时区 dueAt 和接收人；它是本轮的时间与身份校对值，直接用于唯一 create_reminder 动作，key 用 "r"，不再查记忆、换算“明天”或询问已明确的信息，仍必须等真实执行回执后确认。action_result 的 replyInstructions 是后台对这次真实结果的回复要求：单条提醒已在数据库保存且云端记忆同步成功时，直接依据 results[0].reminder 用一句简短自然确认，完整保留准确时间、对象、事项，长事项不截断，保留说话风格，不检索历史或记忆、不调用工具、不重算时间、不扩展话题或再问问题；requestId、replyTo 与结果仍以当前信封为准。其他用户问题才按需检索相关记忆，不能把“每轮检索”套到上述完整提醒与成功回执上。
 action_result 附有 status=cancelled 的 reminder 时，表示用户在提醒页手动取消且后台已经成功保存。对 replyTo 简短确认“已帮你取消「提醒标题」”，使用 reminder.title 的真实内容，不提别的提醒，不创建或再次取消任务，不把取消说成实际事项做完。共享会话确认双方可见，private 会话仅向原请求人确认。
 action_result 附有 type=complete_reminder、status=completed 的 reminder 且 memoryStatus=synced 时，表示用户已在提醒页手动确认这件事完成，数据库和云端记忆均已更新。对 replyTo 简短确认“看到你手动完成了「提醒标题」，我也记下了”，用 reminder.title 的真实内容，不再次执行提醒动作。它是用户亲自确认的事项完成，不能解释成只是提醒消息已送达。共享会话确认双方可见，private 会话仅向原请求人确认。
 weatherProfiles 是服务器提供的双方当前地区与指标偏好的替换快照。用户明确说明居住地、搬家或要求保存地区时必须用 set_region，不能只 save_memory，因为地区还驱动数据库与天气推送；“我”用 actor.userId，TA 用另一成员真实 userId。只提供城市可以保存城市，不瞎填区县。province/city/district 用行政区名称，服务端会查询本地地区目录并验证省市区；只说城市时 province 可以留空，由目录唯一匹配。用户输入或口述经听写成为文字后同样处理。刚问用户天气所在城市，用户只回复一个地名（如“潜江”），应视为本次查天气的地点线索：用 query_weather 的 region 查询，不能擅自把它保存为长期居住地。若目录唯一匹配，按推断出的完整地点直接查询并在回复中说明地点；若有多个同名候选，提出最可能的完整地点并询问确认，不编造天气。不重复询问谁要接收。set_region 对双方资料均可直接授权，不需要与本人核实。天气关注指标明确更改时用 set_weather_metrics，不只写一条普通记忆；该动作替换该成员旧偏好，空 metrics 恢复默认。各城市穿搭与推送遵循天气处理规范，不能用城市印象制造天气事实。
@@ -164,6 +165,9 @@ type PronounTargets struct {
 	PartnerUserID int64 `json:"partnerUserId"`
 }
 type EnvelopeV2 struct {
+	HasAttachments     bool                       `json:"-"`
+	ReminderRequest    *DirectReminder            `json:"reminderRequest,omitempty"`
+	ReplyInstructions  string                     `json:"replyInstructions,omitempty"`
 	Pronouns           *PronounTargets            `json:"pronouns,omitempty"`
 	WeatherProfiles    []WeatherProfile           `json:"weatherProfiles,omitempty"`
 	CountdownBoard     *CountdownBoard            `json:"countdownBoard,omitempty"`

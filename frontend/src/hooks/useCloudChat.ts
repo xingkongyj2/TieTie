@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError } from '../api/client'
-import { qoderApi, type CloudHistory, type CloudOperation, type CloudSession, type CloudStreamEvent } from '../api/qoder'
+import { qoderApi, type CloudHistory, type CloudSession, type CloudStreamEvent } from '../api/qoder'
 import type { CloudMember, CloudReminder, Message } from '../types'
 import { isVisibleChatMessage } from '../lib/chatMessages'
-import { preserveSavedFeedback, savedReminderFeedback, type ReplyFeedback } from '../lib/replyFeedback'
 
 const isRemoteBusy = (session: CloudSession | null) =>
   !!session && ['running', 'rescheduling', 'canceling'].includes(session.status.toLowerCase())
@@ -30,12 +29,14 @@ interface CloudState {
   replyFeedback: ReplyFeedback | null
 }
 
+type ReplyPhase = 'sending' | 'waiting' | 'thinking' | 'replying' | 'syncing' | 'delayed' | 'sent' | 'error' | 'complete'
+interface ReplyFeedback { phase: ReplyPhase; message?: string }
+
 interface PendingTurn {
   startedAt: number
   messageIds: Set<string>
   idleEventId: string | null
   silent: boolean
-  savedReminders?: CloudReminder[]
 }
 
 const initialState: CloudState = {
@@ -87,65 +88,13 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
   const sendLock = useRef(false)
   const localMessageSequence = useRef(0)
   const pendingTurns = useRef(new Map<string, PendingTurn>())
-  const operationController = useRef<AbortController | null>(null)
-  const operationTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const readRef = useRef<(options?: { full?: boolean }) => Promise<void>>(async () => {})
 
-  const update = useCallback((patch: Partial<CloudState>, newTurn = false) => {
+  const update = useCallback((patch: Partial<CloudState>) => {
     if (!mounted.current) return
-    if (!newTurn && patch.replyFeedback !== undefined) {
-      patch = { ...patch, replyFeedback: preserveSavedFeedback(current.current.replyFeedback, patch.replyFeedback) }
-    }
     current.current = { ...current.current, ...patch }
     setState(current.current)
   }, [])
-
-  const cancelOperationPoll = useCallback(() => {
-    operationController.current?.abort()
-    operationController.current = null
-    if (operationTimer.current !== null) clearTimeout(operationTimer.current)
-    operationTimer.current = null
-  }, [])
-
-  const pollOperation = useCallback((id: string, turn: PendingTurn, operation: CloudOperation) => {
-    cancelOperationPoll()
-    const abort = new AbortController()
-    operationController.current = abort
-    const isCurrent = () => mounted.current && !abort.signal.aborted && current.current.selectedId === id
-      && pendingTurns.current.get(id) === turn
-    const poll = async () => {
-      if (!isCurrent() || Date.now() - turn.startedAt >= 120_000) return
-      try {
-        const result = await qoderApi.getOperationStatus(operation, abort.signal)
-        if (!isCurrent()) return
-        if (result.status === 'saved') {
-          const feedback = savedReminderFeedback(result.reminders)
-          if (feedback) {
-            turn.savedReminders = result.reminders
-            const reminders = new Map(current.current.reminders.map((reminder) => [reminder.id, reminder]))
-            for (const reminder of result.reminders) reminders.set(reminder.id, reminder)
-            update({ reminders: [...reminders.values()], replyFeedback: feedback })
-            cancelOperationPoll()
-            return
-          }
-        } else if (result.status === 'failed') {
-          update({ replyFeedback: { phase: 'error', message: result.message || '这次操作未完成，正在等待 AI 回复…' } })
-          cancelOperationPoll()
-          return
-        }
-      } catch (error) {
-        // This reads local operation state. A transient read failure is neither
-        // a failed reminder nor grounds to replace the chat's current feedback.
-        if (!isCurrent()) return
-        if (error instanceof ApiError && [401, 403, 404].includes(error.status)) {
-          cancelOperationPoll()
-          return
-        }
-      }
-      if (isCurrent()) operationTimer.current = setTimeout(() => { void poll() }, Date.now() - turn.startedAt < 30_000 ? 500 : 2_000)
-    }
-    void poll()
-  }, [cancelOperationPoll, update])
 
   const cancelRead = useCallback(() => {
     readVersion.current += 1
@@ -180,7 +129,6 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       const silentDone = pending.silent && turnEnded
       if (replied || failed || silentDone) {
         pendingTurns.current.delete(id)
-        cancelOperationPoll()
         replyFeedback = replied ? { phase: 'complete' }
           : silentDone ? { phase: 'sent', message: '消息已发给对方' }
             : { phase: 'error', message: history.turnError || '这次没有收到 AI 回复，请稍后重试。' }
@@ -192,17 +140,13 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
         replyFeedback = { phase: 'delayed', message: '回复时间较长，仍在等待并自动检查…' }
       }
     }
-    // A cloud read started before the local save can finish afterward. Keep
-    // confirmed rows while merging any newer row versions from that read.
-    const reminders = new Map((pending?.savedReminders ?? []).map((reminder) => [reminder.id, reminder]))
-    for (const reminder of history.reminders ?? snapshot.reminders) reminders.set(reminder.id, reminder)
     update({
       session: history.session,
       replyMode: history.session.replyMode ?? '',
       messages: mergeMessages(full ? snapshot.messages.filter((message) => !!message.localStatus) : snapshot.messages, history.messages)
         .filter((message) => isVisibleChatMessage(message, history.members ?? snapshot.members)),
       members: history.members ?? snapshot.members,
-      reminders: [...reminders.values()],
+      reminders: history.reminders ?? snapshot.reminders,
       remindersError: history.remindersError ?? '',
       cursor: history.cursor ?? snapshot.cursor,
       lastIdleEventId: history.idleEventId ?? snapshot.lastIdleEventId,
@@ -212,7 +156,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       ...(history.session.status.toLowerCase() === 'idle' ? { thinking: false } : {}),
       ...(history.turnError !== null ? { turnError: history.turnError } : {}),
     })
-  }, [cancelOperationPoll, update])
+  }, [update])
 
   const readCloud = useCallback(async ({ full = false }: { full?: boolean } = {}) => {
     if (!mounted.current || sendLock.current) return
@@ -316,7 +260,6 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       createdAt: now.toISOString(), localStatus: 'sending',
     }
     sendLock.current = true
-    cancelOperationPoll()
     cancelRead()
     pendingTurns.current.set(id, {
       startedAt: Date.now(),
@@ -325,7 +268,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       silent,
     })
     update({ messages: mergeMessages(snapshot.messages, [optimistic]), submitting: true, pending: true, replyMode: silent ? 'silent' : '', error: '', turnError: '', refreshing: false,
-      replyFeedback: { phase: 'sending' } }, true)
+      replyFeedback: { phase: 'sending' } })
     let shouldRead = false
     try {
       const result = await qoderApi.sendMessage(id, draft, files, visibility)
@@ -341,7 +284,6 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
             ? { phase: 'sent', message: '消息已发给对方' } as ReplyFeedback
             : { phase: 'waiting' } as ReplyFeedback }
           : {}) })
-        if (pendingTurn && !pendingTurn.silent && result.operation) pollOperation(id, pendingTurn, result.operation)
       }
       // An accepted POST is success even if the following history read fails.
       return true
@@ -368,13 +310,13 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
         else schedule()
       }
     }
-  }, [cancelOperationPoll, cancelRead, pollOperation, schedule, selfUserId, update])
+  }, [cancelRead, schedule, selfUserId, update])
 
   useEffect(() => {
     mounted.current = true
     void reload()
-    return () => { mounted.current = false; cancelRead(); cancelOperationPoll() }
-  }, [cancelOperationPoll, cancelRead, reload])
+    return () => { mounted.current = false; cancelRead() }
+  }, [cancelRead, reload])
 
   useEffect(() => {
     const resume = () => { if (document.visibilityState === 'visible') void readRef.current() }
@@ -389,7 +331,6 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     const id = snapshot.selectedId
     if (!id || sendLock.current) throw new Error('会话还没准备好，请稍后再试。')
     sendLock.current = true
-    cancelOperationPoll()
     cancelRead()
     pendingTurns.current.set(id, {
       startedAt: Date.now(),
@@ -397,7 +338,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       idleEventId: snapshot.lastIdleEventId,
       silent: false,
     })
-    update({ submitting: true, pending: true, error: '', replyFeedback: { phase: 'sending' } }, true)
+    update({ submitting: true, pending: true, error: '', replyFeedback: { phase: 'sending' } })
     try {
       await qoderApi.sendToolResult(id, toolUseId, text)
       if (mounted.current && current.current.selectedId === id) {
@@ -417,7 +358,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
         void readRef.current()
       }
     }
-  }, [cancelOperationPoll, cancelRead, update])
+  }, [cancelRead, update])
 
   const hasPrivateChannel = state.messages.some((message) => message.visibility === 'private')
 
@@ -447,7 +388,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
         if (item.message && isVisibleChatMessage(item.message, snapshot.members)) {
           const replied = !!pendingTurn && item.message.sender === 'ai' && item.message.source === 'chat'
             && !pendingTurn.messageIds.has(item.message.id)
-          if (replied) { pendingTurns.current.delete(id); cancelOperationPoll() }
+          if (replied) pendingTurns.current.delete(id)
           update({ messages: mergeMessages(current.current.messages, [item.message]), cursor: nextCursor, thinking: false,
             pending: pendingTurns.current.has(id), ...(item.message.sender === 'ai' ? { turnError: '' } : {}),
             ...(replied ? { replyFeedback: { phase: 'complete' } as ReplyFeedback } : {}) })
@@ -458,7 +399,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
           ...(pendingTurn && !pendingTurn.silent ? { replyFeedback: { phase: 'syncing' } as ReplyFeedback } : {}) })
       } else if (item.type === 'status') {
         const status = item.status
-        if (status === 'terminated') { pendingTurns.current.delete(id); cancelOperationPoll() }
+        if (status === 'terminated') pendingTurns.current.delete(id)
         update({
           session: snapshot.session ? { ...snapshot.session, status } : null,
           cursor: nextCursor, pending: pendingTurns.current.has(id),
@@ -470,7 +411,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
         })
         if (status === 'idle' || status === 'terminated') void readRef.current({ full: true })
       } else if (item.type === 'session_error') {
-        if (pendingTurn) { pendingTurns.current.delete(id); cancelOperationPoll() }
+        if (pendingTurn) pendingTurns.current.delete(id)
         update({ turnError: snapshot.replyMode === 'silent' ? '' : item.message, cursor: nextCursor, thinking: false,
           pending: pendingTurns.current.has(id),
           ...(pendingTurn ? { replyFeedback: { phase: 'error', message: item.message || 'AI 回复失败，请重试。' } as ReplyFeedback } : {}) })
@@ -479,7 +420,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     const privateSource = hasPrivateChannel ? qoderApi.privateStream(id) : null
     if (privateSource) privateSource.onmessage = source.onmessage
     return () => { source.close(); privateSource?.close(); update({ streaming: false }) }
-  }, [state.selectedId, state.loaded, hasPrivateChannel, cancelOperationPoll, update])
+  }, [state.selectedId, state.loaded, hasPrivateChannel, update])
 
   const busy = state.pending || isRemoteBusy(state.session)
   const replyFeedback = state.replyFeedback?.phase === 'complete' ? null : state.replyFeedback

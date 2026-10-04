@@ -98,6 +98,7 @@ func (s *Server) prepareProtocolInput(ctx context.Context, e conversation.Envelo
 			logging.System().Warn("固定协议记忆暂未同步，首轮使用完整协议并保留重试", "event", "protocol.memory_pending", "session_id", e.SessionID, "error", err)
 		}
 	}
+	e = conversation.ReminderGuidance(e)
 	text, state := conversation.CompactFrame(e, previous)
 	body, err := json.Marshal(state)
 	if err != nil {

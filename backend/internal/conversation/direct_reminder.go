@@ -17,20 +17,28 @@ var explicitRequest = regexp.MustCompile(`^(?:请|麻烦你|帮我)?(今天|明�
 var additionalReminderTime = regexp.MustCompile(`(?:[0-9零〇一二两三四五六七八九十半]+(?:点|时|[:：][0-9]{2}|分钟后|秒钟?后|小时后|天后)|今天|明天|后天|今晚|凌晨|早上|上午|中午|下午|晚上|傍晚|每年|每日|每星期|每个)`)
 
 type DirectReminder struct {
-	Title        string
-	DueAt        time.Time
-	RecipientIDs []int64
+	Title        string    `json:"title"`
+	DueAt        time.Time `json:"dueAt"`
+	RecipientIDs []int64   `json:"recipientIds"`
 }
 
 // ParseSingleReminder is the strict grounding path for a model control action.
 // It also returns an explicit elapsed time so the caller can reject it instead
 // of accepting the model's replacement date. Legacy relative parsing is kept.
 func ParseSingleReminder(text string, ctx Context) (DirectReminder, bool) {
-	if parsed, ok := ParseExplicitReminder(text, ctx); ok {
-		return parsed, true
+	parsed, ok := ParseExplicitReminder(text, ctx)
+	if !ok {
+		parsed, ok = ParseDirectReminder(text, ctx)
 	}
-	parsed, ok := ParseDirectReminder(text, ctx)
-	return parsed, ok && !additionalReminderTime.MatchString(parsed.Title)
+	if !ok || additionalReminderTime.MatchString(parsed.Title) || strings.ContainsAny(parsed.Title, "，,；;。") {
+		return DirectReminder{}, false
+	}
+	for _, marker := range []string{"顺便", "另外", "并且", "同时", "而且", "还要", "再帮", "先别", "不要设置", "不用设置", "别设置"} {
+		if strings.Contains(parsed.Title, marker) {
+			return DirectReminder{}, false
+		}
+	}
+	return parsed, true
 }
 
 func ParseDirectReminder(text string, ctx Context) (DirectReminder, bool) {
