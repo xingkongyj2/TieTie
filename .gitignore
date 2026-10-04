@@ -5,6 +5,7 @@ dist/
 .env
 .env.local
 artifacts/
+__pycache__/
 backend/bin/
 .vite/
 backend/*.db

@@ -77,6 +77,8 @@ h1, h2, h3, p { margin: 0; }
 .cloud-error { flex-shrink: 0; display: flex; align-items: center; gap: 10px; margin: 9px 22px 0; padding: 10px 12px; border-radius: 12px; background: #fff2ee; color: #a35143; font-size: 11px; line-height: 1.7; }
 .cloud-error > span { flex: 1; overflow-wrap: anywhere; }
 .cloud-error button { flex-shrink: 0; color: #934336; background: white; border-radius: 8px; padding: 7px 10px; }
+.cloud-loading-notice { background: #edf5ff; color: #496589; }
+.cloud-loading-notice button { color: #315b91; }
 .cloud-empty { width: 100%; padding: 24px 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #8292af; font-size: 13px; text-align: center; line-height: 1.6; }
 .cloud-empty-mark { display: block; width: 76px; height: 76px; object-fit: contain; }
 .cloud-empty .spinner { border-color: #cddff8; border-top-color: var(--blue); }
@@ -230,11 +232,20 @@ h1, h2, h3, p { margin: 0; }
 .mini-avatars { display: flex; flex-shrink: 0; }
 .mini-avatars .avatar + .avatar { margin-left: -5px; }
 .assistant-feedback { display: flex; align-items: flex-start; gap: 4px; min-height: 40px; margin-top: 18px; color: #61728f; }
-.assistant-feedback-bubble { display: inline-flex; align-items: center; gap: 8px; min-width: min(205px, calc(100vw - 95px)); min-height: 36px; max-width: calc(100% - 48px); padding: 8px 12px 8px 5px; border-radius: 0 14px 14px 14px; background: #fff; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.assistant-feedback-bubble { position: relative; display: inline-flex; align-items: center; gap: 8px; min-width: min(205px, calc(100vw - 95px)); min-height: 36px; max-width: calc(100% - 48px); padding: 8px 12px 8px 5px; border-radius: 0 14px 14px 14px; background: #fff; font-size: 12px; line-height: 1.5; overflow: hidden; overflow-wrap: anywhere; }
+.assistant-feedback.is-processing { animation: feedback-arrive .28s cubic-bezier(.2,.8,.2,1) both; }
+.assistant-feedback.is-processing .assistant-feedback-bubble { color: #42649c; background: linear-gradient(105deg, #f0f5ff, #f8faff 55%, #edf4ff); box-shadow: 0 5px 20px #4575c519; }
+.assistant-feedback.is-processing .assistant-feedback-bubble::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: linear-gradient(90deg, transparent, #7ba8f0, transparent); transform-origin: left; animation: feedback-progress 2.4s ease-in-out infinite; }
+.assistant-feedback-glow { position: relative; flex: 0 0 auto; width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 38% 36%, #fff 0 12%, #9ac0ff 40%, #5b87dc 76%); box-shadow: 0 0 0 3px #a4c5fb36; animation: feedback-breathe 2.2s ease-in-out infinite; }
+.assistant-feedback-glow::after { content: ''; position: absolute; inset: -4px; border: 1px solid #8fb5f475; border-radius: 50%; }
+@keyframes feedback-arrive { from { opacity: 0; transform: translateY(7px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes feedback-breathe { 50% { box-shadow: 0 0 0 6px #a4c5fb18; transform: scale(.94); } }
+@keyframes feedback-progress { 0% { transform: scaleX(.12); opacity: .35; } 50% { transform: scaleX(.8); opacity: .8; } 100% { transform: scaleX(.12); opacity: .35; } }
 .assistant-feedback.is-error .assistant-feedback-bubble { color: #a35143; background: #fff1ed; }
 .assistant-feedback.is-proactive .assistant-feedback-bubble { padding-left: 10px; color: #4e77ba; background: #edf4ff; }
 .assistant-feedback.is-proactive .assistant-feedback-bubble > svg { flex: none; }
 .assistant-feedback-retry { flex-shrink: 0; padding: 2px 0; color: #436ec7; background: none; font-size: inherit; font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { .assistant-feedback.is-processing, .assistant-feedback-glow, .assistant-feedback.is-processing .assistant-feedback-bubble::after { animation: none; } }
 .typing-dots { display: inline-flex; gap: 3px; margin-left: 3px; }
 .typing-dots i { width: 3px; height: 3px; background: var(--blue); border-radius: 100%; animation: typing 1s infinite; }
 .typing-dots i:nth-child(2) { animation-delay: .15s; }
@@ -243,6 +254,9 @@ h1, h2, h3, p { margin: 0; }
 .stream-caret { display: inline-block; width: 5px; height: 16px; margin-left: 2px; border-radius: 2px; vertical-align: -3px; background: var(--blue); animation: typing 1s infinite; }
 .composer-area { position: relative; flex-shrink: 0; padding: 6px 20px max(8px, env(safe-area-inset-bottom)); background: transparent; z-index: 2; }
 .composer-stage { overflow: hidden; transition: opacity .24s ease; }
+.composer-area.is-processing .quick-actions { max-height: 0; opacity: 0; margin-top: 0; margin-bottom: 0; overflow: hidden; pointer-events: none; }
+.composer-area.is-processing .composer-compact { background: #fff4f3; }
+.composer-area.is-processing .composer-compact-text { color: #9a6b69; }
 .composer-compact { display: flex; align-items: center; gap: 4px; height: 52px; padding: 6px 9px 6px 14px; border-radius: 18px; background: #f4f5f7; opacity: 1; overflow: hidden; transition: height .4s cubic-bezier(.25,.8,.25,1), padding .4s cubic-bezier(.25,.8,.25,1), opacity .24s ease; }
 .composer-stage.is-expanded .composer-compact { height: 0; padding-top: 0; padding-bottom: 0; opacity: 0; pointer-events: none; }
 .composer-compact-text { min-width: 0; flex: 1; height: 40px; padding: 0 2px; background: transparent; color: #8b95a6; text-align: left; font-size: 13px; touch-action: none; user-select: none; -webkit-user-select: none; }
@@ -294,6 +308,9 @@ h1, h2, h3, p { margin: 0; }
 .send-button { display: flex; align-items: center; justify-content: center; height: 36px; width: 36px; background: var(--blue); color: white; border-radius: 12px; flex-shrink: 0; }
 .send-button:disabled { opacity: 1; background: #edf3fd; color: #98acca; }
 .send-button .spinner { border-color: #9aa4b540; border-top-color: var(--nav-idle); }
+.send-button.stop-button, .send-button.stop-button:disabled { background: #df5355; color: white; opacity: 1; box-shadow: 0 4px 12px #df53553b; }
+.send-button.stop-button:hover:not(:disabled) { background: #c84246; }
+.send-button.stop-button .spinner { border-color: #ffffff66; border-top-color: white; }
 .composer-caption { display: none; }
 .composer-recipient-hint { margin: 7px 0 0; text-align: center; font-size: 10px; line-height: 1.6; color: #8c98ad; overflow-wrap: anywhere; }
 .composer-caption > span { margin: 0 5px; font-size: 10px; }

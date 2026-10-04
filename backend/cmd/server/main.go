@@ -70,7 +70,12 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	workerDone := make(chan struct{})
-	go func() { defer close(workerDone); srv.RunConversationWorker(ctx) }()
+	if cfg.BackgroundWorkersEnabled {
+		go func() { defer close(workerDone); srv.RunConversationWorker(ctx) }()
+	} else {
+		close(workerDone)
+		logging.System().Info("后台队列已禁用，本实例仅提供 HTTP 服务", "event", "scheduler.disabled")
+	}
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

@@ -1,4 +1,4 @@
-import { isAccountTokenInvalid, request } from './client'
+import { ApiError, isAccountTokenInvalid, request } from './client'
 import type { CloudMember, CloudReminder, Message, ReminderRecurrence } from '../types'
 import uploadTypes from './upload-types.json'
 import { clearToken, getToken } from '../lib/token'
@@ -22,6 +22,10 @@ export interface CloudHistory {
   members?: CloudMember[]
   reminders?: CloudReminder[]
   remindersError?: string | null
+}
+
+export class SendCancelledError extends Error {
+  constructor() { super('发送已停止'); this.name = 'SendCancelledError' }
 }
 
 export type CloudStreamEvent =
@@ -213,11 +217,11 @@ export const qoderApi = {
   deleteReminder(id: string, reminderId: string): Promise<void> {
     return request(`${remindersPath(id)}/${encodeURIComponent(reminderId)}`, { method: 'DELETE' })
   },
-  getMessages(id: string, after?: string | null, signal?: AbortSignal, careAfter?: string): Promise<CloudHistory> {
+  getMessages(id: string, after?: string | null, signal?: AbortSignal, careAfter?: string, timeoutMs = 120_000): Promise<CloudHistory> {
     const query = after ? `?${new URLSearchParams({ after })}` : ''
-    return request(`${sessionPath(id)}${query}`, { signal, timeoutMs: 120_000, headers: careAfter ? { 'X-Tietie-Care-After': careAfter } : undefined })
+    return request(`${sessionPath(id)}${query}`, { signal, timeoutMs, headers: careAfter ? { 'X-Tietie-Care-After': careAfter } : undefined })
   },
-  async sendMessage(id: string, text: string, files: File[] = [], visibility: 'shared' | 'private' = 'shared'): Promise<{ messages: Message[]; replyMode?: 'silent' }> {
+  async sendMessage(id: string, text: string, files: File[] = [], visibility: 'shared' | 'private' = 'shared', beforeDispatch?: () => boolean): Promise<{ messages: Message[]; replyMode?: 'silent' }> {
     // Never tie a submitted turn to the current view's abort signal.
     validateAttachments(files)
     const attachments = await Promise.all(files.map(async (file) => {
@@ -228,7 +232,18 @@ export const qoderApi = {
           ? { kind: 'document', name: file.name, mimeType: file.type || 'application/octet-stream', data: await fileBase64(file) }
         : { kind: 'file', name: file.name, mimeType: supportedTextMime(file.type) ? file.type.toLowerCase().split(';')[0].trim() : 'text/plain', content: await file.text() }
     }))
+    if (beforeDispatch && !beforeDispatch()) throw new SendCancelledError()
     return request(sessionPath(id), { method: 'POST', body: { text, attachments, visibility }, timeoutMs: 120_000 })
+  },
+  async cancelTurn(id: string, visibility: 'shared' | 'private'): Promise<{ status: string }> {
+    try {
+      return await request(`/api/qoder/sessions/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: { visibility }, timeoutMs: 150_000 })
+    } catch (error) {
+      if (error instanceof ApiError && (error.status === 0 || error.status >= 500)) {
+        throw new Error('停止请求暂未确认，请查看处理状态后重试。')
+      }
+      throw error
+    }
   },
   /** 回答云端 Agent 抛出的选择题（AskUserQuestion），让挂起的那一轮继续。 */
   sendToolResult(id: string, toolUseId: string, text: string): Promise<{ messages: Message[]; replyMode?: 'silent' }> {

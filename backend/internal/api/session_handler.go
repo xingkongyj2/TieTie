@@ -39,6 +39,73 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleCancelTurn shares the send lock so a stop tapped during submission
+// reaches Qoder after that message has been accepted.
+func (s *Server) handleCancelTurn(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !qoder.ValidSessionID(id) {
+		writeRouteNotFound(w)
+		return
+	}
+	if apiErr := s.ensureBoundSession(r.Context(), id); apiErr != nil {
+		writeError(w, apiErr)
+		return
+	}
+	var body struct {
+		Visibility string `json:"visibility"`
+	}
+	if apiErr := decodeJSONBody(r, &body, 1024); apiErr != nil {
+		writeError(w, apiErr)
+		return
+	}
+	if body.Visibility != "shared" && body.Visibility != "private" {
+		writeError(w, qoder.NewApiError(400, "invalid_visibility", "无法确定要停止的会话。"))
+		return
+	}
+	unlock := s.lockConversation(id)
+	defer unlock()
+	if apiErr := s.ensureBoundSession(r.Context(), id); apiErr != nil {
+		writeError(w, apiErr)
+		return
+	}
+	if body.Visibility == "private" {
+		binding, err := s.DB.GetBindingBySessionID(r.Context(), id)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		if binding == nil {
+			writeError(w, qoder.NewApiError(403, "session_forbidden", "你没有访问此会话的权限。"))
+			return
+		}
+		channel, err := s.DB.PrivateChannelForOwner(r.Context(), id, auth.UserIDFrom(r.Context()), binding.CreatedAt)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		if channel == nil {
+			writeError(w, qoder.NewApiError(404, "private_channel_not_found", "仅自己可见的会话还未建立。"))
+			return
+		}
+		id = channel.SessionID
+	}
+	job, err := s.DB.GetConversationJob(r.Context(), id)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if job == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "idle"})
+		return
+	}
+	if err := s.Qoder.CancelTurn(r.Context(), id); err != nil {
+		writeError(w, err)
+		return
+	}
+	s.wakeConversation()
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "canceling"})
+}
+
 // handleMessagePreview returns recent, already persisted chat bubbles before
 // the full cloud chronology has finished loading. It never changes the session
 // cursor or readiness state; the normal history response remains authoritative.

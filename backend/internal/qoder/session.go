@@ -96,6 +96,12 @@ func (c *Client) DeleteSession(ctx context.Context, id string) error {
 	return err
 }
 
+// CancelTurn requests cancellation of the active turn. An idle session is a safe no-op.
+func (c *Client) CancelTurn(ctx context.Context, id string) error {
+	_, err := c.send(ctx, http.MethodPost, "/sessions/"+url.PathEscape(id)+"/cancel", "", nil, 0)
+	return err
+}
+
 // MessagesResult 对应 GET /api/qoder/sessions/:id/messages 的响应体。// Cursor / IdleEventID / TurnError 是三态字段：nil 表示 JSON null。
 type MessagesResult struct {
 	Session     *PublicSession  `json:"session"`

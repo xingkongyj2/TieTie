@@ -1,4 +1,4 @@
-import { ArrowUp, AtSign, CalendarDays, CloudSun, EyeOff, FileSpreadsheet, FileText, Mic, Paperclip, X } from 'lucide-react';
+import { ArrowUp, AtSign, CalendarDays, CloudSun, EyeOff, FileSpreadsheet, FileText, Mic, Paperclip, Square, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { MentionText } from './MentionText';
 import type { Member } from '../types';
@@ -6,7 +6,7 @@ import { atomicMentionEdit, completePartnerMention, deleteMention, expandMention
 import { isImageAttachment, validateAttachments } from '../api/qoder';
 import { attachmentDisplayName } from '../lib/attachments';
 
-interface Props { members: Member[]; sending: boolean; disabled?: boolean; placeholder?: string; onSend: (text: string, files: File[], visibility: 'shared' | 'private') => Promise<boolean>; onTool: (tool: 'reminders' | 'anniversary') => void; onError: (text: string) => void }
+interface Props { members: Member[]; sending: boolean; processing: boolean; stopping: boolean; disabled?: boolean; disabledReason?: string; placeholder?: string; onSend: (text: string, files: File[], visibility: 'shared' | 'private') => Promise<boolean>; onStop: () => Promise<void>; onTool: (tool: 'reminders' | 'anniversary') => void; onError: (text: string) => void }
 
 interface SpeechResult { results: ArrayLike<ArrayLike<{ transcript: string }>> }
 interface SpeechFailure { error: string }
@@ -37,7 +37,7 @@ interface VoiceGesture {
   finish: () => void
 }
 
-export function Composer({ members, sending, disabled = false, placeholder = '说点什么，让我们更近一点…', onSend, onTool, onError }: Props) {
+export function Composer({ members, sending, processing, stopping, disabled = false, disabledReason, placeholder = '说点什么，让我们更近一点…', onSend, onStop, onTool, onError }: Props) {
   const [text, setText] = useState('');
   const [visibility, setVisibility] = useState<'shared' | 'private'>('shared');
   const [expanded, setExpanded] = useState(false);
@@ -82,6 +82,9 @@ export function Composer({ members, sending, disabled = false, placeholder = '�
     speechRef.current?.abort(); speechRef.current = null;
   }, []);
   useEffect(() => {
+    if (processing) { inputRef.current?.blur(); setExpanded(false); }
+  }, [processing]);
+  useEffect(() => {
     const urls = files.map((file) => isImageAttachment(file) ? URL.createObjectURL(file) : '');
     setPreviews(urls);
     return () => urls.forEach((url) => { if (url) URL.revokeObjectURL(url); });
@@ -91,7 +94,7 @@ export function Composer({ members, sending, disabled = false, placeholder = '�
     catch (error) { onError(error instanceof Error ? error.message : '无法添加附件。'); }
   };
   const openEditor = (focusInput = true) => {
-    if (sending) return;
+    if (sending || disabled || processing) return;
     setExpanded(true);
     if (focusTimerRef.current) clearTimeout(focusTimerRef.current);
     if (!focusInput) return;
@@ -270,7 +273,7 @@ export function Composer({ members, sending, disabled = false, placeholder = '�
     setDraftAt(edit.text, edit.caret); return true;
   };
   const mentionPartner = () => {
-    if (!partner || sending) return;
+    if (!partner || sending || disabled || processing) return;
     if (!expanded) openEditor();
     const existing = mentionRanges(text, names);
     if (existing.length) {
@@ -331,21 +334,22 @@ export function Composer({ members, sending, disabled = false, placeholder = '�
     catch (error) { onError(error instanceof Error ? error.message : '天气查询暂未发送，请再试一次。'); }
     finally { setQueryingWeather(false); }
   };
-  return <footer className={`composer-area${voiceState !== 'idle' ? ' is-voice-active' : ''}${voiceState === 'cancel' ? ' is-voice-cancel' : ''}`}>
+  return <footer className={`composer-area${voiceState !== 'idle' ? ' is-voice-active' : ''}${voiceState === 'cancel' ? ' is-voice-cancel' : ''}${processing ? ' is-processing' : ''}`}>
     <input ref={fileRef} type="file" className="visually-hidden" aria-label="选择文件或图片" multiple onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = ''; }} />
     <div className="quick-actions">
-      <button type="button" aria-label="@TA" aria-pressed={toPartner} disabled={sending || !partner} onPointerDown={keepInputFocus} onClick={mentionPartner}><AtSign size={14} /><span>TA</span></button>
-      <button onClick={() => onTool('anniversary')}><CalendarDays size={14} /><span>小纪念</span></button>
+      <button type="button" aria-label="@TA" aria-pressed={toPartner} title={disabled ? disabledReason : undefined} disabled={sending || disabled || processing || !partner} onPointerDown={keepInputFocus} onClick={mentionPartner}><AtSign size={14} /><span>TA</span></button>
+      <button type="button" disabled={sending || disabled || processing} onClick={() => onTool('anniversary')}><CalendarDays size={14} /><span>小纪念</span></button>
       <button type="button" disabled={queryingWeather || sending || disabled} onPointerDown={keepInputFocus} onClick={() => void queryWeather()}><CloudSun size={14} /><span>{queryingWeather ? '查询中' : '查天气'}</span></button>
     </div>
-    <div className={`composer-stage${expanded ? ' is-expanded' : ''}`}>
-    <div className="composer-compact" aria-hidden={expanded || voiceState !== 'idle'}>
-      <button type="button" className="composer-compact-text" disabled={sending || disabled} onPointerDown={compactPointerDown} onContextMenu={(event) => event.preventDefault()} onClick={() => { if (suppressCompactClickRef.current) { suppressCompactClickRef.current = false; return; } openEditor(); }} aria-label="发消息或按住说话"><span>{text || (files.length ? `已选 ${files.length} 个附件，点此继续` : '发消息或按住说话')}</span></button>
-      <button type="button" className="attachment-button" aria-label="添加附件或图片" title="添加附件或图片" disabled={sending || disabled} onClick={() => { openEditor(false); fileRef.current?.click(); }}><Paperclip size={19} strokeWidth={2} /></button>
-      <button type="button" className="voice-button" aria-label="按住说话，松手发送，上移取消" title="按住说话" disabled={sending || disabled} onPointerDown={voicePointerDown} onContextMenu={(event) => event.preventDefault()} onClick={(event) => { if (event.detail === 0) gestureRef.current ? releaseVoice() : startVoice(); }}><Mic size={19} strokeWidth={2} aria-hidden="true" /></button>
-      <button type="button" className="send-button" aria-label="发送消息" disabled={(!text.trim() && !files.length) || sending || disabled} onClick={() => void send()}>{sending ? <span className="spinner" /> : <ArrowUp size={22} strokeWidth={2.2} />}</button>
+    <div className={`composer-stage${expanded && !processing ? ' is-expanded' : ''}`}>
+    <div className="composer-compact" aria-hidden={expanded && !processing || voiceState !== 'idle'}>
+      <button type="button" className="composer-compact-text" disabled={sending || disabled || processing} onPointerDown={compactPointerDown} onContextMenu={(event) => event.preventDefault()} onClick={() => { if (suppressCompactClickRef.current) { suppressCompactClickRef.current = false; return; } openEditor(); }} aria-label={processing ? 'AI正在处理' : disabledReason ?? '发消息或按住说话'}><span>{processing ? '正在处理，请稍候…' : text || (files.length ? `已选 ${files.length} 个附件，点此继续` : disabled && disabledReason || '发消息或按住说话')}</span></button>
+      {!processing && <button type="button" className="attachment-button" aria-label="添加附件或图片" title="添加附件或图片" disabled={sending || disabled} onClick={() => { openEditor(false); fileRef.current?.click(); }}><Paperclip size={19} strokeWidth={2} /></button>}
+      {!processing && <button type="button" className="voice-button" aria-label="按住说话，松手发送，上移取消" title="按住说话" disabled={sending || disabled} onPointerDown={voicePointerDown} onContextMenu={(event) => event.preventDefault()} onClick={(event) => { if (event.detail === 0) gestureRef.current ? releaseVoice() : startVoice(); }}><Mic size={19} strokeWidth={2} aria-hidden="true" /></button>}
+      {processing ? <button type="button" className="send-button stop-button" aria-label="停止AI处理" aria-busy={stopping} disabled={stopping} onClick={() => void onStop().catch((error) => onError(error instanceof Error ? error.message : '停止失败，请再试一次。'))}>{stopping ? <span className="spinner" aria-hidden="true" /> : <Square size={15} fill="currentColor" strokeWidth={2} aria-hidden="true" />}</button>
+        : <button type="button" className="send-button" aria-label="发送消息" disabled={(!text.trim() && !files.length) || sending || disabled} onClick={() => void send()}>{sending ? <span className="spinner" /> : <ArrowUp size={22} strokeWidth={2.2} />}</button>}
     </div>
-    <div className="composer-expanded-shell" aria-hidden={!expanded || voiceState !== 'idle'}>
+    <div className="composer-expanded-shell" aria-hidden={!expanded || processing || voiceState !== 'idle'}>
     <div className="composer-expanded-content">
     {files.length > 0 && <div className="composer-attachments" aria-label="待发送附件">{files.map((file, index) => <div className="attachment-chip" key={`${file.name}-${index}`}>
       {previews[index] ? <img src={previews[index]} alt="" /> : /\.(xlsx|xls|xlsm|xlsb)$/i.test(file.name) ? <FileSpreadsheet size={16} /> : <FileText size={16} />}
@@ -355,7 +359,7 @@ export function Composer({ members, sending, disabled = false, placeholder = '�
     <form className="composer" onSubmit={(event) => { event.preventDefault(); void send(); }}>
       <div className="composer-input-wrap">
       <div ref={mirrorRef} className="composer-input-mirror" aria-hidden="true"><MentionText text={text + '\u200b'} names={names} className="composer-mention-token" /></div>
-      <textarea ref={inputRef} aria-label="聊天消息" placeholder={placeholder} rows={2} enterKeyHint="enter" maxLength={2000} value={text} disabled={sending} onChange={(event) => { if (compositionRef.current !== null) setText(event.target.value); else editDraft(text, event.target.value, event.target.selectionStart); }} onCompositionStart={() => { compositionRef.current = text; }} onCompositionEnd={(event) => { const previous = compositionRef.current ?? text; compositionRef.current = null; editDraft(previous, event.currentTarget.value, event.currentTarget.selectionStart); }} onScroll={(event) => { if (mirrorRef.current) mirrorRef.current.scrollTop = event.currentTarget.scrollTop; }} onBeforeInput={(event) => {
+      <textarea ref={inputRef} aria-label="聊天消息" placeholder={placeholder} rows={2} enterKeyHint="enter" maxLength={2000} value={text} disabled={sending || disabled || processing} onChange={(event) => { if (compositionRef.current !== null) setText(event.target.value); else editDraft(text, event.target.value, event.target.selectionStart); }} onCompositionStart={() => { compositionRef.current = text; }} onCompositionEnd={(event) => { const previous = compositionRef.current ?? text; compositionRef.current = null; editDraft(previous, event.currentTarget.value, event.currentTarget.selectionStart); }} onScroll={(event) => { if (mirrorRef.current) mirrorRef.current.scrollTop = event.currentTarget.scrollTop; }} onBeforeInput={(event) => {
         const kind = (event.nativeEvent as InputEvent).inputType;
         if (kind === 'deleteContentBackward' && removeMention('backward') || kind === 'deleteContentForward' && removeMention('forward')) event.preventDefault();
       }} onKeyDown={(event) => {
@@ -367,9 +371,9 @@ export function Composer({ members, sending, disabled = false, placeholder = '�
       </div>
       <div className="composer-toolbar">
       <div className="composer-private-control">
-        <button type="button" className={`composer-private-button ${!toPartner && visibility === 'private' ? 'is-selected' : ''}`} disabled={sending || toPartner} aria-pressed={!toPartner && visibility === 'private'} onPointerDown={keepInputFocus} onClick={() => setVisibility((current) => current === 'private' ? 'shared' : 'private')}><EyeOff size={13} /><span>消息TA不可见</span></button>
+        <button type="button" className={`composer-private-button ${!toPartner && visibility === 'private' ? 'is-selected' : ''}`} disabled={sending || disabled || processing || toPartner} aria-pressed={!toPartner && visibility === 'private'} onPointerDown={keepInputFocus} onClick={() => setVisibility((current) => current === 'private' ? 'shared' : 'private')}><EyeOff size={13} /><span>消息TA不可见</span></button>
       </div>
-      <button type="button" className="attachment-button" aria-label="添加附件或图片" title="添加附件或图片" disabled={sending} onPointerDown={keepInputFocus} onClick={() => fileRef.current?.click()}><Paperclip size={19} strokeWidth={2} /></button>
+      <button type="button" className="attachment-button" aria-label="添加附件或图片" title="添加附件或图片" disabled={sending || disabled || processing} onPointerDown={keepInputFocus} onClick={() => fileRef.current?.click()}><Paperclip size={19} strokeWidth={2} /></button>
       <button type="submit" className="send-button" aria-label="发送消息" disabled={(!text.trim() && !files.length) || sending || disabled}>{sending ? <span className="spinner" /> : <ArrowUp size={22} strokeWidth={2.2} />}</button>
       </div>
     </form>

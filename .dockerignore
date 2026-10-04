@@ -8,6 +8,8 @@
 **/dist
 **/bin
 **/logs
+**/artifacts
+**/__pycache__
 **/*.db
 **/*.db-shm
 **/*.db-wal

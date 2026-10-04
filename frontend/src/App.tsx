@@ -133,16 +133,16 @@ export default function App() {
   const ai = state.members.find((m) => m.id === 'ai')!;
   const feedback = chat.replyFeedback;
   const proactiveFeedback = feedback?.phase === 'proactive_reminder' || feedback?.phase === 'proactive_update';
-  const showFeedback = feedback && feedback.phase !== 'sending' && feedback.phase !== 'complete'
+  const showFeedback = feedback && feedback.phase !== 'complete' && !(feedback.phase === 'sending' && chat.silent)
     && !(feedback.phase === 'delayed' && feedback.message?.startsWith('消息发送状态待确认'));
+  const processingFeedback = feedback && ['sending', 'waiting', 'thinking', 'replying', 'syncing', 'delayed', 'stopping'].includes(feedback.phase);
   const feedbackText = feedback?.phase === 'error' ? feedback.message || '这次回复遇到问题，请重试。'
     : feedback?.phase === 'sent' ? '消息已发给对方'
+      : feedback?.phase === 'stopped' ? '已停止'
+        : feedback?.phase === 'stopping' ? '正在停止…'
       : feedback?.phase === 'proactive_reminder' ? `${ai.name}正在发送消息提醒`
         : feedback?.phase === 'proactive_update' ? `${ai.name}正在告诉你提醒的变化`
-      : feedback?.phase === 'delayed' ? '回复还需要一点时间'
-        : feedback?.phase === 'syncing' ? `${ai.name}正在整理回复`
-          : feedback?.phase === 'thinking' || feedback?.phase === 'replying' ? `${ai.name}正在回复`
-            : `${ai.name}正在准备回复`;
+          : `${ai.name}正在处理…`;
   const selfId = account.account.user.userId;
   const partnerId = account.account.binding?.partnerId;
   const sharedMembers = state.members.map((member) => {
@@ -190,18 +190,19 @@ export default function App() {
     <div className="chat-view" hidden={view !== 'we'}>
       {account.account.binding ? <>
       <header className="chat-header"><div className="chat-heading"><h1>我们</h1></div><button className="icon-button details-button" aria-label="查看角色信息" onClick={() => setView('details')}><Ellipsis size={18} /></button></header>
-      {chat.error && !feedback && <div className="cloud-error" role="alert"><span>{chat.error}</span><button disabled={chat.loading || chat.refreshing || chat.submitting} onClick={() => void chat.reload()}>重试</button></div>}
+      {chat.error && !feedback && <div className="cloud-error" role="alert"><span>{chat.error}</span><button disabled={chat.submitting} onClick={() => void chat.reload()}>重试连接</button></div>}
+      {chat.slowLoading && !chat.error && <div className="cloud-error cloud-loading-notice" role="status"><span>连接云端用时较长，仍在尝试。超过 30 秒会停止等待并提示重试。</span><button onClick={() => void chat.reload()}>重新连接</button></div>}
       <main className={`chat-scroll ${!chat.messages.length && !feedback ? 'is-empty' : ''}`} ref={chatRef} aria-label="云端聊天记录" aria-busy={chat.loading && !chat.messages.length} onScroll={() => { const el = chatRef.current; if (el && !chat.loading) nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100; }}>
-        {chat.loading && !chat.messages.length && !feedback ? <div className="cloud-empty" role="status"><span className="spinner" /><p>正在找回我们聊过的话…</p></div> : !chat.messages.length && !chat.error && !feedback ? <div className="cloud-empty chat-welcome"><span className="welcome-eyebrow"><Sparkles size={13} />我们的共享空间</span><SpaceBuddy variant="blue" className="chat-welcome-buddy" /><h2>共同的提醒，日常的分享</h2>{!chat.session && <p>正在准备我们的共享空间…</p>}</div> : null}
+        {chat.loading && !chat.messages.length && !feedback ? <div className="cloud-empty" role="status"><span className="spinner" /><p>{chat.slowLoading ? '云端连接较慢，正在继续尝试…' : '正在找回我们聊过的话…'}</p></div> : !chat.messages.length && !chat.error && !feedback ? <div className="cloud-empty chat-welcome"><span className="welcome-eyebrow"><Sparkles size={13} />我们的共享空间</span><SpaceBuddy variant="blue" className="chat-welcome-buddy" /><h2>共同的提醒，日常的分享</h2>{!chat.session && <p>正在准备我们的共享空间…</p>}</div> : null}
         <div className="messages" ref={messagesRef}>{chat.messages.map((message, index) => <Fragment key={message.id}>
           {(index === 0 || messageDay(chat.messages[index - 1].createdAt) !== messageDay(message.createdAt)) && <div className="chat-date"><span /><strong>{messageDayLabel(message.createdAt)}</strong><span /></div>}
           <ChatMessage message={message} members={sharedMembers} onError={notify} onOpenImage={(src, alt) => setPreviewImage({ src, alt })} onAnswer={chat.answerAsk} />
         </Fragment>)}</div>
-        {showFeedback && <div className={`assistant-feedback${feedback.phase === 'error' ? ' is-error' : ''}${proactiveFeedback ? ' is-proactive' : ''}`} role={feedback.phase === 'error' ? 'alert' : 'status'} aria-live="polite"><Avatar member={ai} /><div className="assistant-feedback-bubble">{proactiveFeedback && <Bell size={13} aria-hidden="true" />}<span>{feedbackText}</span>{feedback.phase !== 'sent' && feedback.phase !== 'error' && <span className="typing-dots" aria-hidden="true"><i /><i /><i /></span>}{chat.error && <button className="assistant-feedback-retry" disabled={chat.loading || chat.refreshing || chat.submitting} onClick={() => void chat.reload()}>重新同步</button>}</div></div>}
+        {showFeedback && <div className={`assistant-feedback${feedback.phase === 'error' ? ' is-error' : ''}${proactiveFeedback ? ' is-proactive' : ''}${processingFeedback ? ' is-processing' : ''}`} role={feedback.phase === 'error' ? 'alert' : 'status'} aria-live="polite"><Avatar member={ai} /><div className="assistant-feedback-bubble">{processingFeedback && <span className="assistant-feedback-glow" aria-hidden="true" />}{proactiveFeedback && <Bell size={13} aria-hidden="true" />}<span>{feedbackText}</span>{processingFeedback && <span className="typing-dots" aria-hidden="true"><i /><i /><i /></span>}{chat.error && <button className="assistant-feedback-retry" disabled={chat.loading || chat.refreshing || chat.submitting} onClick={() => void chat.reload()}>重新同步</button>}</div></div>}
         {chat.turnError && !feedback && <div className="turn-error" role="alert">{chat.turnError}</div>}
         {chat.remindersError && <div className="turn-error" role="alert">{chat.remindersError}</div>}
       </main>
-      <Composer members={sharedMembers} key={chat.selectedId ?? 'no-session'} sending={chat.submitting} disabled={!chat.canSend} placeholder={chat.awaitingAsk ? '先回答上面那道选择题…' : chat.busy ? (chat.silent ? '消息已发给对方，可以先写下一句…' : '伙伴正在回复，可以先写下一句…') : '记下一个共同提醒…'} onSend={sendMessage} onTool={setTool} onError={notify} />
+      <Composer members={sharedMembers} key={chat.selectedId ?? 'no-session'} sending={chat.submitting} processing={chat.canStop} stopping={chat.stopping} disabled={!chat.canSend} disabledReason={!chat.loaded ? chat.error ? '连接失败，请点上方重试' : '正在连接云端…' : chat.error ? '同步失败，请点上方重试' : chat.awaitingAsk ? '先回答上面的选择题' : chat.busy ? '云端正在处理，请稍候' : undefined} placeholder={chat.awaitingAsk ? '先回答上面那道选择题…' : chat.busy ? (chat.silent ? '消息已发给对方，可以先写下一句…' : '伙伴正在回复，可以先写下一句…') : '记下一个共同提醒…'} onSend={sendMessage} onStop={chat.stopTurn} onTool={setTool} onError={notify} />
       </> : showBindPage ? <BindPage code={account.account.user.code} onBind={async (code) => { await account.bind(code); setShowBindPage(false); }} onBack={() => setShowBindPage(false)} notify={notify} embedded /> : <>
         <header className="chat-header"><div className="chat-heading"><h1>我们</h1></div></header>
         <main className="chat-scroll is-empty unbound-home-scroll" aria-label="我们的空间">

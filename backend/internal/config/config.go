@@ -35,6 +35,7 @@ type Config struct {
 	SchedulerBatchSize          int              // 每次原子领取数量，默认 64
 	ConversationProtocolVersion int              // 新会话协议为2；旧历史仍可读取
 	CloudMemoryEnabled          bool             // 默认开启 Qoder 云端记忆同步
+	BackgroundWorkersEnabled    bool             // 默认开启后台队列；连接生产库的本地实例应关闭
 	LogDir                      string           // 系统与定时任务日志目录
 	LogLevel                    string           // info / debug / warn / error
 	SchedulerConcurrency        int              // 并发云端请求上限，默认 4
@@ -65,6 +66,7 @@ func Load() Config {
 
 		ConversationProtocolVersion: 2,
 		CloudMemoryEnabled:          os.Getenv("QODER_MEMORY_ENABLED") != "false",
+		BackgroundWorkersEnabled:    os.Getenv("BACKGROUND_WORKERS_ENABLED") != "false",
 		LogDir:                      envOr("LOG_DIR", "logs"),
 		LogLevel:                    envOr("LOG_LEVEL", "info"),
 		Host:                        envOr("HOST", "127.0.0.1"),
@@ -76,11 +78,13 @@ func Load() Config {
 		Timeout:                     timeout,
 		UploadTimeout:               60 * time.Second,
 		DB: dbop.MySQLConfig{
-			Host:     os.Getenv("MYSQL_HOST"),
-			Port:     envInt("MYSQL_PORT", 3306, 65535),
-			User:     envOr("MYSQL_USER", "root"),
-			Password: os.Getenv("MYSQL_PASSWORD"),
-			Database: envOr("MYSQL_DATABASE", "tietie"),
+			Host:          os.Getenv("MYSQL_HOST"),
+			Port:          envInt("MYSQL_PORT", 3306, 65535),
+			User:          envOr("MYSQL_USER", "root"),
+			Password:      os.Getenv("MYSQL_PASSWORD"),
+			Database:      envOr("MYSQL_DATABASE", "tietie"),
+			TLSCAFile:     os.Getenv("MYSQL_TLS_CA_FILE"),
+			TLSServerName: envOr("MYSQL_TLS_SERVER_NAME", os.Getenv("MYSQL_HOST")),
 		},
 		AgentID:               os.Getenv("QODER_AGENT_ID"),
 		EnvironmentID:         os.Getenv("QODER_ENVIRONMENT_ID"),

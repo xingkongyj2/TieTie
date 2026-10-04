@@ -53,6 +53,7 @@ func NewRouter(s *Server) http.Handler {
 	mux.Handle("/api/account/bind", authed(s.handleBind))
 	mux.Handle("/api/account/unbind", authed(s.handleUnbind))
 	mux.Handle("/api/qoder/sessions/{id}/messages", authed(s.handleMessages))
+	mux.Handle("POST /api/qoder/sessions/{id}/cancel", authed(s.handleCancelTurn))
 	mux.Handle("GET /api/qoder/sessions/{id}/message-preview", authed(s.handleMessagePreview))
 	mux.Handle("GET /api/qoder/sessions/{id}/memories", authed(s.handleMemoryIndex))
 	mux.Handle("/api/qoder/sessions/{id}/partner-impression", authed(s.handlePartnerImpression))

@@ -122,6 +122,8 @@ docker build -t tietie-backend .      # 镜像只含后端，静态文件用卷�
 
 消息 POST 可传 `visibility:"shared"|"private"`（默认 shared）。private 原话、附件、AI 回复和到期前的任务只归发送者可见；为对方/双方设置的提醒到期后才在共享空间发布提醒内容。仅提醒自己始终走私密分支。`private_channels` 记录独立云端 Session 和绑定版本，`space_memory_stores` 对应独立仓库；历史接口聚合当前登录者自己的分支，`GET .../private-stream` 只推送当前成员自己的私密消息。沿用既有云端 Agent，不更改角色和系统提示词；具体过程见会话场景说明第11节。
 
+`POST /api/qoder/sessions/:id/cancel` 接收 `{visibility:"shared"|"private"}`，在消息发送锁释放后请求云端停止当前回合。前端继续等待会话回到 idle，再开放输入；已经发送的用户消息仍保留在聊天记录中。
+
 - `GET /api/qoder/sessions/:id/reminders` 返回 `{reminders}`。
 - `POST .../reminders` 接收 `{title,dueAt,recipientIds,recurrence?}`，dueAt 为未来第一次触发的 RFC3339 时间；可选 recurrence 支持每天、间隔几天、每周、每月、每年、每周指定星期几及指定多个日历日期。recipientIds 必须来自当前空间，返回 `{reminder}`。
 - `PATCH .../reminders/:reminderId` 接收 `{status:"completed"|"scheduled"|"cancelled"}`。完成/恢复仅接收者可操作，已到期或已投递的任务不能撤销完成。V2 中手动完成和恢复会在同一事务排入 AI 状态确认；聊天消息以 `source=reminder_update` 区分普通回复，到点主动提醒仍使用 `source=reminder`。

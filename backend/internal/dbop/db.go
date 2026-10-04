@@ -5,10 +5,14 @@ package dbop
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
 	"database/sql"
 	"errors"
 	"fmt"
 	"log"
+	"os"
 	"regexp"
 	"sync"
 	"time"
@@ -26,11 +30,14 @@ type DB struct {
 
 // MySQLConfig 是一组 MySQL 连接参数。
 type MySQLConfig struct {
-	Host     string
-	Port     int
-	User     string
-	Password string
-	Database string
+	Host          string
+	Port          int
+	User          string
+	Password      string
+	Database      string
+	TLSCAFile     string
+	TLSServerName string
+	tlsConfigName string
 }
 
 // Addr 返回 host:port，仅用于连接与日志。
@@ -38,6 +45,41 @@ func (c MySQLConfig) Addr() string { return fmt.Sprintf("%s:%d", c.Host, c.Port)
 
 // databasePattern 限制库名字符，DDL 里直接拼库名才是安全的。
 var databasePattern = regexp.MustCompile(`^[A-Za-z0-9_]{1,64}$`)
+
+// withTLS prepares the same verified TLS configuration for database creation
+// and the application pool. Without a CA file, the internal connection is unchanged.
+func (c MySQLConfig) withTLS() (MySQLConfig, error) {
+	c.tlsConfigName = ""
+	if c.TLSCAFile == "" {
+		return c, nil
+	}
+	ca, err := os.ReadFile(c.TLSCAFile)
+	if err != nil {
+		return c, fmt.Errorf("读取 MYSQL_TLS_CA_FILE %q: %w", c.TLSCAFile, err)
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(ca) {
+		return c, fmt.Errorf("MYSQL_TLS_CA_FILE %q 不包含有效的 PEM 证书", c.TLSCAFile)
+	}
+	serverName := c.TLSServerName
+	if serverName == "" {
+		serverName = c.Host
+	}
+	if serverName == "" {
+		return c, errors.New("MySQL TLS 需要 MYSQL_TLS_SERVER_NAME 或 MYSQL_HOST")
+	}
+	// Driver registrations are process-wide. Include both trust roots and the
+	// verified hostname so independent database connections cannot share settings.
+	hash := sha256.Sum256(append(append([]byte(serverName), 0), ca...))
+	name := fmt.Sprintf("tietie_%x", hash)
+	if err := mysql.RegisterTLSConfig(name, &tls.Config{
+		RootCAs: roots, ServerName: serverName, MinVersion: tls.VersionTLS12,
+	}); err != nil {
+		return c, fmt.Errorf("注册 MySQL TLS 配置: %w", err)
+	}
+	c.tlsConfigName = name
+	return c, nil
+}
 
 // dsn 组装连接串；database 传空串表示只连服务器，用于建库。
 // parseTime 让 DATETIME 还原成 time.Time，loc=UTC 与写入侧保持一致，
@@ -49,6 +91,7 @@ func (c MySQLConfig) dsn(database string) string {
 	cfg.User = c.User
 	cfg.Passwd = c.Password
 	cfg.DBName = database
+	cfg.TLSConfig = c.tlsConfigName
 	cfg.ParseTime = true
 	cfg.Loc = time.UTC
 	cfg.Collation = "utf8mb4_bin" // 连接侧也走二进制序，LIKE 与范围比较才和 SQLite 一致
@@ -101,6 +144,11 @@ func Open(cfg MySQLConfig) (*DB, error) {
 	}
 	if !databasePattern.MatchString(cfg.Database) {
 		return nil, fmt.Errorf("数据库名 %q 只能包含字母、数字和下划线", cfg.Database)
+	}
+	var err error
+	cfg, err = cfg.withTLS()
+	if err != nil {
+		return nil, err
 	}
 	if err := ensureDatabase(cfg); err != nil {
 		return nil, err

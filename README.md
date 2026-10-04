@@ -36,6 +36,46 @@ npm run preview # 预览产物，/api 同样代理到 Go 后端
 
 生产部署时 Go 后端直接托管 `frontend/dist/`（`STATIC_DIR`，默认 `../frontend/dist`），单进程即可，无需 Vite。端口占用等环境变量见 `backend/README.md`。
 
+## CNB 与服务器部署
+
+`.cnb.yml` 在推送后构建 `deploy/dockerfile`，镜像发布到 CNB。服务器用 `bash deploy/cnb_tietie.sh` 拉取镜像并启动应用；先配置服务器自己的 `backend/.env.local`，已有 Docker 登录可复用，或提供 `CNB_TOKEN` / `CNB_TOKEN_USER_NAME`。
+
+脚本默认管理 `tietie-mysql`、数据卷 `tietie_mysql_data`，应用始终通过 Docker 内网的容器名和 3306 连接数据库。宿主机默认只开放 `127.0.0.1:3306`；需要从本地电脑连接时，在**服务器**配置：
+
+```dotenv
+MYSQL_HOST=tietie-mysql
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=原服务器应用数据库密码
+MYSQL_ROOT_PASSWORD=原MySQL容器的root密码
+MYSQL_BIND_IP=0.0.0.0
+MYSQL_PUBLISHED_PORT=3306
+MYSQL_ALLOWED_CIDRS=203.0.113.10/32
+MYSQL_PUBLIC_INTERFACE=eth0
+BACKGROUND_WORKERS_ENABLED=true
+```
+
+将示例白名单替换为本地电脑的当前公网 IPv4；多项可用逗号或空格分隔。部署变量读取顺序是显式 shell 环境、服务器 `ENV_FILE`（默认 `backend/.env.local`）、默认值。`MYSQL_ROOT_PASSWORD` 是部署管理密码，不从应用的 `MYSQL_PASSWORD` 推导；已有容器可直接沿用其原 root 环境配置，脚本不会修改密码。
+
+`deploy/configure_mysql.py` 使用 Python 3 标准库，公开端口还需要 root、systemd、iptables 和 iproute2。它预检端口、root SQL 登录及原 named volume，端口配置相同不重建；已有未映射端口的 MySQL 需要重建一次，先停应用，再保留原镜像、配置和数据卷重建，失败时恢复旧 MySQL。不会删除数据卷，执行前应备份数据库；新应用镜像先拉取，拉取失败不会停止当前服务。
+
+白名单在 MySQL 公开端口启动前写入 `DOCKER-USER` 顶部，按外网入口、Docker DNAT 原宿主端口和容器目标 3306 匹配；Docker 内网应用及其他端口不受影响，也不会先放行白名单之外的已有连接。规则通过专用 systemd 服务在 Docker 启动前恢复，Docker 的 drop-in 要求此服务成功后才启动；配置文件只有端口、接口和 CIDR，不保存数据库密码。部署只 reload/enable 规则服务，不重启 Docker。改回 `MYSQL_BIND_IP=127.0.0.1` 并重新部署会移除本脚本的白名单及启动依赖。Docker 使用 iptables 后端，规则依据 [Docker 防火墙说明](https://docs.docker.com/engine/network/firewall-iptables/)。
+
+本地 `backend/.env.local` 使用专用数据库账号，例如：
+
+```dotenv
+MYSQL_HOST=38.76.183.142
+MYSQL_PORT=3306
+MYSQL_USER=tietie_local
+MYSQL_PASSWORD=专用账号密码
+MYSQL_DATABASE=tietie
+MYSQL_TLS_CA_FILE=/本地绝对路径/mysql-ca.pem
+MYSQL_TLS_SERVER_NAME=38.76.183.142
+BACKGROUND_WORKERS_ENABLED=false
+```
+
+数据库管理员需给此专用账号授权 `tietie` 数据库并要求 SSL，服务器证书的 SAN 需包含连接 IP。把服务器 CA 放到本地指定路径，应用会校验 CA 和服务器身份；不要提交密码、CA 私钥或 `.env.local`。本地禁用后台 worker 后仍会读写同一数据库，提醒调度、后台会话同步和记忆任务由生产服务器负责；生产配置保持 `BACKGROUND_WORKERS_ENABLED=true`。公网 IP 改变时更新服务器白名单并重新部署。
+
 ## 登录、邀请码与绑定
 
 - **注册/登录**：用户名（2-24 位中文/字母/数字）+ 密码（≥6 位，数据库明文存储）；登录成功签发 JWT（默认 30 天），前端保存后所有需登录的 `/api` 请求携带 `Authorization: Bearer`，401 时自动回到登录页。旧账号的 bcrypt 哈希在首次成功登录时转换为明文密码。
