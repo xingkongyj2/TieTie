@@ -99,6 +99,8 @@ export type MessageVisibility = 'shared' | 'private'
 export interface Message {
 	weatherCards?: import('./api/care').WeatherCardData[]
   localStatus?: 'sending' | 'sent' | 'failed' | 'uncertain'
+  /** Keeps the rendered row stable when a local send receives its cloud event ID. */
+  renderKey?: string
   replyMode?: 'silent'
   visibility?: MessageVisibility
   id: string

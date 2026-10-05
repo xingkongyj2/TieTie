@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError } from '../api/client'
 import { qoderApi, SendCancelledError, type CloudHistory, type CloudSession, type CloudStreamEvent } from '../api/qoder'
 import type { CloudMember, CloudReminder, Message, ReminderRecurrence } from '../types'
-import { isVisibleChatMessage } from '../lib/chatMessages'
+import { isTurnCancellationMarker, isVisibleChatMessage } from '../lib/chatMessages'
 
 const isRemoteBusy = (session: CloudSession | null) =>
   !!session && ['running', 'rescheduling', 'canceling'].includes(session.status.toLowerCase())
@@ -57,19 +57,30 @@ const initialState: CloudState = {
   turnError: '', replyFeedback: null,
 }
 
-function mergeMessages(existing: Message[], incoming: Message[]): Message[] {
-  const byId = new Map(existing.map((message) => [message.id, message]))
-  for (const message of incoming) byId.set(message.id, message)
-  // A local bubble is replaced by the verified cloud event, including when
-  // SSE beats the POST response or a full history refresh finishes first.
-  for (const local of existing.filter((message) => message.localStatus)) {
+function mergeMessages(existing: Message[], incoming: Message[], replace = false): Message[] {
+  const previous = new Map(existing.map((message) => [message.id, message]))
+  const byId = new Map((replace ? existing.filter((message) => !!message.localStatus) : existing)
+    .map((message) => [message.id, message]))
+  for (const message of incoming) {
+    const renderKey = previous.get(message.id)?.renderKey
+    byId.set(message.id, renderKey ? { ...message, renderKey } : message)
+  }
+  // Only a newly received cloud event can acknowledge a local bubble. Reusing
+  // an older equal-text row would briefly remove a fresh short message.
+  const newEchoes = incoming.filter((message) => message.sender === 'self' && !message.localStatus && !previous.has(message.id))
+  const usedEchoes = new Set<string>()
+  for (const local of existing.filter((message) => message.localStatus && message.localStatus !== 'failed')) {
     const sentAt = Date.parse(local.createdAt ?? '')
-    const echoed = [...byId.values()].some((message) => message.id !== local.id && !message.localStatus
+    const echoed = newEchoes.find((message) => !usedEchoes.has(message.id) && message.id !== local.id
       && message.sender === 'self' && message.userId === local.userId && message.text === local.text
       && (message.visibility ?? 'shared') === (local.visibility ?? 'shared')
       && (Number.isNaN(sentAt) || Number.isNaN(Date.parse(message.createdAt ?? ''))
         || Math.abs(Date.parse(message.createdAt!) - sentAt) < 120_000))
-    if (echoed) byId.delete(local.id)
+    if (echoed) {
+      usedEchoes.add(echoed.id)
+      byId.set(echoed.id, { ...byId.get(echoed.id)!, renderKey: local.renderKey ?? local.id })
+      byId.delete(local.id)
+    }
   }
   // The accepted user event may arrive before an unread earlier reply is polled.
   // Reconcile in timestamp order rather than the order requests completed.
@@ -180,7 +191,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     update({
       session: history.session,
       replyMode: history.session.replyMode ?? '',
-      messages: mergeMessages(full ? snapshot.messages.filter((message) => !!message.localStatus) : snapshot.messages, history.messages)
+      messages: mergeMessages(snapshot.messages, history.messages, full)
         .filter((message) => isVisibleChatMessage(message, history.members ?? snapshot.members)),
       members: history.members ?? snapshot.members,
       reminders: history.reminders ?? snapshot.reminders,
@@ -231,7 +242,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       // history. The full response replaces this preview and unlocks sending.
       void qoderApi.getCachedMessages(id, abort.signal).then(({ messages }) => {
         if (isCurrent() && current.current.selectedId === id && !current.current.loaded && messages.length) {
-          update({ messages })
+          update({ messages: messages.filter((message) => !isTurnCancellationMarker(message)) })
         }
       }).catch(() => {})
     }

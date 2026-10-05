@@ -196,7 +196,7 @@ export default function App() {
       {chat.slowLoading && !chat.error && <div className="cloud-error cloud-loading-notice" role="status"><span>连接云端用时较长，仍在尝试。超过 30 秒会停止等待并提示重试。</span><button onClick={() => void chat.reload()}>重新连接</button></div>}
       <main className={`chat-scroll ${!chat.messages.length && !feedback ? 'is-empty' : ''}`} ref={chatRef} aria-label="云端聊天记录" aria-busy={chat.loading && !chat.messages.length} onScroll={() => { const el = chatRef.current; if (el && !chat.loading) nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 100; }}>
         {chat.loading && !chat.messages.length && !feedback ? <div className="cloud-empty" role="status"><span className="spinner" /><p>{chat.slowLoading ? '云端连接较慢，正在继续尝试…' : '正在找回我们聊过的话…'}</p></div> : !chat.messages.length && !chat.error && !feedback ? <div className="cloud-empty chat-welcome"><span className="welcome-eyebrow"><Sparkles size={13} />我们的共享空间</span><SpaceBuddy variant="blue" className="chat-welcome-buddy" /><h2>共同的提醒，日常的分享</h2>{!chat.session && <p>正在准备我们的共享空间…</p>}</div> : null}
-        <div className="messages" ref={messagesRef}>{chat.messages.map((message, index) => <Fragment key={message.id}>
+        <div className="messages" ref={messagesRef}>{chat.messages.map((message, index) => <Fragment key={message.renderKey ?? message.id}>
           {(index === 0 || messageDay(chat.messages[index - 1].createdAt) !== messageDay(message.createdAt)) && <div className="chat-date"><span /><strong>{messageDayLabel(message.createdAt)}</strong><span /></div>}
           <ChatMessage message={message} members={sharedMembers} onError={notify} onOpenImage={(src, alt) => setPreviewImage({ src, alt })} onAnswer={chat.answerAsk} />
         </Fragment>)}</div>

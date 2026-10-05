@@ -178,6 +178,11 @@ func publicSession(s *rawSession) (*PublicSession, error) {
 	return out, nil
 }
 
+// IsTurnCancellationMarker identifies Qoder's internal acknowledgement.
+func IsTurnCancellationMarker(text string) bool {
+	return strings.EqualFold(strings.TrimSpace(text), "Turn cancelled")
+}
+
 // publicMessages 把上游事件转换为前端消息列表（对应 qoder.mjs publicMessages）。
 func publicMessages(events []Event) []PublicMessage {
 	// 云端在等待工具应答时会把会话标成 idle，所以"是否已回答"只能靠事件配对判断。
@@ -270,6 +275,11 @@ func publicMessages(events []Event) []PublicMessage {
 				msg.Text, msg.Files = splitUserAttachments(msg.Text)
 			}
 		} else {
+			// Qoder emits this internal acknowledgement as an agent.message after
+			// cancellation. It is not an assistant reply for the chat history.
+			if IsTurnCancellationMarker(msg.Text) {
+				continue
+			}
 			assistant := conversation.ParseAssistant(msg.Text)
 			msg.Text, msg.RecipientIDs, msg.Source = assistant.Text, assistant.RecipientIDs, assistant.Source
 			if assistant.Control {

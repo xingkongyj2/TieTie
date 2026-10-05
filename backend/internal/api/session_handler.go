@@ -158,6 +158,9 @@ func cachedPublicMessage(row dbop.Message, binding *dbop.Binding, viewer int64) 
 	if row.Source != "chat" && row.Source != "reminder" {
 		return qoder.PublicMessage{}, false
 	}
+	if row.Sender == "ai" && qoder.IsTurnCancellationMarker(row.Text) {
+		return qoder.PublicMessage{}, false
+	}
 	if row.Text == "" && len(row.Files) == 0 {
 		return qoder.PublicMessage{}, false
 	}
