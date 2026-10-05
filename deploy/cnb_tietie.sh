@@ -75,7 +75,6 @@ docker run -d \
   --env-file "$ENV_FILE" \
   -e HOST=0.0.0.0 \
   -e PORT=4173 \
-  -e STATIC_DIR=/app/dist \
   -e LOG_DIR=/app/logs \
   "${mysql_host_args[@]}" \
   -v "${LOG_DIR}:/app/logs" \

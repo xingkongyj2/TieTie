@@ -25,7 +25,8 @@ import (
 
 // DB 是数据库句柄。
 type DB struct {
-	gdb *gorm.DB
+	gdb                 *gorm.DB
+	wechatNotifications WechatNotificationOptions
 }
 
 // MySQLConfig 是一组 MySQL 连接参数。
@@ -184,6 +185,10 @@ func Open(cfg MySQLConfig) (*DB, error) {
 
 	if err := gdb.AutoMigrate(
 		&User{},
+		&WechatIdentity{},
+		&WechatSubscription{},
+		&WechatSubscriptionReceipt{},
+		&WechatNotification{},
 		&UserProfile{},
 		&CareMode{},
 		&CareReport{},

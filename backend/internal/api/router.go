@@ -15,6 +15,7 @@ import (
 	"tietie/backend/internal/dbop"
 	"tietie/backend/internal/qoder"
 	"tietie/backend/internal/weather"
+	"tietie/backend/internal/wechat"
 )
 
 // Server 聚合全部 handler 依赖。
@@ -24,6 +25,8 @@ type Server struct {
 	Auth             *auth.Service
 	DB               *dbop.DB // 可为 nil：未配置数据库时账号类接口返回 503
 	Weather          weather.Provider
+	Wechat           wechat.CodeExchanger
+	WechatMessages   wechat.MessageSender
 	weatherOnce      sync.Once
 	locksMu          sync.Mutex
 	sessionLocks     map[string]*conversationLock
@@ -41,6 +44,7 @@ func NewRouter(s *Server) http.Handler {
 	// ---- 公开接口：登录/注册（无需 JWT）----
 	mux.Handle("/api/auth/register", http.HandlerFunc(s.handleAuthRegister))
 	mux.Handle("/api/auth/login", http.HandlerFunc(s.handleAuthLogin))
+	mux.Handle("/api/auth/wechat", http.HandlerFunc(s.handleAuthWechat))
 	mux.Handle("/api/assets/reminder-titles.woff", http.HandlerFunc(s.handleTitleFont))
 	mux.Handle("/api/assets/OFL.txt", http.HandlerFunc(s.handleTitleFontLicense))
 
@@ -49,6 +53,7 @@ func NewRouter(s *Server) http.Handler {
 		return s.authGuard(http.HandlerFunc(h))
 	}
 	mux.Handle("/api/account/me", authed(s.handleMe))
+	mux.Handle("/api/account/wechat-subscription", authed(s.handleWechatSubscription))
 	mux.Handle("/api/account/profiles", authed(s.handleProfiles))
 	mux.Handle("/api/account/profile", authed(s.handleProfile))
 	mux.Handle("/api/account/regions", authed(s.handleRegions))

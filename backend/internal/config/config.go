@@ -18,27 +18,36 @@ type Config struct {
 	QWeatherProjectID      string
 	QWeatherPrivateKeyFile string
 
-	Host                        string           // 监听地址，默认 127.0.0.1
-	Port                        int              // 监听端口，默认 4173（与 Node 版一致）
-	StaticDir                   string           // 可选 H5 产物目录，默认 ../frontend/web/dist
-	Upstream                    string           // Qoder 云端地址
-	Token                       string           // QODER_ACCESS_TOKEN
-	DefaultSessionID            string           // QODER_DEFAULT_SESSION_ID
-	Timeout                     time.Duration    // 上游普通请求超时
-	UploadTimeout               time.Duration    // 上游文件上传超时
-	DB                          dbop.MySQLConfig // MySQL 连接参数（MYSQL_* 环境变量）
-	AgentID                     string           // QODER_AGENT_ID，绑定时新建会话用的 agent；留空自动探测
-	EnvironmentID               string           // QODER_ENVIRONMENT_ID，留空自动探测
-	JWTSecret                   string           // JWT 签名密钥；生产环境必须通过 JWT_SECRET 设置
-	JWTTTL                      time.Duration    // 令牌有效期，默认 30 天
-	SchedulerPollInterval       time.Duration    // 到期队列检查间隔，默认 1s
-	SchedulerBatchSize          int              // 每次原子领取数量，默认 64
-	ConversationProtocolVersion int              // 新会话协议为2；旧历史仍可读取
-	CloudMemoryEnabled          bool             // 默认开启 Qoder 云端记忆同步
-	BackgroundWorkersEnabled    bool             // 默认开启后台队列；连接生产库的本地实例应关闭
-	LogDir                      string           // 系统与定时任务日志目录
-	LogLevel                    string           // info / debug / warn / error
-	SchedulerConcurrency        int              // 并发云端请求上限，默认 4
+	Host                           string           // 监听地址，默认 127.0.0.1
+	Port                           int              // 监听端口，默认 4173（与 Node 版一致）
+	StaticDir                      string           // 可选 H5 产物目录，默认 ../frontend/web/dist
+	Upstream                       string           // Qoder 云端地址
+	Token                          string           // QODER_ACCESS_TOKEN
+	DefaultSessionID               string           // QODER_DEFAULT_SESSION_ID
+	Timeout                        time.Duration    // 上游普通请求超时
+	UploadTimeout                  time.Duration    // 上游文件上传超时
+	DB                             dbop.MySQLConfig // MySQL 连接参数（MYSQL_* 环境变量）
+	AgentID                        string           // QODER_AGENT_ID，绑定时新建会话用的 agent；留空自动探测
+	EnvironmentID                  string           // QODER_ENVIRONMENT_ID，留空自动探测
+	JWTSecret                      string           // JWT 签名密钥；生产环境必须通过 JWT_SECRET 设置
+	JWTTTL                         time.Duration    // 令牌有效期，默认 30 天
+	WechatAppID                    string           // 微信小程序 AppID，必须与前端项目一致
+	WechatAppSecret                string           // 微信小程序密钥，仅保存在后端
+	WechatTimeout                  time.Duration    // 微信 code2Session 超时，默认 10s
+	WechatReminderTemplateID       string           // 提醒订阅消息模板 ID，留空停用微信推送
+	WechatReminderTitleKey         string           // 模板标题关键词名，默认 thing1；显式留空可省略
+	WechatReminderTimeKey          string           // 模板时间关键词名，默认 time2；显式留空可省略
+	WechatReminderContentKey       string           // 模板内容关键词名，默认 thing3；显式留空可省略
+	WechatMiniprogramState         string           // formal / trial / developer，默认 formal
+	WechatReminderSubscriptionType string           // once / permanent；默认 once，长期模板才可 permanent
+	SchedulerPollInterval          time.Duration    // 到期队列检查间隔，默认 1s
+	SchedulerBatchSize             int              // 每次原子领取数量，默认 64
+	ConversationProtocolVersion    int              // 新会话协议为2；旧历史仍可读取
+	CloudMemoryEnabled             bool             // 默认开启 Qoder 云端记忆同步
+	BackgroundWorkersEnabled       bool             // 默认开启后台队列；连接生产库的本地实例应关闭
+	LogDir                         string           // 系统与定时任务日志目录
+	LogLevel                       string           // info / debug / warn / error
+	SchedulerConcurrency           int              // 并发云端请求上限，默认 4
 }
 
 // Load 从环境变量读取配置，缺省值与 server/index.mjs、server/qoder.mjs 保持一致。
@@ -86,13 +95,22 @@ func Load() Config {
 			TLSCAFile:     os.Getenv("MYSQL_TLS_CA_FILE"),
 			TLSServerName: envOr("MYSQL_TLS_SERVER_NAME", os.Getenv("MYSQL_HOST")),
 		},
-		AgentID:               os.Getenv("QODER_AGENT_ID"),
-		EnvironmentID:         os.Getenv("QODER_ENVIRONMENT_ID"),
-		JWTSecret:             envOr("JWT_SECRET", "tietie-dev-secret-change-me"),
-		JWTTTL:                jwtTTL(),
-		SchedulerPollInterval: time.Duration(envInt("SCHEDULER_POLL_SECONDS", 1, 60)) * time.Second,
-		SchedulerBatchSize:    envInt("SCHEDULER_BATCH_SIZE", 64, 512),
-		SchedulerConcurrency:  envInt("SCHEDULER_CONCURRENCY", 4, 32),
+		AgentID:                        os.Getenv("QODER_AGENT_ID"),
+		EnvironmentID:                  os.Getenv("QODER_ENVIRONMENT_ID"),
+		JWTSecret:                      envOr("JWT_SECRET", "tietie-dev-secret-change-me"),
+		JWTTTL:                         jwtTTL(),
+		WechatAppID:                    os.Getenv("WECHAT_APP_ID"),
+		WechatAppSecret:                os.Getenv("WECHAT_APP_SECRET"),
+		WechatTimeout:                  time.Duration(envInt("WECHAT_TIMEOUT_SECONDS", 10, 60)) * time.Second,
+		WechatReminderTemplateID:       os.Getenv("WECHAT_REMINDER_TEMPLATE_ID"),
+		WechatReminderTitleKey:         envOrPresent("WECHAT_REMINDER_TITLE_KEY", "thing1"),
+		WechatReminderTimeKey:          envOrPresent("WECHAT_REMINDER_TIME_KEY", "time2"),
+		WechatReminderContentKey:       envOrPresent("WECHAT_REMINDER_CONTENT_KEY", "thing3"),
+		WechatMiniprogramState:         envOr("WECHAT_MINIPROGRAM_STATE", "formal"),
+		WechatReminderSubscriptionType: envOr("WECHAT_REMINDER_SUBSCRIPTION_TYPE", "once"),
+		SchedulerPollInterval:          time.Duration(envInt("SCHEDULER_POLL_SECONDS", 1, 60)) * time.Second,
+		SchedulerBatchSize:             envInt("SCHEDULER_BATCH_SIZE", 64, 512),
+		SchedulerConcurrency:           envInt("SCHEDULER_CONCURRENCY", 4, 32),
 	}
 }
 
@@ -117,6 +135,15 @@ func jwtTTL() time.Duration {
 func envOr(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return fallback
+}
+
+// envOrPresent distinguishes an omitted keyword setting (use its default) from
+// an explicitly empty keyword setting (omit that field from the template).
+func envOrPresent(key, fallback string) string {
+	if value, present := os.LookupEnv(key); present {
+		return value
 	}
 	return fallback
 }

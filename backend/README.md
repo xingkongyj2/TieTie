@@ -70,6 +70,13 @@ go run ./cmd/server           # 或 make dev
 | `QODER_ENVIRONMENT_ID` | 绑定新建会话使用的运行环境；留空优先取名为 Default 的环境 |
 | `JWT_SECRET` | JWT 签名密钥，生产环境必须设置为随机长字符串 |
 | `JWT_TTL_HOURS` | 令牌有效期（小时），默认 720（30 天） |
+| `WECHAT_APP_ID` | 微信小程序 AppID，必须与 `frontend/project.config.json` 中的 AppID 一致 |
+| `WECHAT_APP_SECRET` | 微信公众平台的小程序 AppSecret，仅保存在后端环境变量中 |
+| `WECHAT_TIMEOUT_SECONDS` | 微信登录及订阅消息请求超时，默认 10 秒，范围 1–60 |
+| `WECHAT_REMINDER_TEMPLATE_ID` | 微信公众平台选定的订阅消息模板 ID；留空停用微信提醒 |
+| `WECHAT_REMINDER_TITLE_KEY` / `WECHAT_REMINDER_TIME_KEY` / `WECHAT_REMINDER_CONTENT_KEY` | 实际模板的标题、时间、内容关键词；默认 `thing1` / `time2` / `thing3`，多余字段显式留空 |
+| `WECHAT_MINIPROGRAM_STATE` | 点击推送打开的版本：`formal`（默认）/ `trial` / `developer` |
+| `WECHAT_REMINDER_SUBSCRIPTION_TYPE` | `once`（默认）；仅平台批准的长期模板可用 `permanent` |
 | `SCHEDULER_POLL_SECONDS` | 定时队列检查间隔，默认 1 秒，范围 1–60 |
 | `SCHEDULER_BATCH_SIZE` | 每批领取任务数，默认 64，范围 1–512 |
 | `LOG_DIR` | 日志目录，默认 `backend/` 运行目录下的 `logs/` |
@@ -78,6 +85,10 @@ go run ./cmd/server           # 或 make dev
 
 ## 账号与绑定
 
+- `POST /api/auth/wechat {code}`：小程序用 `wx.login` 获取临时 code；服务端通过固定的微信 HTTPS `jscode2session` 接口验证身份，返回 `{token, user, binding, isNewUser}`。首次自动创建新账号和邀请码，`isNewUser=true` 时前端进入资料引导；重复登录使用原账号及绑定。不会自动合并历史账号密码账号。
+- 微信身份独立存储在 `wechat_identities`，`(app_id, open_id)` 复合主键保证唯一；用户和身份在同一事务中创建，并发重复登录回滚多余用户后读取已创建账号。用户名为随机值，不含 OpenID；微信账号没有可用于密码登录的密码。客户端传入的 OpenID 或 session key 不作为登录凭据，接口和日志均不包含 AppSecret 或 session key。
+- 首次启动更新后的后端会通过 AutoMigrate 新建 `wechat_identities`，无需手动改已有用户。部署时填写 `WECHAT_APP_ID` 和 `WECHAT_APP_SECRET` 并重启后端；缺少配置返回 503 `wechat_login_unavailable`，无效或已使用的 code 返回 401 `invalid_wechat_code`，微信请求超时返回 504 `wechat_login_timeout`，上游故障返回 502 `wechat_login_failed`。小程序需将后端 HTTPS 地址配置为 request 合法域名，后端需可访问 `api.weixin.qq.com`。
+- 部署后可向 `/api/auth/wechat` POST 空 JSON `{}` 检查接口：新版应返回 400 `invalid_wechat_code`，不会请求微信或创建账号；若仍返回 404 `unsupported_route`，当前服务尚未更新或请求被转发到旧实例。需要先构建并发布包含新版 Go 后端的镜像，再更新服务器容器；只上传小程序或仅拉取旧镜像不能增加此路由。
 - `POST /api/auth/register {username, password}`：注册即登录，返回 `{token, user, binding}`；密码明文存储，邀请码 4 位数字自动生成防碰撞。
 - `POST /api/auth/login {username, password}`：登录，返回同上。
 - `GET /api/account/me`：JWT 换取当前账号与绑定状态。
@@ -101,7 +112,7 @@ docker build -t tietie-backend .      # 镜像只含后端，静态文件用卷�
 - **开发**：起 `go run ./cmd/server`（或 `frontend/` 里 `npm start`），再在 `frontend/web/` 里 `npm run dev`——
   Vite 已配置 `/api` 代理到 `http://127.0.0.1:4173`。
 
-微信小程序在 `frontend/` 下通过 Taro 构建，产物由微信发布。它使用公开 HTTPS API 地址和原 JWT 接口，无需 Vite 代理；生产请配置 request 合法域名。参见 [迁移说明](../frontend/MIGRATION.md)。
+微信小程序在 `frontend/` 下通过 Taro 构建，产物由微信发布。它使用公开 HTTPS API 地址和微信登录接口，登录后继续使用 JWT，无需 Vite 代理；生产请配置 request 合法域名。参见 [迁移说明](../frontend/MIGRATION.md)。
 
 ## 与 Node 版的差异
 
@@ -131,7 +142,17 @@ docker build -t tietie-backend .      # 镜像只含后端，静态文件用卷�
 - `PATCH .../reminders/:reminderId` 接收 `{status:"completed"|"scheduled"|"cancelled"}`。完成/恢复仅接收者可操作，已到期或已投递的任务不能撤销完成。V2 中手动完成和恢复会在同一事务排入 AI 状态确认；聊天消息以 `source=reminder_update` 区分普通回复，到点主动提醒仍使用 `source=reminder`。
 - 消息历史额外包含 `members`、`reminders`、`remindersError`；消息包含 `userId`、`displayName`、`recipientIds`、`source`、提醒回执 ID/错误。原始云端 Events 与提醒操作 JSON 不对外公开。
 
-一次性和重复提醒都由数据库调度；重复规则按 Asia/Shanghai 的日历日期计算，既保留每次触发的历史，也排定下一次。服务需常驻，页面关闭不影响保存与唤醒；离线手机/微信推送尚未接入。MySQL 下每类队列的「挑候选 + 改状态」由一把 advisory lock 串起来，跨连接不会重复领取；但多副本运行仍需分布式租约与跨实例空间锁，会话内的串行也还依赖进程内互斥，不能直接运行多个进程各自在启动时恢复相同队列。
+一次性和重复提醒都由数据库调度；重复规则按 Asia/Shanghai 的日历日期计算，既保留每次触发的历史，也排定下一次。服务需常驻，页面关闭不影响保存与唤醒；微信推送需配置模板并获得用户授权。MySQL 下每类队列的「挑候选 + 改状态」由一把 advisory lock 串起来，跨连接不会重复领取；但多副本运行仍需分布式租约与跨实例空间锁，会话内的串行也还依赖进程内互斥，不能直接运行多个进程各自在启动时恢复相同队列。
+
+## 微信订阅提醒
+
+`GET /api/account/wechat-subscription` 返回 `{enabled, templateId, hasWechatIdentity, remaining, subscriptionType}`；`POST` 接收 `{templateId, result:"accept"|"reject"|"ban", requestId}`。用户身份来自 JWT 和当前 AppID 的微信身份记录，客户端不能指定 OpenID。每次原生授权使用独立 requestId，保存重试复用同一 ID，重复提交不会增加次数；拒绝本次授权不抹除之前已接受的次数。一次性模板每次 accept 增加一次预留额度，长期模板授权成功时 remaining 为 `-1`。
+
+普通 AI/手动提醒实际投递完成、早晚关怀及纪念日报告插入时，在同一事务创建 `wechat_notifications`，按来源和接收人去重。模板未启用时不入队；普通聊天和提醒更新不入队。独立 worker 发送前再次检查绑定版本、实际提醒接收人、当前微信身份和额度；一次性额度原子预留。私密提醒只投递给本人，跳转链接使用共享空间 ID，聊天接口只加载当前账号有权看到的消息。
+
+发送通过固定微信 HTTPS 地址获取并缓存 stable token，再调用订阅消息接口。明确限流或忙碌最多重试三次；授权版本未变时，明确拒绝退回预留次数，微信拒绝授权则作废对应额度。发送期间若用户重新授权，旧错误结果不清除新额度，也不退回旧版本预留次数，保守避免恢复已撤销的授权。发送超时、未知响应或进程在发送中退出标记 uncertain，不重复发送。领取后尚未发送的租约可以恢复，超过 24 小时的积压停止发送。后台队列关闭时也不发送微信消息。
+
+上线前在微信公众平台选择实际模板，并按 [`.env.example`](.env.example) 填写模板 ID、关键词编号、版本与 AppSecret，重启后端自动建表。用户需在「我的 → 微信提醒」点击授权；默认一次授权只可收到一条提醒，后台不能替用户授权。长期模板必须事先获得微信批准。模板当前尚未选定，mock 测试不代表真实发送已验收。参考 [稳定 token](https://developers.weixin.qq.com/miniprogram/dev/server/API/mp-access-token/api_getstableaccesstoken.html)及[消息发送接口](https://developers.weixin.qq.com/miniprogram/dev/server/API/mp-message-management/subscribe-message/api_sendmessage.html)。
 
 ## 提醒落库、记忆与运行日志
 

@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"testing"
+)
 
 func TestLoadMySQLTLSSettings(t *testing.T) {
 	t.Setenv("MYSQL_HOST", "38.76.183.142")
@@ -27,5 +30,54 @@ func TestLoadBackgroundWorkersEnabled(t *testing.T) {
 				t.Fatalf("BackgroundWorkersEnabled = %t, want %t", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestLoadWechatLoginSettings(t *testing.T) {
+	t.Setenv("WECHAT_APP_ID", "wx-test-app")
+	t.Setenv("WECHAT_APP_SECRET", "test-only-secret")
+	for _, tc := range []struct {
+		value   string
+		seconds int
+	}{{"", 10}, {"5", 5}, {"60", 60}, {"0", 10}, {"61", 10}, {"invalid", 10}} {
+		t.Run(tc.value, func(t *testing.T) {
+			t.Setenv("WECHAT_TIMEOUT_SECONDS", tc.value)
+			cfg := Load()
+			if cfg.WechatAppID != "wx-test-app" || cfg.WechatAppSecret != "test-only-secret" || int(cfg.WechatTimeout.Seconds()) != tc.seconds {
+				t.Fatal("wechat login settings were not loaded correctly")
+			}
+		})
+	}
+}
+
+func TestLoadWechatReminderSettings(t *testing.T) {
+	t.Setenv("WECHAT_REMINDER_TEMPLATE_ID", "template-test")
+	t.Setenv("WECHAT_REMINDER_TITLE_KEY", "thing8")
+	t.Setenv("WECHAT_REMINDER_TIME_KEY", "date4")
+	t.Setenv("WECHAT_REMINDER_CONTENT_KEY", "thing7")
+	t.Setenv("WECHAT_MINIPROGRAM_STATE", "trial")
+	t.Setenv("WECHAT_REMINDER_SUBSCRIPTION_TYPE", "permanent")
+	cfg := Load()
+	if cfg.WechatReminderTemplateID != "template-test" || cfg.WechatReminderTitleKey != "thing8" || cfg.WechatReminderTimeKey != "date4" || cfg.WechatReminderContentKey != "thing7" || cfg.WechatMiniprogramState != "trial" || cfg.WechatReminderSubscriptionType != "permanent" {
+		t.Fatal("wechat reminder settings were not loaded correctly")
+	}
+	for _, key := range []string{"WECHAT_REMINDER_TITLE_KEY", "WECHAT_REMINDER_TIME_KEY", "WECHAT_REMINDER_CONTENT_KEY", "WECHAT_MINIPROGRAM_STATE", "WECHAT_REMINDER_SUBSCRIPTION_TYPE"} {
+		t.Setenv(key, "")
+	}
+	cfg = Load()
+	if cfg.WechatReminderTitleKey != "" || cfg.WechatReminderTimeKey != "" || cfg.WechatReminderContentKey != "" {
+		t.Fatal("explicitly empty keywords must omit fields")
+	}
+	if cfg.WechatMiniprogramState != "formal" || cfg.WechatReminderSubscriptionType != "once" {
+		t.Fatal("default delivery must use formal build and one-time subscription")
+	}
+	for _, key := range []string{"WECHAT_REMINDER_TITLE_KEY", "WECHAT_REMINDER_TIME_KEY", "WECHAT_REMINDER_CONTENT_KEY"} {
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg = Load()
+	if cfg.WechatReminderTitleKey != "thing1" || cfg.WechatReminderTimeKey != "time2" || cfg.WechatReminderContentKey != "thing3" {
+		t.Fatal("omitted keywords must use documented defaults")
 	}
 }

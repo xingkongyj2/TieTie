@@ -577,7 +577,7 @@ func (db *DB) RecordReminderDispatch(ctx context.Context, id string, eventIDs []
 }
 
 // FinishReminderDispatch 记录 AI 实际回复完成及全部云端事件 ID；已完成的重放保持幂等。
-func (db *DB) FinishReminderDispatch(ctx context.Context, id string, eventIDs []string, now time.Time) error {
+func (db *DB) FinishReminderDispatch(ctx context.Context, id string, eventIDs []string, now time.Time, content ...WechatReminderContent) error {
 	if !db.enabled() {
 		return errNoDB
 	}
@@ -595,7 +595,7 @@ func (db *DB) FinishReminderDispatch(ctx context.Context, id string, eventIDs []
 		return err
 	}
 	err = db.updateReminderStates(ctx, id, []string{ReminderDispatching, ReminderUncertain},
-		map[string]any{"status": ReminderDelivered, "task_status": "completed", "task_completed_at": now.UTC(), "delivered_at": now.UTC(), "dispatch_event_ids": string(encoded), "next_attempt_at": nil})
+		map[string]any{"status": ReminderDelivered, "task_status": "completed", "task_completed_at": now.UTC(), "delivered_at": now.UTC(), "dispatch_event_ids": string(encoded), "next_attempt_at": nil}, content...)
 	if !errors.Is(err, ErrReminderState) {
 		return err
 	}
@@ -659,7 +659,7 @@ func (db *DB) updateReminderDispatch(ctx context.Context, id string, updates map
 	return db.updateReminderStates(ctx, id, []string{ReminderDispatching}, updates)
 }
 
-func (db *DB) updateReminderStates(ctx context.Context, id string, allowedStates []string, updates map[string]any) error {
+func (db *DB) updateReminderStates(ctx context.Context, id string, allowedStates []string, updates map[string]any, content ...WechatReminderContent) error {
 	if !db.enabled() {
 		return errNoDB
 	}
@@ -685,6 +685,13 @@ func (db *DB) updateReminderStates(ctx context.Context, id string, allowedStates
 			return err
 		}
 		if reminder.Status == ReminderDelivered {
+			message := WechatReminderContent{}
+			if len(content) > 0 {
+				message = content[0]
+			}
+			if err := db.enqueueWechatReminder(tx, reminder, message); err != nil {
+				return err
+			}
 			delivered := time.Now().UTC()
 			if reminder.DeliveredAt != nil {
 				delivered = *reminder.DeliveredAt

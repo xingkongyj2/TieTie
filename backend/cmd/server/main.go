@@ -21,6 +21,7 @@ import (
 	"tietie/backend/internal/logging"
 	"tietie/backend/internal/qoder"
 	"tietie/backend/internal/scheduler"
+	"tietie/backend/internal/wechat"
 )
 
 func main() {
@@ -50,11 +51,14 @@ func main() {
 	logging.System().Info("后台服务配置就绪", "event", "scheduler.configured", "poll_interval", options.PollInterval, "batch_size", options.BatchSize, "concurrency", options.Concurrency)
 
 	srv := &api.Server{
-		Cfg:   &cfg,
-		Qoder: qoder.NewClient(cfg),
-		Auth:  auth.NewService(cfg.JWTSecret, cfg.JWTTTL),
-		DB:    db,
+		Cfg:            &cfg,
+		Qoder:          qoder.NewClient(cfg),
+		Auth:           auth.NewService(cfg.JWTSecret, cfg.JWTTTL),
+		DB:             db,
+		Wechat:         wechat.NewClient(cfg.WechatAppID, cfg.WechatAppSecret, cfg.WechatTimeout),
+		WechatMessages: wechat.NewMessageClient(wechat.MessageOptions{AppID: cfg.WechatAppID, AppSecret: cfg.WechatAppSecret, Timeout: cfg.WechatTimeout, ReminderTemplateID: cfg.WechatReminderTemplateID, ReminderTitleKey: cfg.WechatReminderTitleKey, ReminderTimeKey: cfg.WechatReminderTimeKey, ReminderContentKey: cfg.WechatReminderContentKey, MiniprogramState: cfg.WechatMiniprogramState}),
 	}
+	db.SetWechatNotifications(dbop.WechatNotificationOptions{Enabled: srv.WechatMessages.Enabled(), AppID: cfg.WechatAppID, TemplateID: cfg.WechatReminderTemplateID, SubscriptionType: cfg.WechatReminderSubscriptionType})
 	if cfg.JWTSecret == "tietie-dev-secret-change-me" {
 		log.Println("警告: 正在使用默认 JWT_SECRET，生产环境请通过环境变量设置自定义密钥")
 	}
@@ -71,7 +75,13 @@ func main() {
 	defer stop()
 	workerDone := make(chan struct{})
 	if cfg.BackgroundWorkersEnabled {
-		go func() { defer close(workerDone); srv.RunConversationWorker(ctx) }()
+		go func() {
+			defer close(workerDone)
+			pushDone := make(chan struct{})
+			go func() { defer close(pushDone); srv.RunWechatNotificationWorker(ctx) }()
+			srv.RunConversationWorker(ctx)
+			<-pushDone
+		}()
 	} else {
 		close(workerDone)
 		logging.System().Info("后台队列已禁用，本实例仅提供 HTTP 服务", "event", "scheduler.disabled")

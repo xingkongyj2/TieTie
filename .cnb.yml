@@ -7,7 +7,8 @@ main:
       stages:
         - name: docker login
           script: printf '%s' "$CNB_TOKEN" | docker login "$CNB_DOCKER_REGISTRY" -u "${CNB_TOKEN_USER_NAME:-cnb}" --password-stdin
-        - name: build and push TieTie
+        - name: build and push TieTie backend
           script: |
-            docker build -f ./deploy/dockerfile -t ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}/tietie:1 .
+            docker build -f ./deploy/dockerfile --build-arg VCS_REF=${CNB_COMMIT} -t ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}/tietie:1 -t ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}/tietie:${CNB_COMMIT} .
             docker push ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}/tietie:1
+            docker push ${CNB_DOCKER_REGISTRY}/${CNB_REPO_SLUG_LOWERCASE}/tietie:${CNB_COMMIT}

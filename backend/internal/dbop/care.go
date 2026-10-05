@@ -281,6 +281,9 @@ func (db *DB) CompleteCareReport(ctx context.Context, job CareMode, members []Ca
 			return result.Error
 		}
 		if result.RowsAffected > 0 {
+			if err := db.enqueueWechatCare(tx, report, b, job.NextDue); err != nil {
+				return err
+			}
 			expires := time.Date(now.In(weather.Shanghai).Year(), now.In(weather.Shanghai).Month(), now.In(weather.Shanghai).Day()+1, 0, 0, 0, 0, weather.Shanghai)
 			if job.Mode == "night" {
 				expires = expires.AddDate(0, 0, 1)

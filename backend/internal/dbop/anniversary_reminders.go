@@ -169,6 +169,9 @@ func (db *DB) DeliverAnniversaryReminders(ctx context.Context, job AnniversaryRe
 					return result.Error
 				}
 				if result.RowsAffected > 0 {
+					if err := db.enqueueWechatCare(tx, report, *b, now); err != nil {
+						return err
+					}
 					expires := target.AddDate(0, 0, 1)
 					fact, _ := json.Marshal(map[string]any{"content": text, "sourceType": "anniversary_reminder", "anniversaryId": anniversary.ID, "date": report.Date, "expiresAt": expires})
 					if err := enqueueMemory(tx, MemoryRecord{SessionID: job.SessionID, Path: memoryspace.FactPath("realtime", "space", 0, report.ID), Scope: "space", Category: "realtime", ExpiresAt: &expires, PendingContent: string(fact), Operation: "upsert", BindingCreatedAt: b.CreatedAt}); err != nil {

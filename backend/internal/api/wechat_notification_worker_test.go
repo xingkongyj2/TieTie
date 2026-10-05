@@ -1,0 +1,106 @@
+package api
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"tietie/backend/internal/dbop"
+	"tietie/backend/internal/wechat"
+)
+
+type notificationStoreMock struct {
+	ready                        bool
+	prepareErr                   error
+	prepared, released, finished bool
+	state                        string
+	retryable, unauthorized      bool
+}
+
+func (m *notificationStoreMock) PrepareWechatNotification(context.Context, dbop.WechatNotification, time.Time) (string, bool, error) {
+	m.prepared = true
+	return "verified-openid", m.ready, m.prepareErr
+}
+func (m *notificationStoreMock) FinishWechatNotification(_ context.Context, _ dbop.WechatNotification, state, _ string, retryable, unauthorized bool, _ time.Time) error {
+	m.finished = true
+	m.state = state
+	m.retryable = retryable
+	m.unauthorized = unauthorized
+	return nil
+}
+func (m *notificationStoreMock) ReleaseWechatNotification(context.Context, dbop.WechatNotification, time.Time) error {
+	m.released = true
+	return nil
+}
+
+type notificationSenderMock struct {
+	sendErr      error
+	sent         bool
+	notification wechat.ReminderNotification
+}
+
+func (*notificationSenderMock) Enabled() bool      { return true }
+func (*notificationSenderMock) TemplateID() string { return "template" }
+func (m *notificationSenderMock) SendReminder(_ context.Context, openid string, notification wechat.ReminderNotification) error {
+	if openid != "verified-openid" {
+		return errors.New("unverified identity")
+	}
+	m.sent = true
+	m.notification = notification
+	return m.sendErr
+}
+func TestWechatNotificationWorkerRecordsOutcomes(t *testing.T) {
+	for _, tc := range []struct {
+		name                    string
+		err                     error
+		state                   string
+		retryable, unauthorized bool
+	}{{"sent", nil, dbop.WechatNotificationSent, false, false}, {"known_retry", &wechat.MessageError{Kind: wechat.MessageRetryable}, dbop.WechatNotificationFailed, true, false}, {"authorization_revoked", &wechat.MessageError{Kind: wechat.MessageUnauthorized}, dbop.WechatNotificationFailed, false, true}, {"timeout", &wechat.MessageError{Kind: wechat.MessageUncertain}, dbop.WechatNotificationUncertain, false, false}, {"unknown", errors.New("unknown transport failure"), dbop.WechatNotificationUncertain, false, false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &notificationStoreMock{ready: true}
+			sender := &notificationSenderMock{sendErr: tc.err}
+			job := dbop.WechatNotification{Title: "吃药", Content: "记得吃药", Page: "pages/index/index?from=reminder&sessionId=space", DueAt: time.Now()}
+			err := deliverWechatNotification(context.Background(), store, sender, job)
+			if !errors.Is(err, tc.err) || !store.finished || !sender.sent || store.state != tc.state || store.retryable != tc.retryable || store.unauthorized != tc.unauthorized {
+				t.Fatalf("store=%+v sent=%v err=%v", store, sender.sent, err)
+			}
+			if sender.notification.Page != job.Page || sender.notification.Content != job.Content {
+				t.Fatal("lost notification content or chat link")
+			}
+		})
+	}
+}
+func TestWechatNotificationWorkerDoesNotSendWithoutReservation(t *testing.T) {
+	store := &notificationStoreMock{ready: false}
+	sender := &notificationSenderMock{}
+	if err := deliverWechatNotification(context.Background(), store, sender, dbop.WechatNotification{}); err != nil {
+		t.Fatal(err)
+	}
+	if sender.sent || store.finished {
+		t.Fatal("sent a skipped reminder")
+	}
+}
+func TestWechatNotificationWorkerReleasesUnstartedCancelledLease(t *testing.T) {
+	store := &notificationStoreMock{ready: true}
+	sender := &notificationSenderMock{}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := deliverWechatNotification(ctx, store, sender, dbop.WechatNotification{}); err != nil {
+		t.Fatal(err)
+	}
+	if sender.sent || store.prepared || !store.released {
+		t.Fatalf("store=%+v sender=%+v", store, sender)
+	}
+}
+func TestWechatNotificationWorkerReleasesFailedPreparation(t *testing.T) {
+	failure := errors.New("database unavailable")
+	store := &notificationStoreMock{prepareErr: failure}
+	sender := &notificationSenderMock{}
+	if err := deliverWechatNotification(context.Background(), store, sender, dbop.WechatNotification{}); !errors.Is(err, failure) {
+		t.Fatal(err)
+	}
+	if sender.sent || !store.released {
+		t.Fatalf("store=%+v sender=%+v", store, sender)
+	}
+}

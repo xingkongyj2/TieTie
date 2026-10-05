@@ -1,6 +1,6 @@
 # 贴贴 · 两个人的小窝
 
-前端已迁移为 **Taro 4 + React 18 + TypeScript 微信小程序**，沿用 Go 后端与现有账号、双人空间、聊天、提醒和记忆接口。以旧 H5 为视觉基线，保留配色、间距、圆角、自定义导航与动画参数。旧版 React 19 H5 保存在 `frontend/web/`，用于对照和现有 Web 部署。
+前端已迁移为 **Taro 4 + React 18 + TypeScript 微信小程序**，沿用 Go 后端与现有账号、双人空间、聊天、提醒和记忆接口。以旧 H5 为视觉基线，保留配色、间距、圆角、自定义导航与动画参数。旧版 React 19 H5 保存在 `frontend/web/`，用于对照和独立 Web 构建。
 
 ## 微信小程序开发
 
@@ -33,7 +33,7 @@ npm test              # 传输、SSE、附件和环境配置测试
 npm run typecheck
 ```
 
-小程序由微信开发者工具预览、上传和发布；`frontend/dist/` **不是网页产物**，不能由 Go 静态服务托管。真实语音转写、微信登录和订阅消息尚未接入；注册/登录继续使用原有账号密码。详细目录、功能对应和视觉验收见 [小程序迁移说明](frontend/MIGRATION.md)。
+小程序由微信开发者工具预览、上传和发布；`frontend/dist/` **不是网页产物**，不能由 Go 静态服务托管。小程序登录页顶部显示与微信胶囊同一行的「贴贴清单」，中间保留图标与窄「登录」按钮，首次微信登录自动创建账号；H5 保留原账号密码入口。后端需配置 `WECHAT_APP_ID`（与 `frontend/project.config.json` 一致）和 `WECHAT_APP_SECRET`，密钥不能放进前端。微信提醒发送链路已接入，启用需要订阅消息模板和用户授权；真实语音转写尚未接入。详细目录、功能对应和视觉验收见 [小程序迁移说明](frontend/MIGRATION.md)。
 
 ## H5 对照与服务器部署
 
@@ -45,11 +45,13 @@ npm run build        # 产物 frontend/web/dist/
 npm run preview
 ```
 
-Go 的默认 `STATIC_DIR` 已改为 `../frontend/web/dist`。已有 `.env.local` 如显式写了旧目录，需按部署目录自行更新。Docker 镜像继续构建旧 H5 与 Go 服务，小程序独立发布。Taro H5 适配可用 `frontend/` 下的 `npm run dev:h5` 或 `npm run build:h5`，产物 `frontend/dist-h5/`。
+Go 的默认 `STATIC_DIR` 已改为 `../frontend/web/dist`。CNB 部署镜像只构建 Go 后端，不包含旧 H5 或小程序产物；小程序由微信开发者工具独立发布。需要单独运行 H5 时配置 `STATIC_DIR` 指向对应产物。Taro H5 适配可用 `frontend/` 下的 `npm run dev:h5` 或 `npm run build:h5`，产物 `frontend/dist-h5/`。
 
 ## CNB 与服务器部署
 
-`.cnb.yml` 在推送后构建 `deploy/dockerfile`，镜像发布到 CNB。服务器用 `bash deploy/cnb_tietie.sh` 拉取镜像并启动应用；先配置服务器自己的 `backend/.env.local`，已有 Docker 登录可复用，或提供 `CNB_TOKEN` / `CNB_TOKEN_USER_NAME`。
+`.cnb.yml` 在推送后构建后端专用的 `deploy/dockerfile`，镜像发布到 CNB，同时提供 `:1` 和提交 SHA 标签，镜像 revision 标记对应代码提交。服务器用 `bash deploy/cnb_tietie.sh` 拉取镜像并启动应用；先配置服务器自己的 `backend/.env.local`，已有 Docker 登录可复用，或提供 `CNB_TOKEN` / `CNB_TOKEN_USER_NAME`。可用 `IMAGE=docker.cnb.cool/xingkong/my/tietie/tietie:提交SHA bash deploy/cnb_tietie.sh` 指定版本。
+
+纯后端部署的首页 `/` 返回 404，不再展示旧网页。无副作用的部署检查：`POST /api/auth/wechat` 发送 `{}` 应返回 400 `invalid_wechat_code`，未登录访问 `/api/account/me` 应返回 401，`/api/assets/reminder-titles.woff` 应返回 200。微信实际登录需在服务器配置 `WECHAT_APP_ID`、`WECHAT_APP_SECRET`；微信订阅推送还需配置模板。
 
 脚本默认管理 `tietie-mysql`、数据卷 `tietie_mysql_data`，应用始终通过 Docker 内网的容器名和 3306 连接数据库。宿主机默认只开放 `127.0.0.1:3306`；需要从本地电脑连接时，在**服务器**配置：
 
@@ -89,6 +91,7 @@ BACKGROUND_WORKERS_ENABLED=false
 
 ## 登录、邀请码与绑定
 
+- **微信小程序登录**：前端通过 `Taro.login` 获取临时 code，交给 `POST /api/auth/wechat`，服务端向微信兑换身份并签发现有 JWT。首次登录创建独立账号与邀请码，同一小程序中的同一微信身份后续登录复用账号、绑定和聊天；不会自动合并原账号密码账号。首次登录继续填写资料和绑定空间。登录流程参考 [Taro 登录文档](https://docs.taro.zone/docs/3.x/apis/open-api/login/)。服务端 AppSecret 与微信 session_key 不下发到前端。
 - **注册/登录**：用户名（2-24 位中文/字母/数字）+ 密码（≥6 位，数据库明文存储）；登录成功签发 JWT（默认 30 天），前端保存后所有需登录的 `/api` 请求携带 `Authorization: Bearer`，401 时自动回到登录页。旧账号的 bcrypt 哈希在首次成功登录时转换为明文密码。
 - 注册后生成 **4 位数字邀请码**（`0000-9999`，撞车时注册流程自动重试；旧格式 8 位字母码已废弃，需要清库重来）。未绑定时显示绑定引导页：可复制邀请码或分享链接（`?invite=CODE`，微信里发给对方，打开自动预填）；输入框只收数字、最长 4 位。
 - **绑定**：输入对方邀请码 → 校验双方都未与其他人绑定；已有当前绑定幂等返回；新绑定创建独立记忆仓库、写入全部 JSON 模板，再新建专属会话（agent/环境自动探测，可用 `QODER_AGENT_ID` / `QODER_ENVIRONMENT_ID` 指定）后落库。每人只能有一个绑定对象。
@@ -113,7 +116,10 @@ BACKGROUND_WORKERS_ENABLED=false
 | --- | --- | --- |
 | `POST /api/auth/register` | 公开 | 注册并登录，返回 JWT、用户与邀请码 |
 | `POST /api/auth/login` | 公开 | 登录，返回 JWT 与当前绑定 |
+| `POST /api/auth/wechat` | 公开 | 微信 code 登录；首次自动创建账号，返回 JWT、绑定与 isNewUser |
 | `GET /api/account/me` | JWT | 当前账号与绑定状态 |
+| `GET /api/account/wechat-subscription` | JWT | 微信提醒模板、身份与剩余授权次数 |
+| `POST /api/account/wechat-subscription` | JWT | 幂等保存本次微信订阅授权结果 |
 | `POST /api/account/bind` | JWT | 用对方邀请码绑定，返回共享会话 ID |
 | `POST /api/account/unbind` | JWT | 退出当前会话：解除双方绑定，云端会话保留 |
 | `GET /api/qoder/sessions/:id/messages` | JWT+绑定 | 完整/增量历史和会话状态 |
@@ -137,7 +143,7 @@ Qoder 接口依据：[Session 使用说明](https://docs.qoder.cn/cloud-agents/s
 - 提醒板：在聊天中自然地说“半小时后提醒我喝水”“明天早上九点提醒我们出门”，或使用快捷表单明确时间与 @全部 / @我 / @他。共享提醒保存到 MySQL，双方看到同一状态；接收人可以完成任务，尚未到期且未投递过的完成可撤销，也可以取消。
 - 小纪念：在一起天数和双人纪念卡。
 
-个人资料与 AI 说话方式由服务端保存并同步云端记忆；双人成员身份与提醒协议由服务端随每轮消息传入。共享提醒双方可见，聊天另支持仅自己可见的独立私聊。尚未接入微信登录或离线设备推送。
+个人资料与 AI 说话方式由服务端保存并同步云端记忆；双人成员身份与提醒协议由服务端随每轮消息传入。共享提醒双方可见，聊天另支持仅自己可见的独立私聊。微信登录和订阅提醒已接入，微信通知需先完成服务端配置及用户授权。
 
 小程序通过微信存储保存 JWT 与界面偏好，偏好按账号、对方及会话隔离。账号资料、共享纪念日和提醒以服务端记录为准，旧本机提醒不会自动转成定时任务。云端文字历史不写入持久存储，聊天图片使用本地预览缓存并在退出账号时清理。
 
@@ -153,7 +159,15 @@ Qoder 保留云端已有角色和系统提示词，应用只补充成员身份�
 
 后端控制台打印启动及任务进展，同时写入 `backend/logs/system.log` 和 `backend/logs/scheduler.log`，每个文件 10 MiB 轮转、保留 5 个备份。调度器每 30 秒报告运行状态与下一任务。可配置 `LOG_DIR` / `LOG_LEVEL`，详见 [后端说明](backend/README.md)。修改源代码后需重启 Go 进程。
 
-当前使用单实例 Go 服务与 MySQL。服务必须持续运行才能及时唤醒；应用内实时提示支持打开页面的用户，关闭页面后可在重新打开时查看提醒，尚无微信/系统离线推送。多副本部署需另外增加分布式任务租约和跨实例会话锁；到期队列的领取已用 MySQL advisory lock 保证同一时刻只有一个进程改写候选行，但会话内的处理仍靠进程内互斥，不代表已实现完整的多副本调度。
+当前使用单实例 Go 服务与 MySQL。服务必须持续运行才能及时唤醒；应用内实时提示支持打开页面的用户，关闭页面后可以通过已授权的微信订阅消息收到提醒。多副本部署需另外增加分布式任务租约和跨实例会话锁；到期队列的领取已用 MySQL advisory lock 保证同一时刻只有一个进程改写候选行，但会话内的处理仍靠进程内互斥，不代表已实现完整的多副本调度。
+
+### 微信提醒
+
+AI 创建和手动创建的到期提醒，以及早安、晚安和纪念日提醒，在实际提醒内容保存后进入微信发送队列。普通聊天、提醒修改回执和地区未填写提示不会产生推送。提醒只发送给指定接收人，私密提醒仅发送给本人；点击微信消息进入对应空间的聊天页，打开时仍校验当前登录账号和绑定关系。
+
+启用步骤：在微信公众平台「功能 → 订阅消息」选择符合小程序类目的模板，在后端填写 `WECHAT_REMINDER_TEMPLATE_ID` 和实际关键词编号（标题、时间、内容），同时配置 AppID 和 AppSecret；开发/体验版使用 `WECHAT_MINIPROGRAM_STATE=developer/trial`，正式版使用 `formal`。完整变量见 [backend/.env.example](backend/.env.example)。更新并重启后端、重新构建小程序后，用户在「我的 → 微信提醒 → 接收提醒」主动授权。
+
+默认一次性订阅，每次授权可接收一条消息；次数用完需要再次授权。仅使用微信实际批准的长期订阅模板时，才可设置 `WECHAT_REMINDER_SUBSCRIPTION_TYPE=permanent`。模板未配置时关闭推送，不补发历史提醒。授权余额是本地发送预留，最终以微信返回结果为准；网络响应不明确时保留未知状态并停止重发，避免重复通知。真实发送仍需选定模板并进行真机联调。参考 [微信订阅消息接口](https://developers.weixin.qq.com/miniprogram/dev/server/API/mp-message-management/subscribe-message/api_sendmessage.html)。
 
 ## 代码结构
 
@@ -245,7 +259,7 @@ frontend/src/components/       聊天、输入栏、资料与工具弹层
 ### 接入边界与参考文档
 
 - 贴贴使用 **Managed Mode**。自然语言 Schedule 及 IM Channel 文档属于 **Forward Mode**，使用 Template、Identity 等资源，不能直接套用到当前 Managed Session；普通重复提醒优先沿用 Go 后台调度。参见 [自然语言 Schedule](https://docs.qoder.cn/cloud-agents/natural-language-schedule-management)。
-- Webhook 是云端到后台的通知，不等于手机离线推送。系统或微信通知需要单独接入，也不能替代本地天气和纪念日队列的执行。
+- Webhook 是云端到后台的通知，不能替代本地天气、纪念日队列与微信订阅消息发送队列的执行。
 - 只更新 Agent 不会自动修改已经创建的 Session。已有 Session 的工具和 MCP 可通过运行配置更新；模型、系统提示词和 Skill 等字段需按文档检查 Beta 请求头及可用性。参见 [更新 Session](https://docs.qoder.cn/cloud-agents/sessions-update)。
 - Skills 和 Browser Use 等能力存在开放条件或 Beta 限制，接入前核实当前账号与文档；不要提前把平台支持写成贴贴已支持。
 - 参考：[Managed Agents](https://docs.qoder.cn/cloud-agents/agents-list)、[工具配置](https://docs.qoder.cn/cloud-agents/agent-tools)、[取消当前轮](https://docs.qoder.cn/cloud-agents/sessions-cancel)、[文件交付](https://docs.qoder.cn/cloud-agents/files)、[Webhook](https://docs.qoder.cn/cloud-agents/webhooks)、[Vault](https://docs.qoder.cn/cloud-agents/vaults)、[Dreams](https://docs.qoder.cn/cloud-agents/dreams)、[Skills](https://docs.qoder.cn/cloud-agents/agent-skills)。

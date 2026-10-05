@@ -304,7 +304,7 @@ func (s *Server) processConversationFrom(ctx context.Context, id string, result 
 				message.Text = reminderMentions(message.Text, reminder.RecipientIDs, space)
 				if reminder.Status == dbop.ReminderDispatching || reminder.Status == dbop.ReminderUncertain {
 					if message.ProtocolError == "" && strings.TrimSpace(message.Text) != "" {
-						if err := s.DB.FinishReminderDispatch(ctx, reminder.ID, append(reminder.DispatchEventIDs, event.ID), time.Now()); err != nil {
+						if err := s.DB.FinishReminderDispatch(ctx, reminder.ID, append(reminder.DispatchEventIDs, event.ID), time.Now(), dbop.WechatReminderContent{Text: message.Text, MessageID: event.ID}); err != nil {
 							return space, "", err
 						}
 					} else {
