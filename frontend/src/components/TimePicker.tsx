@@ -1,4 +1,6 @@
-import { useId, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
+import { ScrollView, View } from '@tarojs/components'
+import { nextFrame } from '../lib/platform'
 import { Sheet } from './Sheet'
 import './TimePicker.css'
 
@@ -8,43 +10,56 @@ const pad = (value: number) => String(value).padStart(2, '0')
 function TimeWheel({ label, count, value, onChange, disabled }: {
   label: string; count: number; value: number; onChange: (value: number) => void; disabled: boolean
 }) {
-  const id = useId()
-  const root = useRef<HTMLDivElement>(null)
-  const initial = useRef(value)
-  useLayoutEffect(() => { if (root.current) root.current.scrollTop = initial.current * ROW_HEIGHT }, [])
+  const id = useId().replace(/:/g, '')
+  const [scrollTop, setScrollTop] = useState(value * ROW_HEIGHT)
+  const latestScroll = useRef(value * ROW_HEIGHT)
+  const touching = useRef(false)
+  const snapTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => { if (snapTimer.current) clearTimeout(snapTimer.current) }, [])
+  const bounded = (next: number) => Math.max(0, Math.min(count - 1, next))
   const pick = (next: number) => {
-    const bounded = Math.max(0, Math.min(count - 1, next))
-    onChange(bounded)
-    root.current?.scrollTo({ top: bounded * ROW_HEIGHT, behavior: 'instant' })
-    root.current?.focus({ preventScroll: true })
+    if (disabled) return
+    const selection = bounded(next)
+    onChange(selection)
+    setScrollTop(latestScroll.current)
+    nextFrame(() => setScrollTop(selection * ROW_HEIGHT))
+  }
+  const scheduleSnap = () => {
+    if (snapTimer.current) clearTimeout(snapTimer.current)
+    snapTimer.current = setTimeout(() => {
+      snapTimer.current = null
+      if (!disabled && !touching.current) pick(Math.round(latestScroll.current / ROW_HEIGHT))
+    }, 160)
   }
   return <div className="time-picker-column">
     <span className="time-picker-label">{label}</span>
-    <div className="time-picker-wheel" ref={root} role="listbox" tabIndex={disabled ? -1 : 0}
-      aria-label={label} aria-disabled={disabled} aria-activedescendant={`${id}-${value}`}
+    <ScrollView className="time-picker-wheel" scrollY enhanced showScrollbar={false} scrollTop={scrollTop}
+      style={{ padding: 0, height: '220px', pointerEvents: disabled ? 'none' : undefined, opacity: disabled ? .6 : 1 }}
+      onTouchStart={() => { touching.current = true; if (snapTimer.current) clearTimeout(snapTimer.current) }}
+      onTouchEnd={() => { touching.current = false; scheduleSnap() }}
+      onTouchCancel={() => { touching.current = false; scheduleSnap() }}
       onScroll={(event) => {
-        if (!disabled) onChange(Math.max(0, Math.min(count - 1, Math.round(event.currentTarget.scrollTop / ROW_HEIGHT))))
-      }}
-      onKeyDown={(event) => {
+        latestScroll.current = event.detail.scrollTop
         if (disabled) return
-        const next = event.key === 'ArrowUp' ? value - 1 : event.key === 'ArrowDown' ? value + 1
-          : event.key === 'PageUp' ? value - 5 : event.key === 'PageDown' ? value + 5
-          : event.key === 'Home' ? 0 : event.key === 'End' ? count - 1 : null
-        if (next !== null) { event.preventDefault(); pick(next) }
+        const selection = bounded(Math.round(event.detail.scrollTop / ROW_HEIGHT))
+        onChange(selection)
+        if (!touching.current && Math.abs(event.detail.scrollTop - selection * ROW_HEIGHT) > .5) scheduleSnap()
       }}>
+      <View style={{ height: '88px' }} />
       {Array.from({ length: count }, (_, index) => <button type="button" role="option" id={`${id}-${index}`} key={index}
-        tabIndex={-1} aria-selected={index === value} disabled={disabled}
+        aria-selected={index === value} disabled={disabled}
         className={`time-picker-option ${index === value ? 'is-selected' : ''}`}
         onClick={() => pick(index)}>{pad(index)}</button>)}
-    </div>
+      <View style={{ height: '88px' }} />
+    </ScrollView>
   </div>
 }
 
 export function TimePicker({ title, value, onClose, onConfirm }: {
   title: string; value: string; onClose: () => void; onConfirm: (time: string) => Promise<boolean>
 }) {
-  const [hour, setHour] = useState(() => Number(value.slice(0, 2)))
-  const [minute, setMinute] = useState(() => Number(value.slice(3, 5)))
+  const [hour, setHour] = useState(() => Math.max(0, Math.min(23, Number(value.slice(0, 2)) || 0)))
+  const [minute, setMinute] = useState(() => Math.max(0, Math.min(59, Number(value.slice(3, 5)) || 0)))
   const [saving, setSaving] = useState(false)
   const submitting = useRef(false)
   return <Sheet title={title} onClose={onClose}>{(close) => <div className="time-picker">

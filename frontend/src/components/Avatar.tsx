@@ -1,5 +1,7 @@
+import { Image } from '@tarojs/components';
 import type { Member } from '../types';
 import { spaceBuddyArtwork } from '../data/ipCharacters';
+import { assetUrl } from '../lib/assets';
 
 interface Props { member: Member; size?: 'tiny' | 'small' | 'normal' | 'large'; className?: string; showAILabel?: boolean }
 
@@ -8,7 +10,7 @@ export function Avatar({ member, size = 'normal', className = '', showAILabel = 
   const isAI = member.id === 'ai';
   const src = isAI ? spaceBuddyArtwork.blue.src : member.avatar;
   return <span className={`avatar avatar-${member.id} avatar-${size} ${isAI ? 'avatar-ai-ip' : ''} ${className}`}>
-    <img src={src} alt={`${member.name}的角色头像`} draggable={false} />
+    <Image className="h5-img" src={assetUrl(src)} mode="aspectFit" ariaLabel={`${member.name}的角色头像`} style={{ width: '100%', height: '100%' }} />
     {isAI && showAILabel && <span className="avatar-ai-label" aria-label="人工智能助手">AI</span>}
   </span>;
 }

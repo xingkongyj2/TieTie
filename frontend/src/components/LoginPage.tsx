@@ -1,5 +1,7 @@
-import { LogIn, UserPlus } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { ScrollView } from '@tarojs/components'
+import { Input, Form, SubmitButton } from './Fields';
+import { LogIn, UserPlus } from './Icons';
+import { useRef, useState, type FormEvent } from 'react';
 import { SpaceBuddies } from './SpaceBuddies';
 
 interface Props {
@@ -15,6 +17,7 @@ export function LoginPage({ onLogin, onRegister, notify }: Props) {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
   const [error, setError] = useState('');
 
   const switchMode = (next: 'login' | 'register') => {
@@ -25,7 +28,7 @@ export function LoginPage({ onLogin, onRegister, notify }: Props) {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (busy) return;
+    if (submitting.current) return;
     const name = username.trim();
     if (!name || !password) {
       setError('请输入用户名和密码。');
@@ -35,6 +38,7 @@ export function LoginPage({ onLogin, onRegister, notify }: Props) {
       setError('两次输入的密码不一致。');
       return;
     }
+    submitting.current = true;
     setBusy(true);
     setError('');
     try {
@@ -48,21 +52,24 @@ export function LoginPage({ onLogin, onRegister, notify }: Props) {
     } catch (e) {
       setError(e instanceof Error ? e.message : '操作失败，请稍后重试。');
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   };
 
   return <div className="app-shell login-page">
+    <ScrollView scrollY enhanced showScrollbar={false} className="login-scroll">
+    <div className="login-scroll-content">
     <header className="login-header"><h1>贴贴清单</h1></header>
     <SpaceBuddies className="login-buddies" />
 
     <div className="login-tabs" role="tablist">
-      <button type="button" role="tab" aria-selected={mode === 'login'} className={mode === 'login' ? 'is-active' : ''} onClick={() => switchMode('login')}>登录</button>
-      <button type="button" role="tab" aria-selected={mode === 'register'} className={mode === 'register' ? 'is-active' : ''} onClick={() => switchMode('register')}>注册</button>
+      <button type="button" role="tab" disabled={busy} aria-selected={mode === 'login'} className={mode === 'login' ? 'is-active' : ''} onClick={() => switchMode('login')}>登录</button>
+      <button type="button" role="tab" disabled={busy} aria-selected={mode === 'register'} className={mode === 'register' ? 'is-active' : ''} onClick={() => switchMode('register')}>注册</button>
     </div>
 
-    <form className="login-form" onSubmit={(event) => void submit(event)}>
-      <input
+    <Form className="login-form" onSubmit={(event) => void submit(event)}>
+      <Input
         value={username}
         onChange={(event) => { setUsername(event.target.value); setError(''); }}
         aria-label="用户名"
@@ -71,7 +78,7 @@ export function LoginPage({ onLogin, onRegister, notify }: Props) {
         maxLength={24}
         disabled={busy}
       />
-      <input
+      <Input
         type="password"
         value={password}
         onChange={(event) => { setPassword(event.target.value); setError(''); }}
@@ -81,7 +88,7 @@ export function LoginPage({ onLogin, onRegister, notify }: Props) {
         maxLength={64}
         disabled={busy}
       />
-      {mode === 'register' && <input
+      {mode === 'register' && <Input
         type="password"
         value={confirm}
         onChange={(event) => { setConfirm(event.target.value); setError(''); }}
@@ -92,10 +99,12 @@ export function LoginPage({ onLogin, onRegister, notify }: Props) {
         disabled={busy}
       />}
       {error && <p className="login-error" role="alert">{error}</p>}
-      <button type="submit" className="primary-button" disabled={busy}>
+      <SubmitButton  className="primary-button" disabled={busy}>
         {mode === 'register' ? <UserPlus size={15} /> : <LogIn size={15} />}
         {busy ? '请稍候…' : mode === 'register' ? '注册并进入' : '登录'}
-      </button>
-    </form>
+      </SubmitButton>
+    </Form>
+    </div>
+    </ScrollView>
   </div>;
 }

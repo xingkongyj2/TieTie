@@ -1,5 +1,6 @@
-import { ChevronDown, Clock3, Plus, Repeat2, X } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { Input, Textarea, Select, Form, SubmitButton } from './Fields';
+import { ChevronDown, Clock3, Plus, Repeat2, X } from './Icons';
+import { useRef, useState, type FormEvent } from 'react';
 import type { RelationshipState, Reminder, ReminderRecurrence } from '../types';
 import { Anniversaries } from './Anniversaries';
 import type { AnniversaryState } from '../hooks/useAnniversaries';
@@ -50,11 +51,11 @@ export function ReminderBoard({ state, onToggle, onCancel, onDelete, notify, pen
   const completedDays: { key: string; label: string; reminders: Reminder[] }[] = [];
   for (const reminder of completed) {
     const time = finishedTime(reminder);
-    const date = Number.isFinite(time) ? new Date(time) : null;
-    const key = date ? `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}` : 'unknown';
+    const date = Number.isFinite(time) ? new Date(time + shanghaiOffsetMs) : null;
+    const key = date ? `${date.getUTCFullYear()}-${date.getUTCMonth() + 1}-${date.getUTCDate()}` : 'unknown';
     let day = completedDays.find((item) => item.key === key);
     if (!day) {
-      day = { key, label: date ? date.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }) : '日期未记录', reminders: [] };
+      day = { key, label: date ? `${date.getUTCFullYear()}年${date.getUTCMonth() + 1}月${date.getUTCDate()}日` : '日期未记录', reminders: [] };
       completedDays.push(day);
     }
     day.reminders.push(reminder);
@@ -86,6 +87,7 @@ function ReminderCompose({ state, onAdd, onClose, notify, onPickTime }: Pick<Pro
   const [weekdays, setWeekdays] = useState<number[]>([]);
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
   const [error, setError] = useState('');
   const chooseRepeatMode = (mode: RepeatMode) => {
     setRepeatMode(mode);
@@ -109,7 +111,7 @@ function ReminderCompose({ state, onAdd, onClose, notify, onPickTime }: Pick<Pro
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const title = content.trim();
-    if (!title || busy) return;
+    if (!title || submitting.current) return;
     const isoDate = date.replaceAll('.', '-');
     if (!/^\d{2}:\d{2}$/.test(time)) { setError('请选择提醒时刻。'); return; }
     if (repeatMode === 'interval' && (!Number.isInteger(intervalDays) || intervalDays < 1 || intervalDays > 3650)) { setError('间隔天数请选择 1 到 3650 天。'); return; }
@@ -133,18 +135,19 @@ function ReminderCompose({ state, onAdd, onClose, notify, onPickTime }: Pick<Pro
         : repeatMode === 'weekdays' ? { type: 'weekdays', weekdays }
           : repeatMode === 'dates' ? { type: 'dates', dates: selectedDates }
             : { type: repeatMode };
+    submitting.current = true;
     setBusy(true);
     setError('');
     try { await onAdd({ title, assignee, time: due.toISOString(), recurrence }); notify(recurrence ? '重复提醒已安排，到点会在聊天里提醒' : '共享提醒已安排，到点会在聊天里提醒'); onClose(); }
     catch (error) { setError(error instanceof Error ? error.message : '提醒添加失败，请再试一次。'); }
-    finally { setBusy(false); }
+    finally { submitting.current = false; setBusy(false); }
   };
-  return <form className="reminder-compose" onSubmit={(event) => void submit(event)}>
+  return <Form className="reminder-compose" onSubmit={(event) => void submit(event)}>
     <div className="reminder-editor">
       <label className="sr-only" htmlFor="quick-reminder-content">提醒内容</label>
-      <textarea id="quick-reminder-content" rows={5} maxLength={500} placeholder="写下提醒内容…" value={content} disabled={busy} onChange={(event) => { setContent(event.target.value); setError(''); }} />
+      <Textarea id="quick-reminder-content" rows={5} maxLength={500} placeholder="写下提醒内容…" value={content} disabled={busy} onChange={(event) => { setContent(event.target.value); setError(''); }} />
       <div className="reminder-editor-footer">
-        <label className="reminder-mention"><span className="sr-only">提醒对象</span><select value={assignee} disabled={busy} onChange={(event) => setAssignee(event.target.value as typeof assignee)}><option value="both">@我们两人</option><option value="self">@我</option><option value="partner">@{state.members.find((member) => member.id === 'partner')?.name || '另一位成员'}</option></select><ChevronDown size={14} aria-hidden="true" /></label>
+        <label className="reminder-mention"><span className="sr-only">提醒对象</span><Select value={assignee} disabled={busy} onChange={(event) => setAssignee(event.target.value as typeof assignee)}><option value="both">@我们两人</option><option value="self">@我</option><option value="partner">@{state.members.find((member) => member.id === 'partner')?.name || '另一位成员'}</option></Select><ChevronDown size={14} aria-hidden="true" /></label>
       </div>
     </div>
     <div className="reminder-time-field"><span>{repeatMode === 'dates' ? '指定日期与时间' : '提醒时间'}</span><div className="reminder-date-time">
@@ -156,18 +159,18 @@ function ReminderCompose({ state, onAdd, onClose, notify, onPickTime }: Pick<Pro
     </div><small>按北京时间设置，到点会在共享聊天里提醒所选的人。</small></div>
     <div className="reminder-repeat-field">
       <label htmlFor="quick-reminder-repeat"><Repeat2 size={15} aria-hidden="true" />重复提醒</label>
-      <div className="reminder-repeat-select"><select id="quick-reminder-repeat" value={repeatMode} disabled={busy} onChange={(event) => chooseRepeatMode(event.target.value as RepeatMode)}>
+      <div className="reminder-repeat-select"><Select id="quick-reminder-repeat" value={repeatMode} disabled={busy} onChange={(event) => chooseRepeatMode(event.target.value as RepeatMode)}>
         <option value="none">不重复</option><option value="daily">每天</option><option value="interval">每隔几天</option><option value="weekly">每周</option><option value="monthly">每月</option><option value="yearly">每年</option><option value="weekdays">指定每周星期</option><option value="dates">指定几个日期</option>
-      </select><ChevronDown size={15} aria-hidden="true" /></div>
-      {repeatMode === 'interval' && <label className="reminder-interval">每隔 <input type="number" min={1} max={3650} step={1} value={intervalDays} disabled={busy} onChange={(event) => { setIntervalDays(Number(event.target.value)); setError(''); }} /> 天提醒一次</label>}
+      </Select><ChevronDown size={15} aria-hidden="true" /></div>
+      {repeatMode === 'interval' && <label className="reminder-interval">每隔 <Input type="number" min={1} max={3650} step={1} value={intervalDays} disabled={busy} onChange={(event) => { setIntervalDays(Number(event.target.value)); setError(''); }} /> 天提醒一次</label>}
       {repeatMode === 'weekdays' && <div className="reminder-weekday-options" role="group" aria-label="指定每周星期">{weekdayOptions.map((label, index) => <button type="button" key={label} aria-pressed={weekdays.includes(index + 1)} className={weekdays.includes(index + 1) ? 'is-selected' : ''} disabled={busy} onClick={() => toggleWeekday(index + 1)}>{label}</button>)}</div>}
       {repeatMode === 'dates' && <div className="reminder-date-options" aria-label="已选指定日期">{selectedDates.length ? selectedDates.map((day) => <span className="reminder-date-chip" key={day}>{day.replaceAll('-', '.')}<button type="button" disabled={busy} aria-label={`移除 ${day}`} onClick={() => { const remaining = selectedDates.filter((item) => item !== day); setSelectedDates(remaining); if (date.replaceAll('.', '-') === day) setDate(remaining.at(-1)?.replaceAll('-', '.') ?? ''); setError(''); }}><X size={13} aria-hidden="true" /></button></span>) : <small>从上方日历添加日期，可选多个。</small>}</div>}
       {repeatMode === 'weekdays' && <small>从开始日期起，按选中的星期提醒。</small>}
       {repeatMode === 'dates' && selectedDates.length > 0 && <small>点上方日期可继续添加；每个日期都会在选定时间提醒。</small>}
     </div>
     {error && <p className="form-error" role="alert">{error}</p>}
-    <button className="primary-button" type="submit" disabled={busy || !content.trim() || !time || (repeatMode === 'dates' ? !selectedDates.length : !date)}>{busy ? '正在添加…' : '添加提醒'}<Plus size={17} /></button>
-  </form>;
+    <SubmitButton className="primary-button"  disabled={busy || !content.trim() || !time || (repeatMode === 'dates' ? !selectedDates.length : !date)}>{busy ? '正在添加…' : '添加提醒'}<Plus size={17} /></SubmitButton>
+  </Form>;
 }
 
 export function Tools(props: Props) {

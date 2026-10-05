@@ -1,5 +1,7 @@
-import { Check, ChevronRight, MapPin } from 'lucide-react'
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import Taro from '@tarojs/taro'
+import { ScrollView } from '@tarojs/components'
+import { Check, ChevronRight, MapPin } from './Icons'
+import { useEffect, useId, useRef, useState } from 'react'
 import { profileApi, type ProvinceOption } from '../api/profile'
 import type { RegionLocation } from '../types'
 import { Sheet } from './Sheet'
@@ -8,37 +10,42 @@ import './RegionPicker.css'
 function RegionColumn({ label, options, selected, placeholder, onSelect }: {
   label: string; options: { code: string; name: string }[]; selected?: string; placeholder: string; onSelect: (code: string) => void
 }) {
-  const id = useId()
-  const root = useRef<HTMLDivElement>(null)
-  useLayoutEffect(() => {
-    const list = root.current
-    const option = list?.querySelector<HTMLElement>('[aria-selected="true"]')
-    if (list && option) list.scrollTop = Math.max(0, option.offsetTop - (list.clientHeight - option.clientHeight) / 2)
-  }, [selected])
+  const id = useId().replace(/:/g, '-')
+  const listId = `region-list-${id}`
+  const offset = useRef(0)
+  const [scrollTop, setScrollTop] = useState(0)
+  useEffect(() => {
+    if (!selected) return
+    let active = true
+    Taro.nextTick(() => {
+      Taro.createSelectorQuery().select(`#${listId}`).boundingClientRect()
+        .select(`#${id}-${selected}`).boundingClientRect().exec((results) => {
+          if (!active) return
+          const [list, option] = results as ({ top: number; height: number } | null)[]
+          if (list && option) setScrollTop(Math.max(0, offset.current + option.top - list.top - (list.height - option.height) / 2))
+        })
+    })
+    return () => { active = false }
+  }, [listId, selected])
   return <div className="region-picker-column">
     <span className="region-picker-label">{label}</span>
-    <div className="region-picker-options" ref={root} role="listbox" aria-label={label} aria-disabled={!options.length}
-      aria-activedescendant={selected ? `${id}-${selected}` : undefined} tabIndex={options.length ? 0 : -1}
-      onKeyDown={(event) => {
-        if (!options.length) return
-        const current = Math.max(0, options.findIndex((option) => option.code === selected))
-        const next = event.key === 'ArrowUp' ? current - 1 : event.key === 'ArrowDown' ? selected ? current + 1 : 0
-          : event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1 : null
-        if (next !== null) { event.preventDefault(); onSelect(options[Math.max(0, Math.min(options.length - 1, next))].code) }
-      }}>
+    <ScrollView className="region-picker-options" id={listId} scrollY scrollTop={scrollTop} scrollWithAnimation
+      onScroll={(event) => { offset.current = event.detail.scrollTop }} aria-label={label}
+      aria-disabled={!options.length} aria-activedescendant={selected ? `${id}-${selected}` : undefined}>
       {options.length ? options.map((option) => <button type="button" role="option" id={`${id}-${option.code}`} key={option.code}
         tabIndex={-1} aria-selected={option.code === selected} className={option.code === selected ? 'is-selected' : ''}
-        onClick={() => { onSelect(option.code); root.current?.focus({ preventScroll: true }) }}><span>{option.name}</span>{option.code === selected && <Check size={12} aria-hidden="true" />}</button>)
+        onClick={() => onSelect(option.code)}><span>{option.name}</span>{option.code === selected && <Check size={12} aria-hidden="true" />}</button>)
         : <p className="region-picker-placeholder">{placeholder}</p>}
-    </div>
+    </ScrollView>
   </div>
 }
 
 const regionName = (value?: RegionLocation) => value ? [value.province, value.province === value.city ? '' : value.city, value.district].filter(Boolean).join(' · ') : ''
 
-export function RegionPicker({ value, required = false, onChange, onValidityChange }: {
+export function RegionPicker({ value, required = false, disabled = false, onChange, onValidityChange }: {
   value?: RegionLocation
   required?: boolean
+  disabled?: boolean
   onChange: (value?: RegionLocation) => void
   onValidityChange: (valid: boolean) => void
 }) {
@@ -70,7 +77,7 @@ export function RegionPicker({ value, required = false, onChange, onValidityChan
   const complete = !!draftProvince && !!draftCity && (!draftCity.districts.length || draftCity.districts.some((item) => item.code === draft?.districtCode))
   return <section className="form-card region-card">
     <div className="field-label" id={labelId}><span>地区 {required && <span className="field-required">必填</span>}</span><MapPin size={15} aria-hidden="true" /></div>
-    <button type="button" className="region-picker-trigger" aria-label="选择地区" aria-haspopup="dialog" aria-expanded={open}
+    <button type="button" className="region-picker-trigger" disabled={disabled} aria-label="选择地区" aria-haspopup="dialog" aria-expanded={open}
       onClick={() => { setDraft(value ? { ...value } : undefined); setOpen(true) }}>
       <span className={value ? '' : 'is-placeholder'}>{regionName(value) || '选择省份、城市和区／县'}</span><ChevronRight size={16} aria-hidden="true" />
     </button>

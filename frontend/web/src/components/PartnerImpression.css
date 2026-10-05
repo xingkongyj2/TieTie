@@ -1,0 +1,22 @@
+.partner-impression { display: grid; gap: 18px; padding-bottom: 24px; }
+.impression-card { padding: 23px 22px; border: 1px solid #e6ecf6; border-radius: 22px; background: linear-gradient(150deg,#f1f5ff 0%,#fff 70%); }
+.impression-heading { display: flex; align-items: center; gap: 10px; margin: 0 0 16px; }
+.impression-heading h2 { display: flex; align-items: center; gap: 8px; margin: 0; flex: 1; min-width: 0; font-size: 19px; line-height: 1.5; color: #36435a; overflow-wrap: anywhere; }
+.impression-title-icon { flex-shrink: 0; color: var(--blue); }
+.impression-refresh { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 50%; background: #fff; color: #8898b2; }
+.impression-refresh:disabled { opacity: .45; }
+.impression-summary { margin: 0; font-size: 14px; line-height: 1.95; color: #4b576c; white-space: pre-wrap; overflow-wrap: anywhere; }
+.impression-loading { display: flex; align-items: center; gap: 9px; margin: 15px 0 5px; color: #8996ad; font-size: 12px; line-height: 1.6; }
+.impression-loading .typing-dots { display: inline-flex; }
+.impression-supplement { padding: 0 3px; }
+.impression-supplement > label { display: block; font-size: 14px; font-weight: 600; line-height: 1.6; color: #536079; }
+.impression-supplement > p { margin: 8px 0 14px; font-size: 12px; line-height: 1.8; color: #939daf; }
+.impression-supplement textarea { width: 100%; margin-top: 12px; padding: 14px; font: inherit; font-size: 13px; line-height: 1.8; border: 1px solid #e6eaf2; border-radius: 15px; background: #fff; color: #43516a; resize: vertical; min-height: 120px; }
+.impression-supplement textarea::placeholder { color: #b0b9c8; }
+.impression-supplement textarea:focus { outline: 2px solid #c6d6fa; outline-offset: 2px; }
+.impression-input-footer { display: flex; align-items: center; justify-content: flex-end; margin-top: 10px; }
+.impression-input-footer .primary-button { display: inline-flex; align-items: center; gap: 8px; padding: 11px 16px; min-height: 40px; }
+.impression-supplement .impression-sync { color: #7b8fb5; font-size: 11px; }
+.impression-problem { color: #947665; font-size: 12px; line-height: 1.7; margin-top: 12px; }
+.impression-problem p { margin: 0 0 8px; }
+.impression-problem button { padding: 7px 10px; border-radius: 8px; background: #fff; color: #657fab; }

@@ -20,7 +20,7 @@
 .mine-avatar-edit .avatar-large { width: 55px; height: 55px; }
 .mine-avatar-pencil { position: absolute; right: -5px; bottom: -3px; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; border: 0; background: var(--mine-accent); color: white; }
 .mine-avatar-edit:hover:not(:disabled) { background: #e0eafa; }
-.mine-avatar-edit[aria-busy="true"] { opacity: 1; }
+.mine-avatar-edit.is-busy { opacity: 1; }
 .mine-avatar-loading { position: absolute; inset: 0; display: grid; place-items: center; border-radius: inherit; background: #eaf1fbdd; }
 .mine-avatar-loading .spinner { width: 26px; height: 26px; border-color: #c6d8f5; border-top-color: var(--mine-accent); }
 .mine-name { margin-top: 17px; }

@@ -1,4 +1,5 @@
-import { CalendarDays, Clock3, CloudMoon, Compass, Flower2, Gem, Leaf, Mountain, Orbit, Repeat2, Sparkles, Star, Sun, Wind } from 'lucide-react'
+import { isAppVisible, onAppVisibilityChange } from '../lib/platform'
+import { CalendarDays, Clock3, CloudMoon, Compass, Flower2, Gem, Leaf, Mountain, Orbit, Repeat2, Sparkles, Star, Sun, Wind } from './Icons'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { countdownApi, type Countdown } from '../api/countdowns'
 import { TabLoading } from './TabLoading'
@@ -12,7 +13,7 @@ function countdownAppearance(id: string) {
  return { Graphic: countdownGraphics[(seed >>> 16) % countdownGraphics.length] }
 }
 
-export function Countdowns({ sessionId }: { sessionId?: string }) {
+export function Countdowns({ sessionId, onPlaceholderChange }: { sessionId?: string; onPlaceholderChange?: (placeholder: boolean) => void }) {
  const [items, setItems] = useState<Countdown[]>([])
  const [next, setNext] = useState('')
  const [error, setError] = useState('')
@@ -20,19 +21,24 @@ export function Countdowns({ sessionId }: { sessionId?: string }) {
  const pages = useRef(1)
  const generation = useRef(0)
  const mounted = useRef(true)
+ const reading = useRef('')
  const reload = useCallback(async () => {
-  if (!sessionId) return
+  if (!sessionId || reading.current === sessionId) return
+  reading.current = sessionId
+  setLoading(true)
   const seq = ++generation.current
+  const requestedPages = pages.current
   try {
    const rows: Countdown[] = []; let cursor = ''
-   for (let i = 0; i < pages.current; i++) { const page = await countdownApi.list(sessionId, cursor); rows.push(...page.items); cursor = page.nextCursor; if (!cursor) break }
+   for (let i = 0; i < requestedPages; i++) { const page = await countdownApi.list(sessionId, cursor); rows.push(...page.items); cursor = page.nextCursor; if (!cursor) break }
    if (mounted.current && seq === generation.current) { setItems(rows); setNext(cursor); setError('') }
   } catch (e) { if (mounted.current && seq === generation.current) setError(e instanceof Error ? e.message : '倒计时暂时没加载出来。') }
-  finally { if (mounted.current && seq === generation.current) setLoading(false) }
+  finally { if (reading.current === sessionId) reading.current = ''; if (mounted.current && seq === generation.current) setLoading(false) }
  }, [sessionId])
- useEffect(() => { mounted.current = true; pages.current = 1; setItems([]); setLoading(true); void reload(); const timer = setInterval(() => { void reload() }, 30_000); const focus = () => { void reload() }; window.addEventListener('focus', focus); return () => { mounted.current = false; generation.current++; clearInterval(timer); window.removeEventListener('focus', focus) } }, [reload])
+ useEffect(() => { mounted.current = true; pages.current = 1; setItems([]); setLoading(true); void reload(); const refresh = () => { if (isAppVisible()) void reload() }; const timer = setInterval(refresh, 30_000); const unsubscribe = onAppVisibilityChange(refresh); return () => { mounted.current = false; generation.current++; clearInterval(timer); unsubscribe() } }, [reload])
+ useEffect(() => { onPlaceholderChange?.(!sessionId || loading && !items.length || !items.length && !error) }, [sessionId, loading, items.length, error, onPlaceholderChange])
  if (!sessionId) return <EmptyTabState kind="countdown" title="还没有倒计时" example="TA 是 1998 年 11 月 16 日出生的" />
- if (loading) return <TabLoading />
+ if (loading && !items.length) return <TabLoading />
  if (!items.length && !error) return <EmptyTabState kind="countdown" title="还没有倒计时" example="TA 是 1998 年 11 月 16 日出生的" />
  const styles = recordCardStyles(items)
  return <div className="countdowns">
@@ -48,6 +54,6 @@ export function Countdowns({ sessionId }: { sessionId?: string }) {
     {item.leapAdjusted && <p className="countdown-leap-note">非闰年的 2 月 29 日按 2 月 28 日计算</p>}
    </article>
   })}
-  {next && <button type="button" className="countdown-more" onClick={() => { pages.current++; void reload() }}>查看更多</button>}
+  {next && <button type="button" className="countdown-more" disabled={loading} onClick={() => { if (reading.current === sessionId) return; pages.current++; void reload() }}>查看更多</button>}
  </div>
 }

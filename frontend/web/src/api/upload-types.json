@@ -1,0 +1,21 @@
+{
+  "textApplicationMimes": [
+    "application/json", "application/xml", "application/javascript",
+    "application/x-yaml", "application/x-toml"
+  ],
+  "textExtensions": [
+    ".txt", ".md", ".csv", ".json", ".xml", ".yaml", ".yml", ".toml",
+    ".ini", ".conf", ".cfg", ".env", ".log", ".html", ".htm", ".css",
+    ".scss", ".less", ".js", ".jsx", ".ts", ".tsx", ".vue", ".svelte",
+    ".py", ".go", ".rs", ".java", ".kt", ".scala", ".c", ".cpp",
+    ".cc", ".h", ".hpp", ".rb", ".php", ".swift", ".r", ".lua",
+    ".pl", ".sh", ".bash", ".zsh", ".fish", ".ps1", ".sql",
+    ".graphql", ".gql", ".proto", ".dockerfile", ".makefile",
+    ".gitignore", ".editorconfig", ".eslintrc", ".prettierrc", ".tex",
+    ".rst", ".adoc", ".org", ".svg"
+  ],
+  "extensionlessNames": [
+    "dockerfile", "makefile", "gemfile", "rakefile", "procfile",
+    "vagrantfile", "justfile", "brewfile"
+  ]
+}

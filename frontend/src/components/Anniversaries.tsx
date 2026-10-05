@@ -1,5 +1,5 @@
-import { BriefcaseBusiness, CakeSlice, CalendarDays, Clock3, Flag, Flower2, Gem, Gift, GraduationCap, Hand, House, Leaf, Moon, Mountain, Music, PartyPopper, PawPrint, Pin, RefreshCw, Sparkles, Star, Trophy, UsersRound } from 'lucide-react'
-import { useState, type CSSProperties } from 'react'
+import { BriefcaseBusiness, CakeSlice, CalendarDays, Clock3, Flag, Flower2, Gem, Gift, GraduationCap, Hand, House, Leaf, Moon, Mountain, Music, PartyPopper, PawPrint, Pin, RefreshCw, Sparkles, Star, Trophy, UsersRound } from './Icons'
+import { useRef, useState, type CSSProperties } from 'react'
 import type { Anniversary } from '../api/anniversaries'
 import type { AnniversaryState } from '../hooks/useAnniversaries'
 import { recordCardStyle, recordCardStyles } from '../lib/cardAppearance'
@@ -33,7 +33,7 @@ function anniversaryGraphic(item: Anniversary | null) {
   const hash = Array.from(item.id).reduce((value, char) => (value * 31 + char.codePointAt(0)!) >>> 0, 0)
   return graphics[hash % graphics.length]
 }
-const shanghaiDate = (value: Date) => { const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(value); return ['year', 'month', 'day'].map(type => parts.find(part => part.type === type)?.value).join('-') }
+const shanghaiDate = (value: Date) => new Date(value.getTime() + 8 * 60 * 60_000).toISOString().slice(0, 10)
 const stamp = (date: string) => { const [year, month, day] = date.split('-').map(Number); const value = new Date(0); value.setUTCFullYear(year, month - 1, day); value.setUTCHours(0, 0, 0, 0); return value.getTime() }
 function elapsed(date: string) { return Math.round((stamp(shanghaiDate(new Date())) - stamp(date)) / 86400000) }
 
@@ -47,29 +47,32 @@ function Hero({ item, spaceCreatedAt, style, onPin, pinDisabled = false, pinning
   const pinned = item ? item.pinned : originPinned
   return <article className={`anniversary-feature ${pinned ? 'is-pinned' : ''}`} style={style ?? recordCardStyle(item?.id || `origin:${spaceCreatedAt}`, item ? undefined : 'blue')} aria-label={item ? `${onPin ? '纪念日' : '首页展示'}：${item.title}` : '专属空间开始'}>
     {item ? <Graphic className="anniversary-feature-art" size={132} strokeWidth={0.8} aria-hidden="true" /> : <span className="anniversary-origin-circle" aria-hidden="true" />}
-    <div className="anniversary-feature-top"><span className="anniversary-calendar"><Graphic size={22} aria-hidden="true" /></span>{onPin ? <button type="button" className="anniversary-feature-tag anniversary-pin" aria-label={item ? `${pinned ? '取消置顶' : '置顶'}：${item.title}` : '置顶：专属空间开始'} aria-pressed={pinned} disabled={pinDisabled || (!item && pinned)} onClick={onPin}><Pin size={12} aria-hidden="true" />{pinning ? '保存中' : pinned ? '已置顶' : '置顶'}</button> : <span className="anniversary-feature-tag">{pinned ? <><Pin size={12} aria-hidden="true" />已置顶</> : item ? kindLabels[item.kind] : '空间起点'}</span>}</div>
+    <div className="anniversary-feature-top"><span className="anniversary-calendar"><Graphic size={22} aria-hidden="true" /></span>{onPin ? <button type="button" className={`anniversary-feature-tag anniversary-pin${pinned ? ' is-pinned' : ''}`} aria-label={item ? `${pinned ? '取消置顶' : '置顶'}：${item.title}` : '置顶：专属空间开始'} aria-pressed={pinned} disabled={pinDisabled || (!item && pinned)} onClick={onPin}><Pin size={12} aria-hidden="true" />{pinning ? '保存中' : pinned ? '已置顶' : '置顶'}</button> : <span className="anniversary-feature-tag">{pinned ? <><Pin size={12} aria-hidden="true" />已置顶</> : item ? kindLabels[item.kind] : '空间起点'}</span>}</div>
     <h2>{item?.title || '专属空间开始'}</h2>
     <p className="anniversary-count-label">{days >= 0 ? '已经' : '还有'}</p>
     <div className="anniversary-day-count"><strong>{Math.abs(days)}</strong><span>天</span></div>
-    <div className="anniversary-feature-date"><Clock3 size={14} aria-hidden="true" /><time dateTime={date}>{date.replaceAll('-', '.')}{!item && valid ? ` · ${new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', hour: '2-digit', minute: '2-digit', hour12: false }).format(created)}` : ''}</time></div>
+    <div className="anniversary-feature-date"><Clock3 size={14} aria-hidden="true" /><time dateTime={date}>{date.replaceAll('-', '.')}{!item && valid ? ` · ${new Date(created.getTime() + 8 * 60 * 60_000).toISOString().slice(11, 16)}` : ''}</time></div>
   </article>
 }
 
 export function Anniversaries({ state, compact = false, notify }: { state: AnniversaryState; compact?: boolean; notify: (message: string) => void }) {
   const [busy, setBusy] = useState<string | null>(null)
+  const pinLock = useRef(false)
   const pin = async (item: Anniversary) => {
-    if (busy) return
+    if (pinLock.current) return
+    pinLock.current = true
     setBusy(item.id)
     try { await state.pin(item.id, !item.pinned); notify(item.pinned ? '已取消置顶，首页显示「专属空间开始」' : '已置顶，首页“小纪念”会展示这个日子') }
     catch (problem) { notify(problem instanceof Error ? problem.message : '置顶没保存成功，请再试一次。') }
-    finally { setBusy(null) }
+    finally { pinLock.current = false; setBusy(null) }
   }
   const pinOrigin = async () => {
-    if (busy || !state.featured) return
+    if (pinLock.current || !state.featured) return
+    pinLock.current = true
     setBusy('origin')
     try { await state.pin(state.featured.id, false); notify('已置顶「专属空间开始」') }
     catch (problem) { notify(problem instanceof Error ? problem.message : '置顶没保存成功，请再试一次。') }
-    finally { setBusy(null) }
+    finally { pinLock.current = false; setBusy(null) }
   }
   const items = [...new Map([...(state.featured ? [state.featured] : []), ...state.anniversaries].map(item => [item.id, { ...item, pinned: item.id === state.featured?.id }])).values()].sort((a, b) => Number(b.pinned) - Number(a.pinned) || (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0) || b.id.localeCompare(a.id))
   const styles = recordCardStyles(items, ['blue'])

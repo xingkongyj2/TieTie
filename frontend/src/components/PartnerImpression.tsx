@@ -1,4 +1,7 @@
-import { RefreshCw, Sparkles, ArrowUp } from 'lucide-react'
+import { AbortController } from '../lib/abort'
+import { isAppVisible, onAppVisibilityChange } from '../lib/platform'
+import { Textarea, Form, SubmitButton } from './Fields';
+import { RefreshCw, Sparkles, ArrowUp } from './Icons'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { impressionApi, type Impression } from '../api/impression'
 import type { Member } from '../types'
@@ -17,6 +20,7 @@ export function PartnerImpression({ member, sessionId, notify }: Props) {
   const [refresh, setRefresh] = useState(0)
   const requestKey = useRef<{ text: string; key: string } | null>(null)
   const mounted = useRef(false)
+  const saveLock = useRef(false)
   const version = useRef(0)
   const processing = impression?.status === 'pending' || impression?.status === 'generating'
 
@@ -26,7 +30,10 @@ export function PartnerImpression({ member, sessionId, notify }: Props) {
     const controller = new AbortController()
     const ownVersion = ++version.current
     let timer: ReturnType<typeof setTimeout> | undefined
+    let polling = false
     const load = async (retry: boolean) => {
+      if (controller.signal.aborted || ownVersion !== version.current || !isAppVisible() || polling) return
+      polling = true
       try {
         const result = await impressionApi.get(sessionId, controller.signal, retry)
         if (controller.signal.aborted || ownVersion !== version.current) return
@@ -38,17 +45,22 @@ export function PartnerImpression({ member, sessionId, notify }: Props) {
         if (controller.signal.aborted || ownVersion !== version.current) return
         setLoading(false)
         setError(e instanceof Error ? e.message : '印象暂时没加载出来，请再试一次。')
-      }
+      } finally { polling = false }
     }
     void load(refresh > 0)
-    return () => { controller.abort(); if (timer) clearTimeout(timer) }
+    const unsubscribe = onAppVisibilityChange(() => {
+      if (timer) clearTimeout(timer)
+      if (isAppVisible()) void load(false)
+    })
+    return () => { controller.abort(); if (timer) clearTimeout(timer); unsubscribe() }
   }, [sessionId, refresh])
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     const text = draft.trim()
-    if (!sessionId || !text || saving) return
-    if (requestKey.current?.text !== text) requestKey.current = { text, key: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `note_${Date.now()}_${Math.random().toString(36).slice(2)}` }
+    if (!sessionId || !text || saveLock.current) return
+    if (requestKey.current?.text !== text) requestKey.current = { text, key: `note_${Date.now()}_${Math.random().toString(36).slice(2)}` }
+    saveLock.current = true
     setSaving(true)
     setSaveError('')
     ++version.current // A poll started before this save cannot replace its result.
@@ -67,7 +79,7 @@ export function PartnerImpression({ member, sessionId, notify }: Props) {
         // Retain the draft and the same idempotency key after an uncertain send.
         setRefresh((value) => value + 1)
       }
-    } finally { if (mounted.current) setSaving(false) }
+    } finally { saveLock.current = false; if (mounted.current) setSaving(false) }
   }
 
   if (!sessionId) return <section className="impression-card"><p>绑定两人空间后查看印象。</p></section>
@@ -79,12 +91,12 @@ export function PartnerImpression({ member, sessionId, notify }: Props) {
       {!loading && impression?.status === 'failed' && <div className="impression-problem" role="alert"><p>{impression.error || '印象整理失败。'}</p><button type="button" onClick={() => { setLoading(true); setRefresh((value) => value + 1) }}>重试</button></div>}
       {error && <div className="impression-problem" role="alert"><p>{error}</p><button type="button" disabled={saving} onClick={() => { setLoading(true); setRefresh((value) => value + 1) }}>重试</button></div>}
     </section>
-    <form className="impression-supplement" onSubmit={(event) => void submit(event)}>
+    <Form className="impression-supplement" onSubmit={(event) => void submit(event)}>
       <label htmlFor="impression-input">补充关于{member.name}的信息</label>
-      <textarea id="impression-input" rows={4} maxLength={2000} disabled={saving} value={draft} placeholder="习惯、爱好、工作…" onChange={(event) => setDraft(event.target.value)} />
-      <div className="impression-input-footer"><button className="primary-button" type="submit" disabled={saving || !draft.trim()}>{saving ? '正在记住…' : '告诉贴贴'}<ArrowUp size={15} aria-hidden="true" /></button></div>
+      <Textarea id="impression-input" rows={4} maxLength={2000} disabled={saving} value={draft} placeholder="习惯、爱好、工作…" onChange={(event) => setDraft(event.target.value)} />
+      <div className="impression-input-footer"><SubmitButton className="primary-button"  disabled={saving || !draft.trim()}>{saving ? '正在记住…' : '告诉贴贴'}<ArrowUp size={15} aria-hidden="true" /></SubmitButton></div>
       {saveError && <p className="impression-problem" role="alert">{saveError} 草稿已保留。</p>}
       {memoryPending && <p className="impression-sync" role="status">已保存，记忆同步中。</p>}
-    </form>
+    </Form>
   </div>
 }

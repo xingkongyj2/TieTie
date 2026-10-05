@@ -1,0 +1,54 @@
+/* 微信适配集中在这里，保留原 styles.css 的视觉数值与动画。 */
+page { height:100%; background:#fff; font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif; color:#202b40; font-size:16px; }
+page,view,text,button,image,input,textarea,scroll-view { box-sizing:border-box; }
+.mini-root { height:100%; }
+.app-shell { --app-height:100vh; --page-title-top:var(--mini-nav-top,7px); font-size:16px; line-height:normal; }
+.details-header { padding-top:max(20px,var(--mini-nav-top,env(safe-area-inset-top))); }
+.login-page { padding-top:max(28px,var(--mini-nav-top,env(safe-area-inset-top))); }
+.bind-page { padding-top:max(24px,var(--mini-nav-top,env(safe-area-inset-top))); }
+button::after { border:0; }
+.h5-button { line-height:inherit; margin:0; border:0; }
+.h5-img { display:block; }
+.h5-input,.h5-textarea { box-sizing:border-box; }
+.tietie-icon { display:inline-block; vertical-align:middle; flex-shrink:0; }
+.tietie-field-select { display:block; }
+.tietie-field-select-content { height:100%; width:100%; }
+.tietie-field-select-text { font-size:inherit; color:inherit; }
+.space-buddies { position:relative; aspect-ratio:210/170; }
+.space-buddies-decor { position:absolute; inset:0; width:100%; height:100%; }
+.space-buddies .mine-buddy-back { position:absolute; left:38.095238%; top:7.647059%; width:55.714286%; height:77.647059%; transform-origin:52.136752% 57.575758%; }
+.space-buddies .mine-buddy-front { position:absolute; left:11.428571%; top:28.823529%; width:52.380952%; height:62.352941%; transform-origin:50.909091% 51.886792%; }
+.app-shell.keyboard-open.view-we .bottom-nav.frost-nav { max-height:0; padding-top:0; padding-bottom:0; opacity:0; pointer-events:none; }
+.composer-textarea { color:#303641; }
+.chat-scroll { height:0; flex:1; width:100%; box-sizing:border-box; }
+.markdown-link { color:#000; text-decoration:underline; }
+.markdown-link .tietie-icon { margin-left:2px; vertical-align:-1px; }
+.ask-options .is-disabled { opacity:.62; }
+.markdown-table-scroll { width:100%; white-space:nowrap; }
+.tab-page-scroll,.details-scroll,.onboarding-scroll { height:0; flex:1; width:100%; }
+.details-scroll .details-member-panel { margin-top:16px; }
+.hobby-input-row.is-focused { box-shadow:0 0 0 2px var(--blue); }
+.login-scroll,.bind-scroll { flex:1; height:0; width:100%; }
+.login-scroll-content,.bind-scroll-content { min-height:100%; display:flex; flex-direction:column; align-items:center; }
+.login-scroll-content { gap:14px; }
+.login-scroll-content>.login-header,.login-scroll-content>.login-buddies,.login-scroll-content>.login-tabs,.login-scroll-content>.login-form,.bind-scroll-content>.bind-header,.bind-scroll-content>.bind-welcome,.bind-scroll-content>.bind-code-card,.bind-scroll-content>.bind-form { flex-shrink:0; }
+.things-scroll-content { min-height:100%; display:flex; flex-direction:column; }
+.sheet-backdrop { position:fixed; }
+.sheet { max-height:91vh; }
+.sheet-backdrop.is-open>.sheet { transform:none; }
+.sheet-backdrop.is-closing>.sheet { transition-duration:.38s; transition-timing-function:cubic-bezier(.4,0,1,1); }
+.app-shell.view-we { --glow-x:96%; --glow-y:94px; --glow-width:300px; --glow-height:260px; --glow-color:#e8effe; }
+.app-shell.view-things { --glow-x:7%; --glow-y:116px; --glow-width:290px; --glow-height:250px; --glow-color:#ebf2ff; }
+.app-shell.view-mine { --glow-x:55%; --glow-y:78px; --glow-width:320px; --glow-height:245px; --glow-color:#e9efff; }
+.app-shell.view-we .bottom-nav.frost-nav { overflow:hidden; transition:max-height .28s cubic-bezier(.25,.8,.25,1),opacity .22s ease,padding .28s cubic-bezier(.25,.8,.25,1); }
+.composer.is-focused { background:#f0f2f6; }
+.send-button.is-disabled { opacity:1; background:#edf3fd; color:#98acca; }
+.send-button.is-disabled:active { transform:none; }
+.anniversary-pin.is-pinned { color:var(--date-card-color,#477ad2); background:#ffffffa6; }
+.h5-thead { display:table-header-group; }.h5-tbody { display:table-row-group; }.h5-tr { display:table-row; }.h5-td,.h5-th { display:table-cell; }
+.markdown-body .h5-table { display:table; }.markdown-body .h5-li { display:list-item; }
+.markdown-table-wrap .h5-table { width:max-content; min-width:100%; border-collapse:collapse; font-size:13px; line-height:1.45; }
+.markdown-table-wrap .h5-th,.markdown-table-wrap .h5-td { min-width:68px; max-width:245px; padding:9px 11px; text-align:left; vertical-align:top; overflow-wrap:anywhere; border-top:1px solid #edf0f5; }
+.markdown-table-wrap .h5-th { color:#000; background:#f2f5fb; font-weight:650; white-space:nowrap; }
+.markdown-table-wrap .h5-tbody .h5-tr:nth-child(even) { background:#fafbfe; }
+.markdown-table-wrap .h5-td+.h5-td,.markdown-table-wrap .h5-th+.h5-th { border-left:1px solid #edf0f5; }

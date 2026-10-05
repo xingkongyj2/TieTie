@@ -8,6 +8,9 @@ artifacts/
 __pycache__/
 backend/bin/
 .vite/
+frontend/dist-h5/
+frontend/.swc/
+frontend/project.private.config.json
 backend/*.db
 backend/*.db-shm
 backend/*.db-wal

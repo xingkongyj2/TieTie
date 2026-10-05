@@ -56,7 +56,7 @@
 .weather-more > summary { display: inline-flex; align-items: center; gap: 5px; padding: 4px 0; list-style: none; font-size: 10px; color: #91a2bd; cursor: pointer; }
 .weather-more > summary::-webkit-details-marker { display: none; }
 .weather-more > summary svg { transition: transform .2s; }
-.weather-more[open] > summary svg { transform: rotate(180deg); }
+.weather-more.is-expanded > summary svg { transform: rotate(180deg); }
 .weather-more > summary:focus-visible { outline: 2px solid #c6d8f2; outline-offset: 3px; border-radius: 4px; }
 .weather-personal-heading { font-size: 11px; color: #6481b5; font-weight: 500; }
 .weather-personal-temperature { font-size: 23px; color: #5681c2; margin-top: 8px; }

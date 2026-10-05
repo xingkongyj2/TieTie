@@ -20,7 +20,7 @@ type Config struct {
 
 	Host                        string           // 监听地址，默认 127.0.0.1
 	Port                        int              // 监听端口，默认 4173（与 Node 版一致）
-	StaticDir                   string           // 前端构建产物目录，默认 ../frontend/dist
+	StaticDir                   string           // 可选 H5 产物目录，默认 ../frontend/web/dist
 	Upstream                    string           // Qoder 云端地址
 	Token                       string           // QODER_ACCESS_TOKEN
 	DefaultSessionID            string           // QODER_DEFAULT_SESSION_ID
@@ -71,7 +71,7 @@ func Load() Config {
 		LogLevel:                    envOr("LOG_LEVEL", "info"),
 		Host:                        envOr("HOST", "127.0.0.1"),
 		Port:                        port,
-		StaticDir:                   envOr("STATIC_DIR", "../frontend/dist"),
+		StaticDir:                   envOr("STATIC_DIR", "../frontend/web/dist"),
 		Upstream:                    envOr("QODER_UPSTREAM", "https://api.qoder.com.cn/api/v1/cloud"),
 		Token:                       os.Getenv("QODER_ACCESS_TOKEN"),
 		DefaultSessionID:            os.Getenv("QODER_DEFAULT_SESSION_ID"),

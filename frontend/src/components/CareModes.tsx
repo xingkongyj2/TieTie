@@ -1,4 +1,5 @@
-import { Clock3, Moon, Sun } from 'lucide-react'
+import { isAppVisible, onAppVisibilityChange } from '../lib/platform'
+import { Clock3, Moon, Sun } from './Icons'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError } from '../api/client'
 import { careApi, type CareState, type CareMode } from '../api/care'
@@ -9,8 +10,8 @@ import { TabLoading } from './TabLoading'
 import { EmptyTabState } from './EmptyTabState'
 import './CareModes.css'
 
-export function CareWithAnniversary({ sessionId, selfId, onEditRegion, notify }: {
-  sessionId?: string; selfId?: number; onEditRegion: () => void; notify: (text: string) => void
+export function CareWithAnniversary({ sessionId, selfId, onEditRegion, notify, onPlaceholderChange }: {
+  sessionId?: string; selfId?: number; onEditRegion: () => void; notify: (text: string) => void; onPlaceholderChange?: (placeholder: boolean) => void
 }) {
   const [loading, setLoading] = useState(true)
   const [settings, setSettings] = useState<{ care: CareState; anniversary: AnniversaryReminderSettings } | null>(null)
@@ -34,11 +35,10 @@ export function CareWithAnniversary({ sessionId, selfId, onEditRegion, notify }:
     mounted.current = true
     setLoading(true)
     void reload()
-    const refresh = () => { if (document.visibilityState === 'visible') void reload() }
+    const refresh = () => { if (isAppVisible()) void reload() }
     const timer = setInterval(refresh, 15_000)
-    window.addEventListener('focus', refresh)
-    document.addEventListener('visibilitychange', refresh)
-    return () => { mounted.current = false; sequence.current++; clearInterval(timer); window.removeEventListener('focus', refresh); document.removeEventListener('visibilitychange', refresh) }
+    const unsubscribe = onAppVisibilityChange(refresh)
+    return () => { mounted.current = false; sequence.current++; clearInterval(timer); unsubscribe() }
   }, [reload])
   const missing = state?.members.filter((member) => !member.region?.cityCode) ?? []
   const selfMissing = missing.some((member) => member.userId === selfId)
@@ -84,6 +84,7 @@ export function CareWithAnniversary({ sessionId, selfId, onEditRegion, notify }:
       if (mounted.current && seq === sequence.current) { setBusy(null); void reload() }
     }
   }
+  useEffect(() => { onPlaceholderChange?.(!sessionId || loading || !!state && !state.modes.length && !error) }, [sessionId, loading, state, error, onPlaceholderChange])
   if (!sessionId) return <EmptyTabState kind="care" title="还没有贴贴提醒" example="帮我们看看明天的天气" />
   if (loading) return <TabLoading />
   if (!settings || !state) return <div className="cloud-error" role="alert"><span>{error}</span><button type="button" onClick={() => { setLoading(true); void reload() }}>重试</button></div>

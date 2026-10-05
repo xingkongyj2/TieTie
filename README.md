@@ -1,40 +1,51 @@
 # 贴贴 · 两个人的小窝
 
-面向手机的 React + TypeScript + Vite H5 应用。聊天与提醒接入 Qoder Cloud Agents 的 Managed Session 和 Go 后端。双人身份、个人资料、共享提醒、纪念日、倒计时与定时队列保存在服务端，并按业务规则同步云端记忆；部分界面偏好保存在当前设备。
+前端已迁移为 **Taro 4 + React 18 + TypeScript 微信小程序**，沿用 Go 后端与现有账号、双人空间、聊天、提醒和记忆接口。以旧 H5 为视觉基线，保留配色、间距、圆角、自定义导航与动画参数。旧版 React 19 H5 保存在 `frontend/web/`，用于对照和现有 Web 部署。
 
-## 运行
+## 微信小程序开发
 
-仓库分两个模块：`frontend/`（React + Vite）与 `backend/`（Go 服务）。前端需要 Node.js 22.12+，后端需要 Go 1.22+。
+需要 Node.js 22.12+、Go 1.24+ 和微信开发者工具。
 
 ```bash
 cd frontend
-npm install
-cd ../backend
-cp .env.example .env.local   # 仅首次配置；已有 .env.local 时不要覆盖
+npm ci
+cp .env.example .env.local  # 仅首次；API 直连现有服务器
+npm run dev           # 持续构建微信产物到 frontend/dist/
 ```
 
-在 `backend/.env.local` 中填写服务端配置：
+在微信开发者工具中导入 **frontend/**，检查 `project.config.json` 中的 AppID。`frontend/.env.local` 的 `TARO_APP_API_BASE_URL` 配置为 `http://38.76.183.142:4173`，开发版直接访问现有服务器，无需启动本地后端。HTTP 开发调试需在开发者工具的本地设置中关闭合法域名校验。修改服务地址后需重新构建。
 
-```dotenv
-QODER_ACCESS_TOKEN=你的令牌
-QODER_DEFAULT_SESSION_ID=可选的已有会话ID
-```
-
-两个终端分别启动（npm 命令都在 `frontend/` 下执行）：
+仅需要运行本地后端时，另行配置并启动：
 
 ```bash
-npm start      # 即 cd ../backend && go run ./cmd/server，Go 后端监听 127.0.0.1:4173
-npm run dev    # Vite 开发服务，/api 自动代理到 Go 后端
+cd backend
+cp .env.example .env.local   # 仅首次配置；已有文件不要覆盖
+# 配置 MySQL、JWT 与 Qoder 服务端令牌
+go run ./cmd/server
 ```
 
-打开终端显示的地址（默认 `http://127.0.0.1:5173`）。令牌仅由 Go 后端读取，禁止加 `VITE_` 前缀；`.env.local` 已被忽略，不应提交或发送给浏览器。修改配置后重启后端。
+Qoder 凭据只保存在后端，不能进入小程序源码或公开环境变量。体验/正式版在构建前配置公开 HTTPS 后端地址，并在微信后台设置 request 合法域名：
 
 ```bash
-npm run build   # TypeScript 检查并构建到 frontend/dist/
-npm run preview # 预览产物，/api 同样代理到 Go 后端
+cd frontend
+TARO_APP_API_BASE_URL=https://api.example.com npm run build
+npm test              # 传输、SSE、附件和环境配置测试
+npm run typecheck
 ```
 
-生产部署时 Go 后端直接托管 `frontend/dist/`（`STATIC_DIR`，默认 `../frontend/dist`），单进程即可，无需 Vite。端口占用等环境变量见 `backend/README.md`。
+小程序由微信开发者工具预览、上传和发布；`frontend/dist/` **不是网页产物**，不能由 Go 静态服务托管。真实语音转写、微信登录和订阅消息尚未接入；注册/登录继续使用原有账号密码。详细目录、功能对应和视觉验收见 [小程序迁移说明](frontend/MIGRATION.md)。
+
+## H5 对照与服务器部署
+
+```bash
+cd frontend/web
+npm ci
+npm run dev          # 原 H5，/api 代理到 Go 后端
+npm run build        # 产物 frontend/web/dist/
+npm run preview
+```
+
+Go 的默认 `STATIC_DIR` 已改为 `../frontend/web/dist`。已有 `.env.local` 如显式写了旧目录，需按部署目录自行更新。Docker 镜像继续构建旧 H5 与 Go 服务，小程序独立发布。Taro H5 适配可用 `frontend/` 下的 `npm run dev:h5` 或 `npm run build:h5`，产物 `frontend/dist-h5/`。
 
 ## CNB 与服务器部署
 
@@ -128,7 +139,7 @@ Qoder 接口依据：[Session 使用说明](https://docs.qoder.cn/cloud-agents/s
 
 个人资料与 AI 说话方式由服务端保存并同步云端记忆；双人成员身份与提醒协议由服务端随每轮消息传入。共享提醒双方可见，聊天另支持仅自己可见的独立私聊。尚未接入微信登录或离线设备推送。
 
-`localStorage` 的 `tietie.relationship.v1` 保留本地体验数据及部分界面偏好；账号资料、共享纪念日和提醒以服务端记录为准，旧本机提醒不会自动转成定时任务。云端历史不写入浏览器持久存储，旧模拟消息不会混入云端会话。
+小程序通过微信存储保存 JWT 与界面偏好，偏好按账号、对方及会话隔离。账号资料、共享纪念日和提醒以服务端记录为准，旧本机提醒不会自动转成定时任务。云端文字历史不写入持久存储，聊天图片使用本地预览缓存并在退出账号时清理。
 
 ## 后台定时提醒
 
@@ -156,9 +167,9 @@ backend/internal/scheduler/    按到期时间批量领取、限流并发与退�
 backend/internal/logging/      系统/定时任务独立日志、上海时区、文件轮转
 backend/internal/document/     docx/xlsx 文字提取（.doc/.xls 旧格式暂不支持，需转存）
 frontend/src/api/upload-types.json 上传白名单契约（前端校验用，后端 dto 有同步副本）
-frontend/src/App.tsx           会话选择、消息展示和顶层交互
+frontend/src/TieTieApp.tsx           会话选择、消息展示和顶层交互
 frontend/src/hooks/useCloudChat.ts 云端消息、发送与轮询状态
-frontend/src/api/qoder.ts      浏览器会话 API
+frontend/src/api/qoder.ts      小程序会话 API
 frontend/src/api/client.ts     请求与错误处理
 frontend/src/hooks/useRelationship.ts 本地资料和提醒状态
 frontend/src/api/relationship.ts 本地资料和提醒持久化
@@ -172,7 +183,7 @@ frontend/src/components/       聊天、输入栏、资料与工具弹层
 - 真实云端会话列表、详情、历史及增量读取均返回 HTTP 200；当前读取到 11 个会话。
 - 浏览器验证了会话切换、刷新后保留选择，以及 320 / 375 / 390 / 430px 宽度无页面横向溢出。
 - 发送使用隔离的模拟上游验证：正常回复、无文字回复后恢复发送、409 保留草稿、提交成功后同步失败和恢复；未向现有云端会话发送测试消息。
-- `npm run build` 通过；前端源码和构建产物未包含令牌。
+- `npm run build` 通过；前端源码和构建产物不应包含服务端令牌。
 - 后端已由 Node（server/，已删除）迁移至 Go（backend/）：真实云端会话列表、历史消息、SSE 流及 Vite 代理链路均验证通过，接口与错误码与原 Node 版一致。
 
 双人身份、AI 控制回执、定时提醒和云端长期记忆的逐步流程见 [会话场景说明](docs/conversation-scenarios.md)。

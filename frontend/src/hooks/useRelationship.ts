@@ -1,3 +1,4 @@
+import { isAppVisible, onAppVisibilityChange } from '../lib/platform';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { relationshipApi } from '../api/relationship';
 import { profileApi } from '../api/profile';
@@ -17,7 +18,7 @@ export function useRelationship(userId?: number, partnerId?: number, sessionId?:
     const requestId = ++sequence.current;
     try {
       const [local, { profiles }, { settings: assistant }] = await Promise.all([
-        relationshipApi.getState(),
+        relationshipApi.getState(key),
         userId ? profileApi.get() : Promise.resolve({ profiles: [] }),
         sessionId ? assistantSettingsApi.get(sessionId) : Promise.resolve({ settings: { tone: 'warm' as const } }),
       ]);
@@ -39,7 +40,7 @@ export function useRelationship(userId?: number, partnerId?: number, sessionId?:
     }
   }, [key, userId, partnerId, sessionId, username]);
 
-  useEffect(() => { setError(''); void reload(); const timer=setInterval(() => { void reload(); },30_000); const focus=()=>{void reload()}; window.addEventListener('focus',focus); return ()=>{clearInterval(timer);window.removeEventListener('focus',focus)}; }, [reload]);
+  useEffect(() => { setError(''); void reload(); const timer=setInterval(() => { if (isAppVisible()) void reload(); },30_000); const dispose = onAppVisibilityChange(visible => { if (visible) void reload(); }); return ()=>{clearInterval(timer);dispose()}; }, [reload]);
 
   const saveMember = async (member: Member) => {
     if (member.id !== 'self' || !userId) throw new Error('只能编辑自己的小档案。');
@@ -56,15 +57,18 @@ export function useRelationship(userId?: number, partnerId?: number, sessionId?:
   const saveSettings = async (settings: AISettings) => {
     if (sessionId) await assistantSettingsApi.save(sessionId, settings.tone);
     if (scope.current !== key) return;
-    await relationshipApi.saveSettings(settings);
+    await relationshipApi.saveSettings(settings, key);
+    if (scope.current !== key) return;
     await reload();
   };
   const addReminder = async (input: Omit<Reminder, 'id' | 'completed'>) => {
-    await relationshipApi.addReminder(input);
+    await relationshipApi.addReminder(input, key);
+    if (scope.current !== key) return;
     await reload();
   };
   const toggleReminder = async (id: string) => {
-    await relationshipApi.toggleReminder(id);
+    await relationshipApi.toggleReminder(id, key);
+    if (scope.current !== key) return;
     await reload();
   };
 

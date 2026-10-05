@@ -1,0 +1,13 @@
+.care-mode-title { display: flex; align-items: center; gap: 7px; }
+.care-mode-title strong { white-space: nowrap; }
+.care-time { display: inline-flex; align-items: center; justify-content: center; gap: 4px; flex: none; min-height: 26px; padding: 3px 7px; border-radius: 8px; background: #fff; color: #839abd; font-size: 10px; font-variant-numeric: tabular-nums; box-shadow: 0 1px 4px #678bbc0b; }
+.care-time:hover:not(:disabled) { color: #587fc0; background: #edf3ff; }
+.care-time:focus-visible { outline: 2px solid #c4d8f7; outline-offset: 2px; }
+.care-time:disabled { opacity: .55; }
+.care-mode-row .care-status { color: #a38c62; }
+.care-region-guide { display: flex; flex-wrap: wrap; gap: 9px; align-items: flex-start; margin-bottom: 15px; padding: 17px; background: #f6f8fc; border-radius: 19px; color: #8fa6c8; }
+.care-region-guide > svg { margin-top: 2px; flex: none; }
+.care-region-guide p { flex: 1; font-size: 12px; color: #8391a6; line-height: 1.8; min-width: 130px; }
+.care-region-guide button { display: flex; align-items: center; gap: 4px; margin-left: 27px; font-size: 12px; color: #6388bd; background: none; min-height: 35px; }
+.care-status { color: #a38c62; font-size: 11px; margin-top: 10px; line-height: 1.8; }
+.care-retry { margin-left: 8px; padding: 2px 6px; border-radius: 6px; background: #fff; color: #587fc0; }

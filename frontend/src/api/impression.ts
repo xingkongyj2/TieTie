@@ -1,3 +1,4 @@
+import type { AbortSignalLike } from '../lib/abort'
 import { request } from './client'
 
 export interface Impression {
@@ -10,6 +11,6 @@ export interface Impression {
 export interface ImpressionResult { impression: Impression; memoryStatus?: 'synced' | 'pending' | '' }
 const path = (sessionId: string) => `/api/qoder/sessions/${encodeURIComponent(sessionId)}/partner-impression`
 export const impressionApi = {
-  get: (sessionId: string, signal?: AbortSignal, retry = false) => request<ImpressionResult>(`${path(sessionId)}${retry ? '?retry=true' : ''}`, { signal }),
+  get: (sessionId: string, signal?: AbortSignalLike, retry = false) => request<ImpressionResult>(`${path(sessionId)}${retry ? '?retry=true' : ''}`, { signal }),
   supplement: (sessionId: string, text: string, requestId: string) => request<ImpressionResult>(path(sessionId), { method: 'POST', body: { text, requestId }, timeoutMs: 45_000 }),
 }

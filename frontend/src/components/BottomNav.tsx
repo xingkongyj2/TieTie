@@ -1,4 +1,4 @@
-import { Bell, MessageCircle, UserRound } from 'lucide-react'
+import { Bell, MessageCircle, UserRound } from './Icons'
 import './BottomNav.css'
 
 export type MainView = 'we' | 'things' | 'mine'
@@ -19,7 +19,7 @@ export function BottomNav({ view, onChange }: { view: MainView; onChange: (view:
       aria-current={view === id ? 'page' : undefined}
       onClick={() => onChange(id)}
     >
-      <span className="nav-icon"><Icon size={19} strokeWidth={1.7} aria-hidden="true" /></span>
+      <span className="nav-icon"><Icon size={19} strokeWidth={view === id ? 1.8 : 1.7} aria-hidden="true" /></span>
     </button>)}
   </nav>
 }

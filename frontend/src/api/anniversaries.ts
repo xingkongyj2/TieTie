@@ -27,10 +27,8 @@ export const anniversaryRemindersApi = {
 }
 export const anniversariesApi = {
   list(session: string, after = '', afterDeletion = ''): Promise<AnniversaryResult> {
-    const query = new URLSearchParams()
-    if (after) query.set('after', after)
-    if (afterDeletion) query.set('afterDeletion', afterDeletion)
-    return request(`${path(session)}${query.size ? `?${query}` : ''}`)
+    const query = [after ? `after=${encodeURIComponent(after)}` : '', afterDeletion ? `afterDeletion=${encodeURIComponent(afterDeletion)}` : ''].filter(Boolean).join('&')
+    return request(`${path(session)}${query ? `?${query}` : ''}`)
   },
   pin(session: string, id: string, pinned: boolean): Promise<{ anniversary: Anniversary }> {
     return request(`${path(session)}/${encodeURIComponent(id)}`, { method: 'PATCH', body: { pinned } })

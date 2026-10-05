@@ -1,4 +1,5 @@
-import { ArrowRight, Bell } from 'lucide-react'
+import { Image, ScrollView } from '@tarojs/components'
+import { ArrowRight, Bell } from './Icons'
 import { useState } from 'react'
 import type { RelationshipState } from '../types'
 import { ReminderBoard } from './Tools'
@@ -31,6 +32,10 @@ interface Props {
 export function LittleThings({ sessionId, selfId, onEditRegion, onBind, state, anniversaries, reminderState = state, onToggle, onCancel, onDelete, reminderNotice, remindersLoading, onReloadReminders, notify }: Props) {
   const [activeTab, setActiveTab] = useState<'care' | 'reminders' | 'anniversary' | 'countdown'>('reminders')
   const [activeFilter, setActiveFilter] = useState<'both' | 'self' | 'partner' | null>(null)
+  const [countdownPlaceholder, setCountdownPlaceholder] = useState(true)
+  const [carePlaceholder, setCarePlaceholder] = useState(true)
+  const anniversaryPlaceholder = !sessionId || !anniversaries.anniversaries.length && !anniversaries.featured && (!anniversaries.spaceCreatedAt || Number.isNaN(Date.parse(anniversaries.spaceCreatedAt))) && !anniversaries.error
+  const placeholder = activeTab === 'countdown' ? countdownPlaceholder : activeTab === 'care' ? carePlaceholder : activeTab === 'anniversary' && anniversaryPlaceholder
   const pendingReminders = reminderState.reminders.filter((reminder) => reminderPhase(reminder) === 'pending')
   const pendingCount = pendingReminders.length
   const reminderStats = [
@@ -53,13 +58,13 @@ export function LittleThings({ sessionId, selfId, onEditRegion, onBind, state, a
           else return
           event.preventDefault()
           setActiveTab(tabs[next].id)
-          document.getElementById(`things-${tabs[next].id}-tab`)?.focus()
         }}><span className="things-tab-label">{label}</span></button>)}
           </div>
         </div>
       </header>
-    <div className={`tab-page-scroll things-scroll${!sessionId && activeTab === 'reminders' ? ' is-unbound' : ''}`}>
-      <section role="tabpanel" id="things-reminders-panel" aria-labelledby="things-reminders-tab" className={`things-tab-panel${!sessionId ? ' is-unbound' : ''}`} hidden={activeTab !== 'reminders'}>
+    <ScrollView scrollY enhanced showScrollbar={false} className={`tab-page-scroll things-scroll${placeholder ? ' is-placeholder' : ''}${!sessionId && activeTab === 'reminders' ? ' is-unbound' : ''}`}>
+      <div className="things-scroll-content">
+      <section role="tabpanel" id="things-reminders-panel" aria-labelledby="things-reminders-tab" className={`things-tab-panel${activeTab === 'reminders' ? ' is-active' : ''}${!sessionId ? ' is-unbound' : ''}`} hidden={activeTab !== 'reminders'} style={{ display: activeTab === 'reminders' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
         {!sessionId ? <div className="things-unbound">
           <span className="things-unbound-icon"><Bell size={25} strokeWidth={1.7} aria-hidden="true" /></span>
           <h2>一起记下要紧的事</h2>
@@ -75,12 +80,12 @@ export function LittleThings({ sessionId, selfId, onEditRegion, onBind, state, a
               </h2>
             </div>
             <div className="things-buddy-scene" aria-hidden="true">
-              <SpaceBuddy variant="ice" className="things-buddy" />
-              <svg className="things-buddy-decor" viewBox="0 0 144 144" fill="none" focusable="false">
-                <path d="M124 10V26M116 18H132" stroke="#93BCF0" strokeWidth="2.5" strokeLinecap="round" />
-                <path d="M8 14V22M4 18H12" stroke="#EAB7CB" strokeWidth="1.8" strokeLinecap="round" />
-                <path d="M14 115L17 122L24 125L17 128L14 135L11 128L4 125L11 122Z" fill="#F1D58D" fillOpacity=".8" />
-              </svg>
+              <SpaceBuddy variant="ice" className="things-buddy" mode="aspectFit" />
+              <span className="things-buddy-decor">
+                <Image className="h5-img things-decor-fragment things-decor-fragment-1" src="/assets/decor/things-decor-1.png" mode="scaleToFill" />
+                <Image className="h5-img things-decor-fragment things-decor-fragment-2" src="/assets/decor/things-decor-2.png" mode="scaleToFill" />
+                <Image className="h5-img things-decor-fragment things-decor-fragment-3" src="/assets/decor/things-decor-3.png" mode="scaleToFill" />
+              </span>
             </div>
           </div>
         </section>
@@ -99,13 +104,14 @@ export function LittleThings({ sessionId, selfId, onEditRegion, onBind, state, a
         {remindersLoading && !reminderState.reminders.length ? <p className="empty-note" role="status">正在同步共享提醒…</p> : <ReminderBoard state={reminderState} pendingAssignee={activeFilter} onToggle={onToggle} onCancel={onCancel} onDelete={onDelete} notify={notify} />}
         </>}
       </section>
-      <section role="tabpanel" id="things-countdown-panel" aria-labelledby="things-countdown-tab" className="things-tab-panel" hidden={activeTab !== 'countdown'}>{activeTab === 'countdown' && <Countdowns sessionId={sessionId} />}</section>
-      <section role="tabpanel" id="things-anniversary-panel" aria-labelledby="things-anniversary-tab" className="things-tab-panel" hidden={activeTab !== 'anniversary'}>
+      <section role="tabpanel" id="things-countdown-panel" aria-labelledby="things-countdown-tab" className={`things-tab-panel${activeTab === 'countdown' ? ' is-active' : ''}${countdownPlaceholder ? ' is-placeholder' : ''}`} hidden={activeTab !== 'countdown'} style={{ display: activeTab === 'countdown' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>{activeTab === 'countdown' && <Countdowns sessionId={sessionId} onPlaceholderChange={setCountdownPlaceholder} />}</section>
+      <section role="tabpanel" id="things-anniversary-panel" aria-labelledby="things-anniversary-tab" className={`things-tab-panel${activeTab === 'anniversary' ? ' is-active' : ''}${anniversaryPlaceholder ? ' is-placeholder' : ''}`} hidden={activeTab !== 'anniversary'} style={{ display: activeTab === 'anniversary' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
         {sessionId ? <Anniversaries state={anniversaries} notify={notify} /> : activeTab === 'anniversary' && <EmptyTabState kind="anniversary" title="还没有纪念日" example="我们是 2025 年 5 月 20 日在一起的" />}
       </section>
-      <section role="tabpanel" id="things-care-panel" aria-labelledby="things-care-tab" className="things-tab-panel" hidden={activeTab !== 'care'}>
-        {activeTab === 'care' && <CareWithAnniversary key={sessionId ?? 'unbound'} sessionId={sessionId} selfId={selfId} onEditRegion={onEditRegion} notify={notify} />}
+      <section role="tabpanel" id="things-care-panel" aria-labelledby="things-care-tab" className={`things-tab-panel${activeTab === 'care' ? ' is-active' : ''}${carePlaceholder ? ' is-placeholder' : ''}`} hidden={activeTab !== 'care'} style={{ display: activeTab === 'care' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
+        {activeTab === 'care' && <CareWithAnniversary key={sessionId ?? 'unbound'} sessionId={sessionId} selfId={selfId} onEditRegion={onEditRegion} notify={notify} onPlaceholderChange={setCarePlaceholder} />}
       </section>
-    </div>
+      </div>
+    </ScrollView>
   </section>
 }

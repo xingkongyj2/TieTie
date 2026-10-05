@@ -2,7 +2,8 @@ import { createInitialState } from '../data/mock'
 import { readStorage, writeStorage } from '../lib/storage'
 import type { AISettings, Member, MemberId, Message, RelationshipState, Reminder } from '../types'
 
-const STORAGE_KEY = 'tietie.relationship.v1'
+// Keep local preferences separate for each account and bound conversation.
+const storageKey = (scope: string) => `tietie.relationship.v2:${scope}`
 const MEMBER_IDS: MemberId[] = ['ai', 'self', 'partner']
 const TONES: AISettings['tone'][] = ['warm', 'playful', 'concise']
 const SETTING_FLAGS = ['weatherCare', 'anniversaryReminders'] as const
@@ -72,8 +73,9 @@ function isState(value: unknown): value is RelationshipState {
     && Array.isArray(value.reminders) && value.reminders.every(isReminder) && isDate(value.togetherSince)
 }
 
-function loadState(): RelationshipState {
-  const stored = readStorage<unknown>(STORAGE_KEY, createInitialState)
+function loadState(scope: string): RelationshipState {
+  const key = storageKey(scope)
+  const stored = readStorage<unknown>(key, createInitialState)
   if (isState(stored)) {
     // Retired avatar files must not leave broken images in profiles saved earlier.
     const defaults = createInitialState().members
@@ -92,19 +94,19 @@ function loadState(): RelationshipState {
     })
     if (changed) {
       const migrated = { ...stored, members, settings }
-      writeStorage(STORAGE_KEY, migrated)
+      writeStorage(key, migrated)
       return migrated
     }
     return stored
   }
   // Reject old incompatible data as a whole instead of leaking invalid values into UI.
   const fallback = createInitialState()
-  writeStorage(STORAGE_KEY, fallback)
+  writeStorage(key, fallback)
   return fallback
 }
 
-function persist(state: RelationshipState): void {
-  writeStorage(STORAGE_KEY, state)
+function persist(state: RelationshipState, scope: string): void {
+  writeStorage(storageKey(scope), state)
 }
 
 let sequence = 0
@@ -119,54 +121,54 @@ function makeId(prefix: string): string {
  * Real scheduled reminders and AI inference belong in a future backend adapter.
  */
 export const relationshipApi = {
-  async getState(): Promise<RelationshipState> {
+  async getState(scope: string): Promise<RelationshipState> {
     await delay()
-    return clone(loadState())
+    return clone(loadState(scope))
   },
 
-  async saveMember(member: Member): Promise<Member> {
+  async saveMember(member: Member, scope: string): Promise<Member> {
     if (!isMember(member)) throw new Error('资料格式不正确，请检查昵称、生日和兴趣长度。')
     const updated = { ...clone(member), name: member.name.trim(), hobbies: member.hobbies.map((hobby) => hobby.trim()).filter(Boolean) }
     await delay()
-    const state = loadState()
+    const state = loadState(scope)
     state.members = state.members.map((item) => item.id === updated.id ? updated : item)
     if (updated.id === 'ai') state.settings.name = updated.name
-    persist(state)
+    persist(state, scope)
     return clone(updated)
   },
 
-  async saveSettings(settings: AISettings): Promise<AISettings> {
+  async saveSettings(settings: AISettings, scope: string): Promise<AISettings> {
     if (!isSettings(settings)) throw new Error('设置格式不正确，请检查昵称和语气选项。')
     const updated = { ...currentSettings(settings), name: settings.name.trim() }
     await delay()
-    const state = loadState()
+    const state = loadState(scope)
     state.settings = updated
     state.members = state.members.map((member) => member.id === 'ai' ? { ...member, name: state.settings.name } : member)
-    persist(state)
+    persist(state, scope)
     return clone(state.settings)
   },
 
-  async addReminder(input: Omit<Reminder, 'id' | 'completed'>): Promise<Reminder> {
+  async addReminder(input: Omit<Reminder, 'id' | 'completed'>, scope: string): Promise<Reminder> {
     const reminder: Reminder = { ...input, id: makeId('reminder'), completed: false }
     if (!isReminder(reminder)) throw new Error('请填写 500 字以内的提醒内容，并选择提醒对象。')
     if (reminder.time?.includes('T') && new Date(reminder.time).getTime() <= Date.now()) {
       throw new Error('这个时间已经过去啦，请选一个未来时间。')
     }
     await delay()
-    const state = loadState()
+    const state = loadState(scope)
     reminder.title = reminder.title.trim()
     state.reminders.push(reminder)
-    persist(state)
+    persist(state, scope)
     return clone(reminder)
   },
 
-  async toggleReminder(id: string): Promise<Reminder> {
+  async toggleReminder(id: string, scope: string): Promise<Reminder> {
     await delay()
-    const state = loadState()
+    const state = loadState(scope)
     const reminder = state.reminders.find((item) => item.id === id)
     if (!reminder) throw new Error('这条提醒已经不在啦，请刷新后再试。')
     reminder.completed = !reminder.completed
-    persist(state)
+    persist(state, scope)
     return clone(reminder)
   },
 }

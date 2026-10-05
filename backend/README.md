@@ -63,7 +63,7 @@ go run ./cmd/server           # 或 make dev
 | `MYSQL_USER` | 用户名，默认 `root` |
 | `MYSQL_PASSWORD` | 密码 |
 | `MYSQL_DATABASE` | 库名，默认 `tietie`；启动时 `CREATE DATABASE IF NOT EXISTS`（utf8mb4 / utf8mb4_bin）并 AutoMigrate 建表 |
-| `STATIC_DIR` | 前端产物目录，默认 `../frontend/dist` |
+| `STATIC_DIR` | 前端产物目录，默认 `../frontend/web/dist` |
 | `QODER_TIMEOUT_SECONDS` | 上游请求超时，默认 15s |
 | `QODER_MEMORY_ENABLED` | 云端长期记忆默认开启；设为 `false` 暂停同步，待同步数据保留，新建空间返回 memory_required |
 | `QODER_AGENT_ID` | 绑定新建会话使用的 Agent；留空自动取账号下第一个未归档 Agent |
@@ -97,9 +97,11 @@ docker build -t tietie-backend .      # 镜像只含后端，静态文件用卷�
 
 「待办 → 贴贴 → 纪念日提醒」保存共享空间偏好，默认关闭。开启后，每年在共享纪念日前 3 天的北京时间 08:00 向双方发送群内提示；2 月 29 日在非闰年按 2 月 28 日。提示复用本地关怀消息历史及增量游标，后台需保持运行，无需打开浏览器。当天 08:00–23:00 开启或新增、更正卡片会检查当天提示，重启不重复发送，也不补发错过日期的提示；关闭或解绑后停止，重新绑定默认关闭。
 
-- **生产**：在 `frontend/` 里 `npm run build` 后直接跑 Go 服务，它自带静态文件服务（SPA 回退，默认读 `../frontend/dist`）。
-- **开发**：起 `go run ./cmd/server`（或 `frontend/` 里 `npm start`），再在 `frontend/` 里 `npm run dev`——
+- **生产**：在 `frontend/web/` 里 `npm run build` 后直接跑 Go 服务，它自带静态文件服务（SPA 回退，默认读 `../frontend/web/dist`）。
+- **开发**：起 `go run ./cmd/server`（或 `frontend/` 里 `npm start`），再在 `frontend/web/` 里 `npm run dev`——
   Vite 已配置 `/api` 代理到 `http://127.0.0.1:4173`。
+
+微信小程序在 `frontend/` 下通过 Taro 构建，产物由微信发布。它使用公开 HTTPS API 地址和原 JWT 接口，无需 Vite 代理；生产请配置 request 合法域名。参见 [迁移说明](../frontend/MIGRATION.md)。
 
 ## 与 Node 版的差异
 

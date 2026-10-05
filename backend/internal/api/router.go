@@ -41,6 +41,8 @@ func NewRouter(s *Server) http.Handler {
 	// ---- 公开接口：登录/注册（无需 JWT）----
 	mux.Handle("/api/auth/register", http.HandlerFunc(s.handleAuthRegister))
 	mux.Handle("/api/auth/login", http.HandlerFunc(s.handleAuthLogin))
+	mux.Handle("/api/assets/reminder-titles.woff", http.HandlerFunc(s.handleTitleFont))
+	mux.Handle("/api/assets/OFL.txt", http.HandlerFunc(s.handleTitleFontLicense))
 
 	// ---- 需登录接口：JWT 鉴权 ----
 	authed := func(h func(http.ResponseWriter, *http.Request)) http.Handler {

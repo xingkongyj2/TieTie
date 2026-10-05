@@ -1,0 +1,171 @@
+@font-face {
+  font-family: 'TieTie Reminder Titles';
+  src: url('/fonts/reminder-titles-a3c80cd66a1e.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+.things-page { background: transparent; color: #202b40; }
+.things-page .things-scroll { padding: 0 24px 30px; }
+.things-header { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; gap: 12px; padding: max(var(--page-title-top), env(safe-area-inset-top)) 24px 0; margin-bottom: 3px; }
+.things-heading { min-width: 0; }
+.things-hero { position: relative; padding: 18px 21px 19px; overflow: hidden; border: 0; border-radius: 28px; background: #f8f9fb; }
+.things-hero-top { display: grid; grid-template-columns: minmax(0, 1fr) 133px; align-items: center; gap: 1px; }
+.things-hero-copy { position: relative; z-index: 1; }
+.things-hero-copy h2 { color: #526f98; font-weight: 400; }
+.things-hero-count-line { display: flex; align-items: baseline; gap: 5px; color: #8191a6; font-size: 14px; line-height: 1.4; }
+.things-hero-count { position: relative; isolation: isolate; display: inline-block; color: #5088cd; font-family: Georgia, 'Times New Roman', serif; font-size: 40px; font-style: italic; font-weight: 400; line-height: 1.05; letter-spacing: -1.2px; font-variant-numeric: tabular-nums; }
+.things-hero-count::after { content: ''; position: absolute; z-index: -1; left: -3px; right: -4px; bottom: 3px; height: 6px; border-radius: 50%; background: linear-gradient(90deg, #d9ecfd33, #bfdaf888); transform: rotate(-6deg); pointer-events: none; }
+.things-hero-count-unit { font-size: 12px; }
+.things-hero-title { display: block; margin-top: 9px; font-family: 'TieTie Reminder Titles', 'Yuanti SC', 'PingFang SC', sans-serif; font-size: 26px; line-height: 1.35; letter-spacing: 2px; transform: rotate(-2deg); transform-origin: left center; }
+.things-buddy-scene { position: relative; width: 144px; height: 144px; margin-left: -3px; pointer-events: none; }
+.things-buddy { display: block; width: 100%; height: 100%; max-width: none; object-fit: contain; filter: drop-shadow(0 8px 7px #2864ef0c); }
+.things-buddy-decor { position: absolute; inset: 0; width: 100%; height: 100%; }
+.things-page #things-reminders-panel:not([hidden]) .things-buddy { animation: things-buddy-enter .8s cubic-bezier(.22, 1, .36, 1) both; }
+.things-page #things-reminders-panel:not([hidden]) .things-buddy-decor path { transform-box: fill-box; transform-origin: center; animation: things-decor-enter .5s ease-out var(--decor-delay, .25s) both; }
+.things-buddy-decor path:nth-child(2) { --decor-delay: .4s; }
+.things-buddy-decor path:nth-child(3) { --decor-delay: .55s; }
+@keyframes things-buddy-enter {
+  from { opacity: 0; transform: translateY(10px) scale(.94) rotate(-3deg); }
+  to { opacity: 1; transform: translateY(0) scale(1) rotate(0); }
+}
+@keyframes things-decor-enter {
+  from { opacity: 0; transform: translateY(3px) scale(.45) rotate(-12deg); }
+  to { opacity: 1; transform: translateY(0) scale(1) rotate(0); }
+}
+.things-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.things-stat { display: block; min-width: 0; padding: 15px 14px 16px; border: 0; border-radius: 22px; text-align: left; transition: transform .25s ease, box-shadow .25s ease; }
+.things-stat-all { --stat-color: var(--card-blue-color); background: linear-gradient(145deg, var(--card-blue-start), var(--card-blue-end)); }
+.things-stat-self { --stat-color: var(--card-cream-color); --audience-tilt: 3deg; background: linear-gradient(145deg, var(--card-cream-start), var(--card-cream-end)); }
+.things-stat-partner { --stat-color: var(--card-pink-color); --audience-tilt: -5deg; background: linear-gradient(145deg, var(--card-pink-start), var(--card-pink-end)); }
+.things-stat.is-selected { transform: translateY(-3px); box-shadow: 0 8px 18px #42537121; }
+.things-stat .things-stat-label { display: flex; align-items: center; gap: 2px; color: var(--stat-color); font-size: 14px; font-weight: 500; line-height: 1.5; white-space: nowrap; }
+.things-stat-label > strong { display: inline-block; flex: none; color: var(--stat-color); font-family: 'TieTie Reminder Titles', 'Yuanti SC', 'PingFang SC', sans-serif; font-size: 18px; font-weight: 400; line-height: 1.25; text-shadow: 0 1px 0 #fff, 0 3px 4px #5b7a9324; transform: rotate(var(--audience-tilt, -3deg)); }
+.things-stat-count { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; margin-top: 9px; }
+.things-stat-count > strong { color: #202b40; font-size: 28px; font-weight: 650; line-height: 1.25; letter-spacing: -.7px; font-variant-numeric: tabular-nums; }
+.things-stat-count > span { color: var(--stat-color); font-size: 10px; }
+.things-stat .things-stat-status { display: block; margin-top: 3px; color: var(--stat-color); font-size: 10px; line-height: 1.5; }
+.things-stat.is-selected .things-stat-status { font-weight: 650; }
+.things-page .things-tabs { display: flex; align-items: center; gap: 16px; margin: 0; padding: 0; border: 0; background: transparent; }
+.things-page .things-tabs button { position: relative; display: flex; align-items: center; justify-content: center; flex: none; min-width: 44px; min-height: 36px; padding: 0 2px 4px; color: #8b929f; border-radius: 0; background: transparent; font-family: 'TieTie Reminder Titles', 'Yuanti SC', 'PingFang SC', sans-serif; font-size: 20px; line-height: 1.3; font-weight: 400; letter-spacing: 2px; white-space: nowrap; text-shadow: 0 1px 0 #fff, 0 2px 0 #c4d5f4, 0 4px 6px #537cb926; transition: color .3s, text-shadow .3s; }
+.things-page .things-tabs button:active:not(:disabled) { transform: none; }
+.things-page .things-tabs button.is-active { color: #2864ef; }
+/* 同一艺术字体的字形高度略有差异，校正文字比例，保持字号和按钮尺寸一致。 */
+.things-page .things-tab-label { display: block; transform: scaleY(var(--tab-label-scale-y, 1)); transform-origin: center; }
+.things-page #things-care-tab { --tab-label-scale-y: 1.04; }
+.things-page #things-countdown-tab { --tab-label-scale-y: 1.02; }
+.things-page .things-tab-panel { padding-top: 0; }
+.things-page .things-scroll.is-unbound { display: flex; flex-direction: column; }
+.things-page #things-reminders-panel.is-unbound:not([hidden]) { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; }
+.things-unbound { display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 300px; padding: 24px 10px 48px; text-align: center; }
+.things-unbound-icon { display: grid; place-items: center; width: 54px; height: 54px; margin-bottom: 17px; border-radius: 18px; background: #eaf1fd; color: #4b7fd6; }
+.things-unbound h2 { color: #34435c; font-size: 20px; font-weight: 600; }
+.things-unbound p { margin-top: 9px; color: #8190a5; font-size: 12px; line-height: 1.7; }
+.things-unbound .primary-button { max-width: 188px; margin-top: 24px; font-size: 13px; }
+/* 状态占位随当前 tab 撑满标题与底栏之间的可用空间。 */
+.things-page .things-scroll:has(> .things-tab-panel:not([hidden]) > :is(.tab-loading, .empty-tab-state)) { display: flex; flex-direction: column; padding-bottom: 0; }
+.things-page .things-tab-panel:not([hidden]):has(> :is(.tab-loading, .empty-tab-state)) { display: flex; flex-direction: column; flex: 1; }
+.things-page #things-reminders-panel > .things-section-heading { margin-top: 24px; }
+.things-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; margin: 0 2px 12px; }
+.things-section-heading h2 { display: flex; align-items: center; gap: 12px; }
+/* 艺术字分组标题：提醒页的待完成/已完成与我的页的关于我共用。 */
+.things-page .reminder-title-lettering, .mine-page .reminder-title-lettering { position: relative; display: inline-block; padding: 2px 0 6px; color: #6286c5; font-family: 'TieTie Reminder Titles', 'Yuanti SC', 'PingFang SC', sans-serif; font-size: 19px; font-weight: 400; line-height: 1.3; letter-spacing: 2px; text-shadow: 0 1px 0 #fff, 0 2px 0 #c4d5f4, 0 5px 8px #537cb92e; transform: translateY(-1px) rotate(-3deg); }
+.things-page .reminder-title-lettering::after, .mine-page .reminder-title-lettering::after { content: ''; position: absolute; left: 8%; right: 8%; bottom: -3px; height: 5px; border-radius: 50%; background: #9bb2d538; filter: blur(3px); pointer-events: none; }
+.things-page .reminders-list { display: flex; flex-direction: column; gap: 12px; }
+.things-page .reminder-swipe { position: relative; overflow: hidden; isolation: isolate; border-radius: 24px; }
+.things-page .reminder-swipe.has-actions { touch-action: pan-y; }
+.things-page .reminder-swipe > .reminder-card { z-index: 1; transition: transform .24s cubic-bezier(.25,.8,.25,1), border-top-right-radius .24s cubic-bezier(.25,.8,.25,1), border-bottom-right-radius .24s cubic-bezier(.25,.8,.25,1); }
+.things-page .reminder-swipe:is(.is-open, .is-dragging) > .reminder-card { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.things-page .reminder-swipe.is-dragging > .reminder-card { transition: none; user-select: none; }
+.things-page .reminder-swipe:focus-visible { outline: 2px solid #8eb2ef; outline-offset: 3px; }
+.things-page .reminder-swipe-actions { position: absolute; inset: 0 0 0 auto; display: flex; overflow: hidden; border-radius: 0 24px 24px 0; visibility: hidden; transition: visibility 0s linear .24s; }
+.things-page .reminder-swipe:is(.is-open, .is-dragging) > .reminder-swipe-actions { visibility: visible; transition-delay: 0s; }
+.things-page .reminder-swipe-actions button { display: flex; flex: 0 0 76px; flex-direction: column; align-items: center; justify-content: center; gap: 7px; padding: 8px; border-radius: 0; font-size: 12px; font-weight: 550; }
+.things-page .reminder-swipe-cancel { background: #ffebe8; color: #b75a4d; }
+.things-page .reminder-swipe-delete { background: #df5355; color: #fff; }
+.things-page .reminder-swipe-actions button:disabled { opacity: 1; cursor: default; }
+.things-page .reminder-swipe-actions .spinner { width: 14px; height: 14px; border-color: #ffffff66; border-top-color: #fff; }
+.things-page .reminder-swipe-cancel .spinner { border-color: #e6b2ab; border-top-color: #b75a4d; }
+@media (prefers-reduced-motion: reduce) { .things-page .reminder-swipe > .reminder-card, .things-page .reminder-swipe-actions { transition: none; } }
+.things-page .reminder-card { position: relative; padding: 18px 18px 15px; border: 0; border-radius: 24px; background: #f7f8fa; }
+.things-page .reminder-main { align-items: flex-start; gap: 12px; }
+.things-page .reminder-main > div { min-width: 0; flex: 1; }
+.things-page .reminder-title-row { flex-direction: row; align-items: baseline; gap: 7px; margin-bottom: 8px; }
+.things-page .reminder-title-row .reminder-status { padding: 2px 5px; border-radius: 5px; font-size: 9px; font-weight: 500; line-height: 1.2; }
+.things-page .reminder-main h3 { font-size: 14px; font-weight: 550; line-height: 1.65; color: #202b40; }
+.things-page .reminder-main p { color: #75859e; font-size: 11px; line-height: 1.5; }
+.things-page .reminder-main p.reminder-recurrence { display: flex; align-items: center; gap: 5px; margin-top: 5px; color: #6288bf; }
+.things-page .reminder-recurrence-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.things-page .reminder-card:not(.is-completed) .reminder-recurrence-row { margin-top: 10px; }
+.things-page .reminder-recurrence-row p.reminder-recurrence { min-width: 0; margin-top: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.things-page .reminder-check { margin: 12px -3px 0 0; width: 44px; height: 44px; border: none; border-radius: 14px; background: #fff; color: #2864ef; }
+.things-page .reminder-check::before { position: absolute; inset: 11px; border: 1.5px solid #99b4db; border-radius: 7px; pointer-events: none; }
+.things-page button.reminder-check:hover { background: #e2edff; }
+.things-page .reminder-footer { flex-wrap: nowrap; margin-top: 10px; padding-top: 0; border-top: 0; font-size: 10px; color: #75859e; }
+.things-page .reminder-assignees { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.things-page .reminder-footer .avatar-tiny { width: 24px; height: 24px; }
+.things-page .is-completed { background: #fafafa; }
+.things-page .is-completed .reminder-title-row { align-items: center; }
+.things-page .is-completed .reminder-title-row .reminder-status { padding: 3px 6px; font-size: 10px; line-height: 1.3; }
+.things-page .is-completed .reminder-title-row .reminder-status.is-done { color: #5c88cf; background: #e2ecfd; }
+.things-page .is-completed .reminder-title-row .reminder-status.is-delivered { color: #337958; background: #e7f4ec; }
+.things-page .is-completed .reminder-title-row .reminder-status.is-cancelled { color: #aa6333; background: #fff0df; }
+.things-page .is-completed .reminder-main h3 { color: #202b40; }
+.things-page .is-completed .reminder-check { background: #e2ecfd; color: #5c88cf; }
+.things-page .is-completed .reminder-check::before { display: none; }
+.things-page .reminder-check.is-readonly { background: #eceff2; color: #9aa3ae; cursor: default; }
+.things-page .reminder-check.is-cancelled-mark { background: #eceff2; color: #9aa3ae; cursor: default; }
+.things-page .reminder-check.is-cancelled-mark::before { display: none; }
+.things-page .reminder-completed-divider { justify-content: flex-start; gap: 0; min-height: 44px; margin: 24px 2px 12px; }
+.things-page .reminder-completed-divider::before { display: none; }
+.things-page .reminder-completed-divider::after { display: none; }
+.things-page .reminder-completed-divider h2 { font-weight: 400; }
+.things-page .reminder-completed-divider .reminder-title-lettering { color: #8092af; text-shadow: 0 1px 0 #fff, 0 2px 0 #d5dfea, 0 5px 8px #7589a32e; transform: translateY(-1px) rotate(-2deg); }
+.things-page .reminder-day-group + .reminder-day-group { margin-top: 20px; }
+.things-page .reminder-day-heading { position: relative; display: flex; align-items: center; justify-content: center; gap: 9px; margin: 3px 0 14px; color: #7898c7; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.things-page .reminder-day-heading::before, .things-page .reminder-day-heading::after { content: ''; flex: none; width: 4px; height: 4px; border-radius: 50%; background: #bfd2ef; }
+.things-page .reminder-day-heading .reminder-day-count { position: absolute; top: 50%; right: 0; color: #9ca9bc; font-size: 11px; font-weight: 400; transform: translateY(-50%); }
+.things-page .reminder-action-feedback { display: flex; align-items: center; gap: 6px; margin-top: 9px; color: #5377b4; font-size: 11px; }
+.things-page .reminder-action-feedback .spinner, .things-page .reminder-check .spinner { width: 14px; height: 14px; border-color: #b7cbee; border-top-color: #2864ef; }
+.things-page .reminder-check:disabled[aria-busy="true"] { opacity: 1; }
+.things-page .empty-note { margin: 0; padding: 25px 18px; border: 0; border-radius: 22px; color: #75859e; background: #fafbfc; text-align: center; font-size: 12px; line-height: 1.7; }
+.things-page .anniversary-postcard { padding: 28px 16px 25px; border: 0; border-radius: 28px; background: #f8f9fb; }
+.things-page .anniversary-postcard > svg { color: #6190dc; }
+.things-page .anniversary-number { color: #2864ef; font-size: 64px; font-weight: 600; letter-spacing: -3px; font-variant-numeric: tabular-nums; }
+.things-page .anniversary-number > span { font-size: 13px; color: #75859e; letter-spacing: 0; margin-left: 8px; }
+.things-page .postcard-avatars { margin: 15px auto; gap: 17px; }
+.things-page .postcard-avatars .avatar-large { width: 65px; height: 65px; }
+.things-page .postcard-avatars > svg { color: #8aade3; }
+.things-page .anniversary-postcard p { color: #425571; font-size: 13px; line-height: 1.9; }
+.things-page .anniversary-postcard p span { color: #75859e; font-size: 11px; }
+.things-page .settings-card { padding: 2px 17px; border: 0; border-radius: 24px; background: #f7f8fa; }
+.things-page .setting-row { gap: 11px; padding: 19px 0; }
+.things-page .setting-row + .setting-row { border-top: 0; }
+.things-page .care-modes + .anniversary-reminders .setting-row { border-top: 1px solid #e9edf3; }
+.things-page .setting-icon { width: 36px; height: 38px; color: #6b91cc; background: #fff; border-radius: 12px; }
+.things-page .setting-copy strong { color: #202b40; font-size: 13px; font-weight: 550; }
+.things-page .setting-copy p { margin-top: 5px; color: #75859e; font-size: 10px; line-height: 1.6; }
+.things-page .toggle { width: 38px; height: 24px; flex: none; background: #dce5f0; }
+.things-page .toggle > span { width: 18px; height: 18px; }
+.things-page .toggle.is-on { background: #2864ef; }
+.things-page .toggle.is-on > span { transform: translateX(14px); }
+@media (max-width: 370px) {
+  .things-page .things-scroll { padding-left: 18px; padding-right: 18px; }
+  .things-header { padding-left: 18px; padding-right: 18px; }
+  .things-page .things-tabs { gap: 10px; }
+  .things-page .things-tabs button { font-size: 19px; letter-spacing: 1px; }
+  .things-hero { padding-left: 17px; padding-right: 17px; }
+  .things-hero-top { grid-template-columns: minmax(0, 1fr) 109px; }
+  .things-hero-count { font-size: 36px; }
+  .things-hero-title { font-size: 24px; }
+  .things-buddy-scene { width: 122px; height: 130px; }
+  .things-stats { gap: 8px; }
+  .things-stat { padding-left: 11px; padding-right: 10px; border-radius: 20px; }
+  .things-page .setting-row { gap: 9px; }
+  .things-page .setting-icon { width: 30px; }
+  .things-page .settings-card { padding-left: 13px; padding-right: 13px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .things-page #things-reminders-panel:not([hidden]) .things-buddy,
+  .things-page #things-reminders-panel:not([hidden]) .things-buddy-decor path { animation: none; }
+}

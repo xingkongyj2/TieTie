@@ -1,5 +1,6 @@
-import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
-import { useLayoutEffect, useRef, useState } from 'react'
+import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from './Icons'
+import { useState } from 'react'
+import { ScrollView } from '@tarojs/components'
 import { Sheet } from './Sheet'
 import './DatePicker.css'
 
@@ -29,9 +30,6 @@ function DateDialog({ id, title, value, clearLabel, allowFuture, onClose, onConf
   const [draft, setDraft] = useState<Date | null>(clearLabel && !value ? null : initial)
   const [cursor, setCursor] = useState(initial)
   const [view, setView] = useState<'days' | 'years' | 'months'>('days')
-  const yearsRoot = useRef<HTMLDivElement>(null)
-  const monthHeading = useRef<HTMLButtonElement>(null)
-  const restoreHeadingFocus = useRef(false)
   const year = cursor.getFullYear()
   const month = cursor.getMonth()
   const firstYear = Math.min(1900, initial.getFullYear())
@@ -40,21 +38,9 @@ function DateDialog({ id, title, value, clearLabel, allowFuture, onClose, onConf
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const lastMonth = !allowFuture && year === today.getFullYear() && month === today.getMonth()
 
-  useLayoutEffect(() => {
-    if (restoreHeadingFocus.current) {
-      monthHeading.current?.focus({ preventScroll: true })
-      restoreHeadingFocus.current = false
-    }
-    if (view !== 'years') return
-    const root = yearsRoot.current
-    const selected = root?.querySelector<HTMLElement>('[aria-pressed="true"]')
-    if (root && selected) root.scrollTop = selected.offsetTop - (root.clientHeight - selected.offsetHeight) / 2
-  }, [view])
-
   const selectYear = (nextYear: number) => {
     const nextMonth = !allowFuture && nextYear === today.getFullYear() ? Math.min(month, today.getMonth()) : month
     setCursor(new Date(nextYear, nextMonth, 1))
-    restoreHeadingFocus.current = true
     setView('months')
   }
 
@@ -72,7 +58,7 @@ function DateDialog({ id, title, value, clearLabel, allowFuture, onClose, onConf
         </button>
         <div className="date-picker-heading">
           <button type="button" className={view === 'years' ? 'is-active' : ''} aria-label={`选择年份，当前 ${year} 年`} aria-expanded={view === 'years'} onClick={() => setView(view === 'years' ? 'days' : 'years')}>{year} 年<ChevronDown size={13} aria-hidden="true" /></button>
-          <button type="button" ref={monthHeading} className={view === 'months' ? 'is-active' : ''} aria-label={`选择月份，当前 ${month + 1} 月`} aria-expanded={view === 'months'} onClick={() => setView(view === 'months' ? 'days' : 'months')}>{month + 1} 月<ChevronDown size={13} aria-hidden="true" /></button>
+          <button type="button" className={view === 'months' ? 'is-active' : ''} aria-label={`选择月份，当前 ${month + 1} 月`} aria-expanded={view === 'months'} onClick={() => setView(view === 'months' ? 'days' : 'months')}>{month + 1} 月<ChevronDown size={13} aria-hidden="true" /></button>
         </div>
         <button type="button" className="date-picker-nav" aria-label={view === 'days' ? '下一个月' : '返回日历'} disabled={view === 'days' && lastMonth}
           onClick={() => view === 'days' ? setCursor(new Date(year, month + 1, 1)) : setView('days')}>
@@ -80,11 +66,11 @@ function DateDialog({ id, title, value, clearLabel, allowFuture, onClose, onConf
         </button>
       </div>
       <div className="date-picker-body">
-        {view === 'years' ? <div className="date-picker-options" ref={yearsRoot} role="group" aria-label="选择年份">
+        {view === 'years' ? <ScrollView className="date-picker-years" style={{ height: '248px' }} scrollY scrollTop={Math.max(0, Math.floor((year - firstYear) / 3) * 52 - 104)} showScrollbar={false}><div className="date-picker-options" style={{ height: 'auto' }} role="group" aria-label="选择年份">
           {Array.from({ length: lastYear - firstYear + 1 }, (_, index) => firstYear + index).map((option) => <button type="button" key={option} aria-label={`${option} 年`} aria-pressed={option === year} className={option === year ? 'is-selected' : ''} onClick={() => selectYear(option)}>{option} 年</button>)}
-        </div> : view === 'months' ? <div className="date-picker-options date-picker-months" role="group" aria-label="选择月份">
+        </div></ScrollView> : view === 'months' ? <div className="date-picker-options date-picker-months" role="group" aria-label="选择月份">
           {Array.from({ length: 12 }, (_, option) => <button type="button" key={option} aria-label={`${option + 1} 月`} aria-pressed={option === month} className={option === month ? 'is-selected' : ''}
-            disabled={!allowFuture && year === today.getFullYear() && option > today.getMonth()} onClick={() => { setCursor(new Date(year, option, 1)); restoreHeadingFocus.current = true; setView('days') }}>{option + 1} 月</button>)}
+            disabled={!allowFuture && year === today.getFullYear() && option > today.getMonth()} onClick={() => { setCursor(new Date(year, option, 1)); setView('days') }}>{option + 1} 月</button>)}
         </div> : <div role="group" aria-label={`选择日期，${year} 年 ${month + 1} 月`}>
           <div className="date-picker-week">{WEEKDAYS.map((day) => <span key={day}>{day}</span>)}</div>
           <div className="date-picker-days">
@@ -112,9 +98,7 @@ export function DatePicker({ id, title = '选择日期', clearLabel, placeholder
   const show = () => { if (!disabled) setOpen(true) }
   return <div className="date-picker">
     <div className="date-picker-field">
-      <input className="line-input" id={id} type="text" readOnly inputMode="none" autoComplete="off" placeholder={placeholder}
-        disabled={disabled} value={value} aria-haspopup="dialog" aria-expanded={open} aria-controls={`${id}-calendar`} onClick={show}
-        onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ' || event.altKey && event.key === 'ArrowDown') { event.preventDefault(); show() } }} />
+      <div className="line-input date-picker-readonly" id={id} role="button" aria-label={title} aria-disabled={disabled} onClick={show} style={{ color: value ? undefined : '#a9b2c2', minHeight: '40px' }}>{value || placeholder}</div>
       <button type="button" className="date-picker-toggle" disabled={disabled} aria-label={title} aria-haspopup="dialog" aria-controls={`${id}-calendar`} aria-expanded={open} onClick={show}>
         <CalendarDays size={17} aria-hidden="true" />
       </button>

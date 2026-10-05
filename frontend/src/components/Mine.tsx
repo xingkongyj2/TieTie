@@ -1,4 +1,7 @@
-import { ArrowUpRight, Check, Copy, LogOut, Pencil, Plus, Sparkle, Unlink } from 'lucide-react'
+import { assetUrl } from '../lib/assets'
+import { ScrollView } from '@tarojs/components'
+import Taro from '@tarojs/taro'
+import { ArrowUpRight, Check, Copy, LogOut, Pencil, Plus, Sparkle, Unlink } from './Icons'
 import { useEffect, useRef, useState } from 'react'
 import type { Member, RelationshipState } from '../types'
 import { Avatar } from './Avatar'
@@ -29,8 +32,8 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
   const [savingProfile, setSavingProfile] = useState(false)
   const [exiting, setExiting] = useState(false)
   const [copied, setCopied] = useState(false)
-  const codeRef = useRef<HTMLElement>(null)
   const changingAvatar = useRef(false)
+  const exitLock = useRef(false)
   const mounted = useRef(true)
   const saving = savingAvatar || savingProfile
   const gender = self.gender === 'male' ? '男生' : self.gender === 'female' ? '女生' : '暂不填写'
@@ -47,37 +50,13 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
   }, [copied])
 
   const copyCode = async () => {
-    let success = false
     try {
-      if (navigator.clipboard?.writeText && window.isSecureContext) {
-        await navigator.clipboard.writeText(code)
-        success = true
-      }
-    } catch { /* Some mobile browsers expose Clipboard but reject writes. */ }
-    if (!success) {
-      const input = document.createElement('textarea')
-      input.value = code
-      input.readOnly = true
-      input.style.cssText = 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none'
-      document.body.appendChild(input)
-      input.focus()
-      input.select()
-      input.setSelectionRange(0, code.length)
-      try { success = document.execCommand('copy') } catch { /* Fall back to selecting the visible code. */ }
-      input.remove()
-    }
-    if (success) {
-      setCopied(true)
-      notify('邀请码已复制，分享给想贴贴的人吧')
-    } else {
-      const selection = window.getSelection()
-      if (selection && codeRef.current) {
-        const range = document.createRange()
-        range.selectNodeContents(codeRef.current)
-        selection.removeAllRanges()
-        selection.addRange(range)
-      }
-      notify('已选中邀请码，请在系统菜单中点“复制”')
+      await Taro.setClipboardData({ data: code });
+      if (!mounted.current) return;
+      setCopied(true);
+      notify('邀请码已复制，分享给想贴贴的人吧');
+    } catch {
+      if (mounted.current) notify('复制失败，请长按邀请码手动复制');
     }
   }
 
@@ -86,9 +65,7 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
     changingAvatar.current = true
     setSavingAvatar(true)
     try {
-      const image = new Image()
-      image.src = avatar
-      await image.decode()
+      await Taro.getImageInfo({ src: assetUrl(avatar) })
       if (!mounted.current) return
       await onSaveMember({ ...self, avatar })
       if (mounted.current) notify('头像已更新')
@@ -101,6 +78,8 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
   }
 
   const exitSession = async (close: () => void) => {
+    if (exitLock.current) return
+    exitLock.current = true
     setExiting(true)
     try {
       await onExitSession()
@@ -109,11 +88,12 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
     } catch (e) {
       notify(e instanceof Error ? e.message : '退出专属空间失败，请稍后重试。')
     } finally {
+      exitLock.current = false
       setExiting(false)
     }
   }
   return <section className="tab-page mine-page" aria-label="我的">
-    <div className="tab-page-scroll mine-scroll" inert={pickerOpen || editorOpen || exitOpen}>
+    <ScrollView scrollY enhanced showScrollbar={false} className="tab-page-scroll mine-scroll" aria-hidden={pickerOpen || editorOpen || exitOpen} style={{ pointerEvents: pickerOpen || editorOpen || exitOpen ? 'none' : undefined }}>
       <header className="mine-header">
         <div><h1>我的</h1></div>
         <span className="mine-header-sparkle" aria-hidden="true"><Sparkle size={18} strokeWidth={1.6} /></span>
@@ -122,7 +102,7 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
       <section className="mine-identity-card" aria-label="我的个人空间">
         <SpaceBuddies className="mine-buddies" />
         <div className="mine-identity">
-          <button type="button" className="mine-avatar-edit" aria-label={savingAvatar ? '正在切换头像' : '修改头像'} aria-busy={savingAvatar} disabled={saving} onClick={() => setPickerOpen(true)}>
+          <button type="button" className={`mine-avatar-edit${savingAvatar ? ' is-busy' : ''}`} aria-label={savingAvatar ? '正在切换头像' : '修改头像'} aria-busy={savingAvatar} disabled={saving} onClick={() => setPickerOpen(true)}>
             <Avatar member={self} size="large" />
             {savingAvatar ? <span className="mine-avatar-loading" role="status" aria-live="polite"><span className="spinner" aria-hidden="true" /><span className="sr-only">正在切换头像</span></span> : <span className="mine-avatar-pencil"><Pencil size={12} aria-hidden="true" /></span>}
           </button>
@@ -131,7 +111,7 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
       </section>
 
       <section className="mine-invite" aria-label="我的邀请码">
-        <div className="mine-invite-copy"><span>我的邀请码</span><strong ref={codeRef}>{code}</strong></div>
+        <div className="mine-invite-copy"><span>我的邀请码</span><strong>{code}</strong></div>
         <button type="button" className={`mine-copy-button ${copied ? 'is-copied' : ''}`} aria-label={copied ? '邀请码已复制' : '复制邀请码'} title={copied ? '已复制' : '复制邀请码'} onClick={() => void copyCode()}>
           <span className="mine-copy-mark" aria-hidden="true">{copied ? <Check size={17} strokeWidth={1.7} /> : <Copy size={17} strokeWidth={1.7} />}</span>
         </button>
@@ -154,7 +134,7 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
       </section>
 
       <footer className="mine-footer"><div className="mine-footer-actions">{hasSession && <button type="button" className="secondary-button" disabled={saving || exiting} onClick={() => setExitOpen(true)}><Unlink size={14} aria-hidden="true" />退出专属空间</button>}<button type="button" className="secondary-button" disabled={saving || exiting} onClick={() => { onLogout(); notify('已退出登录') }}><LogOut size={14} aria-hidden="true" />退出登录</button></div></footer>
-    </div>
+    </ScrollView>
     {pickerOpen && <CharacterPicker selectedAvatar={self.avatar} onSelect={(avatar) => { void selectAvatar(avatar) }} onClose={() => setPickerOpen(false)} />}
     {exitOpen && <Sheet title="退出专属空间" onClose={() => setExitOpen(false)}>{(close) => <div className="mine-exit-sheet">
       <p>退出后，你和 TA 都会回到绑定引导页，要重新输入对方邀请码才能继续聊天。</p>

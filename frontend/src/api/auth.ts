@@ -1,5 +1,4 @@
 import { request } from './client'
-import { setToken } from '../lib/token'
 
 export interface Binding {
   sessionId: string
@@ -18,16 +17,14 @@ export interface AccountResult {
   binding: Binding | null
 }
 
-/** 账号系统：注册/登录保存 JWT，me/bind 走鉴权接口。 */
+/** The account hook commits a login token only if its request is still current. */
 export const authApi = {
   async register(username: string, password: string): Promise<AccountResult> {
     const result = await request<AccountResult>('/api/auth/register', { method: 'POST', body: { username, password } })
-    if (result.token) setToken(result.token)
     return result
   },
   async login(username: string, password: string): Promise<AccountResult> {
     const result = await request<AccountResult>('/api/auth/login', { method: 'POST', body: { username, password } })
-    if (result.token) setToken(result.token)
     return result
   },
   me(): Promise<AccountResult> {

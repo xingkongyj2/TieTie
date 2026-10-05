@@ -1,4 +1,4 @@
-import { Cake } from 'lucide-react'
+import { Cake } from './Icons'
 import { useId } from 'react'
 import type { AnniversaryReminderSettings } from '../api/anniversaries'
 

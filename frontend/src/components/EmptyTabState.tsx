@@ -1,4 +1,4 @@
-import { CalendarDays, CloudSun, Hourglass, MessageCircle } from 'lucide-react'
+import { CalendarDays, CloudSun, Hourglass, MessageCircle } from './Icons'
 import './EmptyTabState.css'
 
 interface Props {

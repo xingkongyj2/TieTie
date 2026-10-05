@@ -1,0 +1,19 @@
+/* HTML 标签由插件映射为 View 后，补浏览器的默认排版；业务 CSS 随后覆盖。 */
+.h5-span,.h5-a,.h5-strong,.h5-b,.h5-em,.h5-i,.h5-small,.h5-code,.h5-del,.h5-label,.h5-time { display:inline; }
+.h5-h1 { font-size:2em; }
+.h5-h2 { font-size:1.5em; }
+.h5-h3 { font-size:1.17em; }
+.h5-h4 { font-size:1em; margin:1.33em 0; }
+.h5-h5 { font-size:.83em; margin:1.67em 0; }
+.h5-h6 { font-size:.67em; margin:2.33em 0; }
+.h5-h1,.h5-h2,.h5-h3,.h5-h4,.h5-h5,.h5-h6,.h5-strong,.h5-b { font-weight:bold; }
+.h5-em,.h5-i { font-style:italic; }
+.h5-small { font-size:smaller; }
+.h5-del { text-decoration:line-through; }
+.h5-pre,.h5-code { font-family:monospace; }
+.h5-pre { white-space:pre; }
+.h5-ul,.h5-ol { margin:1em 0; padding-left:40px; }
+.h5-ul { list-style:disc; }
+.h5-ol { list-style:decimal; }
+.h5-li { display:list-item; }
+.h5-br::before { content:'\A'; white-space:pre-line; }

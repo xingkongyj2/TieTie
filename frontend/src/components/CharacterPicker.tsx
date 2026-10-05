@@ -1,4 +1,6 @@
-import { Check } from 'lucide-react';
+import { Image } from '@tarojs/components';
+import { assetUrl } from '../lib/assets';
+import { Check } from './Icons';
 import { characters } from '../data/characters';
 import { Sheet } from './Sheet';
 
@@ -14,7 +16,7 @@ export function CharacterPicker({ selectedAvatar, onSelect, onClose }: Props) {
     <div className="character-grid">{characters.map((character) => {
       const selected = character.avatar === selectedAvatar;
       return <button type="button" key={character.id} className={`character-option ${selected ? 'selected' : ''}`} aria-label={`选择${character.name}，${character.animal}，${character.personality}`} aria-pressed={selected} onClick={() => { onSelect(character.avatar); onClose(); }}>
-        <span className="character-image" style={{ backgroundColor: character.color }}><img src={character.avatar} alt="" loading="lazy" />{selected && <span className="character-selected"><Check size={12} /></span>}</span>
+        <span className="character-image" style={{ backgroundColor: character.color }}><Image className="h5-img" src={assetUrl(character.avatar)} mode="aspectFit" lazyLoad />{selected && <span className="character-selected"><Check size={12} /></span>}</span>
         <span className="character-info"><strong>{character.name}</strong><small>{character.animal}</small></span>
       </button>;
     })}</div>

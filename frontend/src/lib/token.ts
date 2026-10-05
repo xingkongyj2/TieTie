@@ -14,3 +14,14 @@ export function setToken(token: string): void {
 export function clearToken(): void {
   removeStorage(TOKEN_KEY)
 }
+
+const invalidationListeners = new Set<() => void>()
+export function onAccountTokenInvalid(listener: () => void): () => void {
+  invalidationListeners.add(listener)
+  return () => { invalidationListeners.delete(listener) }
+}
+export function invalidateToken(expectedToken: string): void {
+  if (getToken() !== expectedToken) return
+  clearToken()
+  for (const listener of [...invalidationListeners]) listener()
+}

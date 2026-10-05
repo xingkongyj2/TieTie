@@ -1,26 +1,57 @@
 {
-  "name": "tietie-h5",
+  "name": "tietie-miniprogram",
   "private": true,
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "preview": "vite preview",
+    "dev": "npm run assets && taro build --type weapp --watch",
+    "build": "npm run typecheck && npm run assets && taro build --type weapp && node scripts/check-package.mjs",
+    "build:h5": "npm run typecheck && npm run assets && taro build --type h5",
+    "dev:h5": "npm run assets && taro build --type h5 --watch",
+    "typecheck": "tsc --noEmit",
+    "assets": "node scripts/prepare-assets.mjs",
+    "test": "tsx --test tests/*.test.ts",
+    "dev:legacy": "npm --prefix web run dev",
+    "build:legacy": "npm --prefix web ci && npm --prefix web run build",
     "start": "cd ../backend && go run ./cmd/server"
   },
   "dependencies": {
+    "@tarojs/components": "4.3.0",
+    "@tarojs/helper": "4.3.0",
+    "@tarojs/plugin-framework-react": "4.3.0",
+    "@tarojs/plugin-platform-h5": "4.3.0",
+    "@tarojs/plugin-platform-weapp": "4.3.0",
+    "@tarojs/react": "4.3.0",
+    "@tarojs/runtime": "4.3.0",
+    "@tarojs/shared": "4.3.0",
+    "@tarojs/taro": "4.3.0",
     "lucide-react": "^0.468.0",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^4.3.4",
+    "@babel/core": "^7.26.0",
+    "@babel/preset-env": "^7.29.7",
+    "@babel/preset-react": "^7.29.7",
+    "@babel/preset-typescript": "^7.29.7",
+    "@pmmmwh/react-refresh-webpack-plugin": "^0.6.3",
+    "@tarojs/cli": "4.3.0",
+    "@tarojs/plugin-html": "4.3.0",
+    "@tarojs/webpack5-runner": "4.3.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "babel-preset-taro": "4.3.0",
+    "postcss-selector-parser": "^7.1.6",
+    "react-refresh": "^0.18.0",
+    "sharp": "^0.34.5",
+    "tsx": "^4.20.0",
     "typescript": "~5.7.2",
-    "vite": "^6.0.5"
+    "webpack": "5.91.0"
+  },
+  "overrides": {
+    "webpack": "5.91.0"
   }
 }

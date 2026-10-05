@@ -1,0 +1,25 @@
+.region-picker-trigger { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 48px; padding: 12px 14px; border-radius: 13px; background: #fff; color: #34435c; font-size: 14px; line-height: 1.6; text-align: left; }
+.region-picker-trigger > span { min-width: 0; overflow-wrap: anywhere; }
+.region-picker-trigger .is-placeholder { color: #9aa8bf; }
+.region-picker-trigger > svg { flex: none; color: #8fa6c8; }
+.region-picker-modal { padding-bottom: 5px; }
+.region-picker-summary { min-height: 42px; margin-bottom: 16px; padding: 11px 14px; border-radius: 13px; background: #eef4ff; color: #507fca; font-size: 13px; line-height: 1.6; text-align: center; overflow-wrap: anywhere; }
+.region-picker-columns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 24px; }
+.region-picker-column { min-width: 0; }
+.region-picker-label { display: block; margin-bottom: 10px; text-align: center; color: #9aa8bf; font-size: 11px; letter-spacing: 2px; }
+.region-picker-options { position: relative; height: 264px; padding: 4px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; border-radius: 15px; background: #f2f5fb; }
+.region-picker-options::-webkit-scrollbar { display: none; }
+.region-picker-options button { display: flex; align-items: center; justify-content: center; gap: 3px; width: 100%; min-height: 44px; margin-bottom: 4px; padding: 8px 5px; border-radius: 11px; background: transparent; color: #7c8da8; font-size: 13px; line-height: 1.5; text-align: center; }
+.region-picker-options button > span { min-width: 0; overflow-wrap: anywhere; }
+.region-picker-options button > svg { flex: none; }
+.region-picker-options button:hover { background: #e7effd; color: #507fca; }
+.region-picker-options button.is-selected { background: #fff; color: #507fca; font-weight: 600; box-shadow: 0 2px 8px #507fca0b; }
+.region-picker-placeholder { padding: 16px 3px; color: #a1aec2; font-size: 11px; line-height: 1.8; text-align: center; }
+.region-picker-loading, .region-picker-problem { display: flex; min-height: 300px; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: #8fa6c8; font-size: 13px; }
+.region-picker-loading .spinner { width: 25px; height: 25px; border-color: #d2dff4; border-top-color: var(--blue); }
+.region-retry { min-height: 40px; padding: 10px 16px; border-radius: 11px; color: #507fca; font-size: 13px; background: #eef4ff; }
+.region-picker-actions { display: flex; align-items: center; gap: 12px; }
+.region-picker-actions .primary-button { flex: 1; width: auto; min-height: 46px; border-radius: 15px; font-size: 14px; box-shadow: 0 5px 15px #3e74d324; }
+.region-picker-clear { min-height: 46px; padding: 10px 14px; border-radius: 15px; color: #839abd; font-size: 13px; background: #edf2f9; }
+@media (max-width: 370px) { .region-picker-columns { gap: 6px; } .region-picker-options { padding: 3px; } .region-picker-options button { padding-left: 3px; padding-right: 3px; font-size: 12px; } }
+@media (prefers-reduced-motion: reduce) { .region-picker-loading .spinner { animation: none; } }

@@ -3,6 +3,9 @@ import { ApiError } from '../api/client'
 import { qoderApi, SendCancelledError, type CloudHistory, type CloudSession, type CloudStreamEvent } from '../api/qoder'
 import type { CloudMember, CloudReminder, Message, ReminderRecurrence } from '../types'
 import { isTurnCancellationMarker, isVisibleChatMessage } from '../lib/chatMessages'
+import { AbortController } from '../lib/abort'
+import type { MiniFile } from '../lib/files'
+import { isAppVisible, onAppVisibilityChange } from '../lib/platform'
 
 const isRemoteBusy = (session: CloudSession | null) =>
   !!session && ['running', 'rescheduling', 'canceling'].includes(session.status.toLowerCase())
@@ -45,6 +48,7 @@ interface PendingTurn {
   stopRequested?: boolean
   cancelAccepted?: boolean
   dispatched: boolean
+  toolUseId?: string
   submissionDone: Promise<void>
   finishSubmission: () => void
 }
@@ -103,12 +107,20 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
   const [state, setState] = useState<CloudState>(initialState)
   const current = useRef(state)
   const mounted = useRef(false)
+  const [visible, setVisible] = useState(isAppVisible)
+  const scopeRef = useRef('')
+  const loadedScope = useRef('')
+  const scopeIdentity = `${selfUserId ?? ''}:${pinnedId ?? ''}`
+  const scopeEpoch = useRef({ identity: scopeIdentity, version: 0 })
+  if (scopeEpoch.current.identity !== scopeIdentity) scopeEpoch.current = { identity: scopeIdentity, version: scopeEpoch.current.version + 1 }
+  const scope = `${scopeIdentity}:${scopeEpoch.current.version}`
+  scopeRef.current = scope
   const readVersion = useRef(0)
   const controller = useRef<AbortController | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const loadNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const sendLock = useRef(false)
-  const stopLock = useRef(false)
+  const sendLock = useRef<{ scope: string; operation: symbol } | null>(null)
+  const stopLock = useRef<{ scope: string; operation: symbol } | null>(null)
   const suppressStoppedError = useRef(false)
   const stoppedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const localMessageSequence = useRef(0)
@@ -122,10 +134,11 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
   }, [])
 
   const clearStoppedLater = useCallback(() => {
+    const stoppedScope = scopeRef.current
     if (stoppedTimer.current) clearTimeout(stoppedTimer.current)
     stoppedTimer.current = setTimeout(() => {
       stoppedTimer.current = null
-      if (current.current.replyFeedback?.phase === 'stopped') update({ replyFeedback: null })
+      if (scopeRef.current === stoppedScope && current.current.replyFeedback?.phase === 'stopped') update({ replyFeedback: null })
     }, 2200)
   }, [update])
 
@@ -140,13 +153,13 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
   }, [])
 
   const schedule = useCallback(() => {
-    if (!mounted.current || sendLock.current || !current.current.selectedId
+    if (!mounted.current || !isAppVisible() || sendLock.current?.scope === scopeRef.current || !current.current.selectedId
       || !current.current.loaded && !!current.current.error) return
     if (timer.current !== null) clearTimeout(timer.current)
     // The live stream delivers new events; polling the entire cloud history
     // every three seconds contends with the reminder/control worker's lock.
     const active = current.current.pending || isRemoteBusy(current.current.session)
-    const delay = active ? current.current.streaming ? 12_000 : 5_000 : 15_000
+    const delay = active ? current.current.streaming ? 12_000 : 3_000 : 15_000
     timer.current = setTimeout(() => { void readRef.current() }, delay)
   }, [])
 
@@ -192,7 +205,8 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       session: history.session,
       replyMode: history.session.replyMode ?? '',
       messages: mergeMessages(snapshot.messages, history.messages, full)
-        .filter((message) => isVisibleChatMessage(message, history.members ?? snapshot.members)),
+        .filter((message) => isVisibleChatMessage(message, history.members ?? snapshot.members))
+        .map((message) => pendingTurns.current.get(id)?.toolUseId === message.id ? { ...message, answered: true } : message),
       members: history.members ?? snapshot.members,
       reminders: history.reminders ?? snapshot.reminders,
       remindersError: history.remindersError ?? '',
@@ -208,11 +222,13 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
   }, [clearStoppedLater, update])
 
   const readCloud = useCallback(async ({ full = false }: { full?: boolean } = {}) => {
-    if (!mounted.current || sendLock.current) return
+    if (!mounted.current || !isAppVisible() || sendLock.current?.scope === scopeRef.current) return
     const id = pinnedId
     if (!id) {
       // 解绑后清空会话状态，SSE 与轮询随 selectedId 归零一起停掉。
       cancelRead()
+      pendingTurns.current.clear()
+      loadedScope.current = scope
       update(current.current.selectedId ? { ...initialState, loading: false } : { loading: false, slowLoading: false, refreshing: false })
       return
     }
@@ -220,14 +236,16 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     const version = readVersion.current
     const abort = new AbortController()
     controller.current = abort
-    const isCurrent = () => mounted.current && version === readVersion.current && !abort.signal.aborted
-    const changed = id !== current.current.selectedId
+    const isCurrent = () => mounted.current && isAppVisible() && scopeRef.current === scope && version === readVersion.current && !abort.signal.aborted
+    const changed = id !== current.current.selectedId || loadedScope.current !== scope
+    if (loadedScope.current !== scope) pendingTurns.current.clear()
+    loadedScope.current = scope
     const initializing = changed || !current.current.loaded
     if (changed) {
       suppressStoppedError.current = false
       update({
         selectedId: id, session: null, messages: [], members: [], reminders: [], remindersError: '', cursor: null, lastIdleEventId: null,
-        loaded: false, loading: true, slowLoading: false, refreshing: false, error: '', thinking: false, turnError: '', replyFeedback: null, stopping: false,
+        loaded: false, loading: true, slowLoading: false, refreshing: false, submitting: false, error: '', thinking: false, turnError: '', replyFeedback: null, stopping: false,
         pending: pendingTurns.current.has(id),
       })
     } else {
@@ -242,7 +260,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       // history. The full response replaces this preview and unlocks sending.
       void qoderApi.getCachedMessages(id, abort.signal).then(({ messages }) => {
         if (isCurrent() && current.current.selectedId === id && !current.current.loaded && messages.length) {
-          update({ messages: messages.filter((message) => !isTurnCancellationMarker(message)) })
+          update({ messages: messages.filter((message) => !isTurnCancellationMarker(message) && (message.sender === 'ai' || message.userId === selfUserId || current.current.members.some((member) => member.userId === message.userId))) })
         }
       }).catch(() => {})
     }
@@ -253,7 +271,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       if (!isCurrent() || current.current.selectedId !== id) return
       applyHistory(id, history, full || changed)
     } catch (error) {
-      if (error instanceof ApiError && error.code === 'session_forbidden') {
+      if (isCurrent() && error instanceof ApiError && error.code === 'session_forbidden') {
         void onSessionForbidden?.()
       }
       if (isCurrent()) {
@@ -277,16 +295,17 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
         schedule()
       }
     }
-  }, [pinnedId, onSessionForbidden, applyHistory, cancelRead, schedule, update])
+  }, [pinnedId, scope, onSessionForbidden, applyHistory, cancelRead, schedule, update])
   readRef.current = readCloud
 
   const reload = useCallback(() => readCloud({ full: true }), [readCloud])
 
   const saveReminder = useCallback(async (input: { title: string; dueAt: string; recipientIds: number[]; recurrence?: ReminderRecurrence }) => {
     const id = current.current.selectedId
+    const operationScope = scopeRef.current
     if (!id || !current.current.loaded) throw new Error('请先绑定并加载共享空间，再添加提醒。')
     const { reminder } = await qoderApi.createReminder(id, input)
-    if (mounted.current && current.current.selectedId === id) {
+    if (mounted.current && current.current.selectedId === id && scopeRef.current === operationScope) {
       update({ reminders: [...current.current.reminders.filter((item) => item.id !== reminder.id), reminder] })
       void readRef.current()
     }
@@ -294,9 +313,10 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
 
   const changeReminder = useCallback(async (reminderId: string, status: 'completed' | 'scheduled' | 'cancelled') => {
     const id = current.current.selectedId
+    const operationScope = scopeRef.current
     if (!id || !current.current.loaded) throw new Error('共享提醒还未加载，请稍后再试。')
     const { reminder } = await qoderApi.updateReminder(id, reminderId, status)
-    if (mounted.current && current.current.selectedId === id) {
+    if (mounted.current && current.current.selectedId === id && scopeRef.current === operationScope) {
       const currentReminder = { ...reminder, updatedAt: new Date().toISOString() }
       update({ reminders: current.current.reminders.map((item) => item.id === reminder.id ? currentReminder : item) })
       void readRef.current()
@@ -305,18 +325,19 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
 
   const deleteReminder = useCallback(async (reminderId: string) => {
     const id = current.current.selectedId
+    const operationScope = scopeRef.current
     if (!id || !current.current.loaded) throw new Error('共享提醒还未加载，请稍后再试。')
     await qoderApi.deleteReminder(id, reminderId)
-    if (mounted.current && current.current.selectedId === id) {
+    if (mounted.current && current.current.selectedId === id && scopeRef.current === operationScope) {
       update({ reminders: current.current.reminders.filter((item) => item.id !== reminderId) })
       void readRef.current()
     }
   }, [update])
 
-  const sendMessage = useCallback(async (text: string, files: File[] = [], visibility: 'shared' | 'private' = 'shared', silent = false): Promise<boolean> => {
+  const sendMessage = useCallback(async (text: string, files: MiniFile[] = [], visibility: 'shared' | 'private' = 'shared', silent = false): Promise<boolean> => {
     const snapshot = current.current
     const draft = text.trim()
-    if ((!draft && !files.length) || sendLock.current) return false
+    if ((!draft && !files.length) || sendLock.current?.scope === scopeRef.current) return false
     if (!snapshot.selectedId || !snapshot.loaded || snapshot.error || snapshot.pending
       || snapshot.session?.status.toLowerCase() !== 'idle') {
       throw new Error('请等待会话同步完成或当前回复结束后再发送。')
@@ -324,6 +345,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     if (draft.length > 2_000) throw new Error('这条消息有点长，请控制在 2000 字以内。')
     if (!selfUserId) throw new Error('账号信息还未加载，请稍后再发送。')
     const id = snapshot.selectedId
+    const submissionScope = scopeRef.current
     suppressStoppedError.current = false
     const localId = `local_${Date.now()}_${++localMessageSequence.current}`
     const now = new Date()
@@ -331,7 +353,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       id: localId, sender: 'self', userId: selfUserId,
       displayName: snapshot.members.find((member) => member.userId === selfUserId)?.name,
       source: 'chat', kind: 'text', text: draft, visibility,
-      files: files.map((file) => file.name), time: now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }),
+      files: files.map((file) => file.name), time: `${String((now.getUTCHours() + 8) % 24).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}`,
       createdAt: now.toISOString(), localStatus: 'sending',
     }
     let finishSubmission = () => {}
@@ -342,7 +364,8 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       idleEventId: snapshot.lastIdleEventId,
       silent, visibility, dispatched: false, submissionDone, finishSubmission,
     }
-    sendLock.current = true
+    const submissionLock = { scope: submissionScope, operation: Symbol() }
+    sendLock.current = submissionLock
     cancelRead()
     pendingTurns.current.set(id, pendingTurn)
     update({ messages: mergeMessages(snapshot.messages, [optimistic]), submitting: true, pending: true, replyMode: silent ? 'silent' : '', error: '', turnError: '', refreshing: false,
@@ -350,14 +373,14 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     let shouldRead = false
     try {
       const result = await qoderApi.sendMessage(id, draft, files, visibility, () => {
-        if (pendingTurn.stopRequested) return false
+        if (pendingTurn.stopRequested || !mounted.current || scopeRef.current !== submissionScope || current.current.selectedId !== id) return false
         pendingTurn.dispatched = true
         return true
       })
       shouldRead = true
       const acceptedTurn = pendingTurns.current.get(id)
-      if (acceptedTurn && result.replyMode === 'silent') acceptedTurn.silent = true
-      if (mounted.current && current.current.selectedId === id) {
+      if (acceptedTurn === pendingTurn && result.replyMode === 'silent') acceptedTurn.silent = true
+      if (mounted.current && current.current.selectedId === id && scopeRef.current === submissionScope) {
         update({ replyMode: result.replyMode ?? '', messages: mergeMessages(current.current.messages, result.messages)
           .map((message) => message.id === localId ? { ...message, localStatus: 'sent' as const } : message)
           .filter((message) => isVisibleChatMessage(message, current.current.members)),
@@ -371,20 +394,22 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       return true
     } catch (error) {
       if (error instanceof SendCancelledError) {
-        pendingTurns.current.delete(id)
-        suppressStoppedError.current = true
-        clearStoppedLater()
-        if (mounted.current && current.current.selectedId === id) update({
-          messages: current.current.messages.filter((message) => message.id !== localId),
-          pending: false, stopping: false, replyFeedback: { phase: 'stopped' },
-        })
+        if (pendingTurns.current.get(id) === pendingTurn) pendingTurns.current.delete(id)
+        if (mounted.current && current.current.selectedId === id && scopeRef.current === submissionScope) {
+          suppressStoppedError.current = true
+          clearStoppedLater()
+          update({
+            messages: current.current.messages.filter((message) => message.id !== localId),
+            pending: false, stopping: false, replyFeedback: { phase: 'stopped' },
+          })
+        }
         return false
       }
-      const uncertain = error instanceof ApiError && (error.status >= 500 || !!error.code && ['TIMEOUT', 'NETWORK_ERROR', 'upstream_timeout', 'connection_failed'].includes(error.code))
+      const uncertain = error instanceof ApiError && (error.status >= 500 || !!error.code && ['TIMEOUT', 'NETWORK_ERROR', 'upstream_timeout', 'connection_failed', 'LOCAL_IMAGE_ERROR'].includes(error.code))
       const stopRequested = !!pendingTurns.current.get(id)?.stopRequested
       if (uncertain) shouldRead = true
-      if (!uncertain) pendingTurns.current.delete(id)
-      if (mounted.current && current.current.selectedId === id) {
+      if (!uncertain) if (pendingTurns.current.get(id) === pendingTurn) pendingTurns.current.delete(id)
+      if (mounted.current && current.current.selectedId === id && scopeRef.current === submissionScope) {
         update({
           messages: current.current.messages.map((message) => message.id === localId
             ? { ...message, localStatus: uncertain ? 'uncertain' : 'failed' } : message),
@@ -396,21 +421,23 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       if (uncertain) return true
       throw error
     } finally {
-      sendLock.current = false
+      if (sendLock.current === submissionLock) sendLock.current = null
       finishSubmission()
-      if (mounted.current && current.current.selectedId === id) {
+      if (mounted.current && current.current.selectedId === id && scopeRef.current === submissionScope) {
         update({ submitting: false })
         if (shouldRead) void readRef.current()
         else schedule()
-      }
+      } else if (mounted.current && isAppVisible()) void readRef.current()
     }
   }, [cancelRead, clearStoppedLater, schedule, selfUserId, update])
 
   const stopTurn = useCallback(async (): Promise<void> => {
     const id = current.current.selectedId
+    const submissionScope = scopeRef.current
     const pending = id ? pendingTurns.current.get(id) : undefined
-    if (!id || !pending || pending.silent || stopLock.current) return
-    stopLock.current = true
+    if (!id || !pending || pending.silent || stopLock.current?.scope === submissionScope) return
+    const operationLock = { scope: submissionScope, operation: Symbol() }
+    stopLock.current = operationLock
     pending.stopRequested = true
     update({ stopping: true, replyFeedback: { phase: 'stopping' } })
     try {
@@ -418,19 +445,19 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       const result = await qoderApi.cancelTurn(id, pending.visibility)
       if (result.status === 'idle') {
         await pending.submissionDone
-        if (pendingTurns.current.get(id) !== pending) return
+        if (pendingTurns.current.get(id) !== pending || scopeRef.current !== submissionScope) return
         await qoderApi.cancelTurn(id, pending.visibility)
       }
       pending.cancelAccepted = true
-      if (mounted.current && current.current.selectedId === id) void readRef.current({ full: true })
+      if (mounted.current && current.current.selectedId === id && scopeRef.current === submissionScope) void readRef.current({ full: true })
     } catch (error) {
       pending.stopRequested = false
-      if (mounted.current && current.current.selectedId === id && pendingTurns.current.has(id)) {
+      if (mounted.current && current.current.selectedId === id && scopeRef.current === submissionScope && pendingTurns.current.has(id)) {
         update({ stopping: false, replyFeedback: { phase: 'waiting' } })
       }
       throw error
     } finally {
-      stopLock.current = false
+      if (stopLock.current === operationLock) stopLock.current = null
     }
   }, [update])
 
@@ -440,23 +467,23 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     return () => { mounted.current = false; cancelRead(); if (stoppedTimer.current) clearTimeout(stoppedTimer.current) }
   }, [cancelRead, reload])
 
-  useEffect(() => {
-    const resume = () => {
-      if (document.visibilityState === 'visible' && !controller.current
-        && (current.current.loaded || !current.current.error)) void readRef.current()
-    }
-    window.addEventListener('focus', resume)
-    document.addEventListener('visibilitychange', resume)
-    return () => { window.removeEventListener('focus', resume); document.removeEventListener('visibilitychange', resume) }
-  }, [])
+  useEffect(() => onAppVisibilityChange((active) => {
+    setVisible(active)
+    if (active) void readRef.current()
+    else { cancelRead(); update({ streaming: false }) }
+  }), [cancelRead, update])
 
   /** 回答云端选择题（AskUserQuestion）：回传后本轮继续，所以按发送一样置忙并刷新。 */
   const answerAsk = useCallback(async (toolUseId: string, text: string): Promise<boolean> => {
     const snapshot = current.current
     const id = snapshot.selectedId
+    const submissionScope = scopeRef.current
     suppressStoppedError.current = false
-    if (!id || sendLock.current) throw new Error('会话还没准备好，请稍后再试。')
-    sendLock.current = true
+    if (!id || sendLock.current?.scope === scopeRef.current) throw new Error('会话还没准备好，请稍后再试。')
+    if (pendingTurns.current.has(id)) throw new Error('上一次回答还在确认，请等待同步，避免重复发送。')
+    if (snapshot.messages.find((message) => message.id === toolUseId)?.answered) throw new Error('这道问题已经回答过了。')
+    const submissionLock = { scope: submissionScope, operation: Symbol() }
+    sendLock.current = submissionLock
     cancelRead()
     let finishSubmission = () => {}
     const submissionDone = new Promise<void>((resolve) => { finishSubmission = resolve })
@@ -466,29 +493,35 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       idleEventId: snapshot.lastIdleEventId,
       silent: false,
       visibility: snapshot.messages.find((message) => message.id === toolUseId)?.visibility === 'private' ? 'private' : 'shared',
-      dispatched: true, submissionDone, finishSubmission,
+      dispatched: true, toolUseId, submissionDone, finishSubmission,
     }
     pendingTurns.current.set(id, pendingTurn)
     update({ submitting: true, pending: true, error: '', replyFeedback: { phase: 'sending' } })
     try {
       await qoderApi.sendToolResult(id, toolUseId, text)
-      if (mounted.current && current.current.selectedId === id) {
+      if (mounted.current && current.current.selectedId === id && scopeRef.current === submissionScope) {
         // 增量刷新取不到更早的 ask 事件，先本地标记已回答，免得卡片还能再点一次。
         update({ messages: current.current.messages.map((message) => (message.id === toolUseId ? { ...message, answered: true } : message)),
           ...(current.current.replyFeedback?.phase === 'sending' ? { replyFeedback: { phase: 'waiting' } as ReplyFeedback } : {}) })
       }
       return true
     } catch (error) {
-      pendingTurns.current.delete(id)
-      if (mounted.current && current.current.selectedId === id) update({ pending: false, error: '', replyFeedback: { phase: 'error', message: errorMessage(error) } })
+      const uncertain = error instanceof ApiError && (error.status >= 500 || ['TIMEOUT', 'NETWORK_ERROR', 'upstream_timeout', 'connection_failed', 'LOCAL_IMAGE_ERROR'].includes(error.code ?? ''))
+      if (!uncertain && pendingTurns.current.get(id) === pendingTurn) pendingTurns.current.delete(id)
+      if (mounted.current && current.current.selectedId === id && scopeRef.current === submissionScope) update({
+        pending: uncertain, error: '',
+        ...(uncertain ? { messages: current.current.messages.map((message) => message.id === toolUseId ? { ...message, answered: true } : message) } : {}),
+        replyFeedback: uncertain ? { phase: 'delayed', message: '回答发送状态待确认，正在自动检查，请勿重复回答。' } : { phase: 'error', message: errorMessage(error) },
+      })
+      if (uncertain) return true
       throw error
     } finally {
-      sendLock.current = false
+      if (sendLock.current === submissionLock) sendLock.current = null
       finishSubmission()
-      if (mounted.current && current.current.selectedId === id) {
+      if (mounted.current && current.current.selectedId === id && scopeRef.current === submissionScope) {
         update({ submitting: false })
         void readRef.current()
-      }
+      } else if (mounted.current && isAppVisible()) void readRef.current()
     }
   }, [cancelRead, update])
 
@@ -496,14 +529,15 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
 
   useEffect(() => {
     const id = state.selectedId
-    if (!state.loaded || !id) return
+    if (!state.loaded || !id || !visible) return
+    const streamScope = scopeRef.current
     const source = qoderApi.stream(id, current.current.cursor)
-    source.onopen = () => update({ streaming: true })
-    source.onerror = () => update({ streaming: false })
+    source.onopen = () => { if (isAppVisible() && scopeRef.current === streamScope) update({ streaming: true }) }
+    source.onerror = () => { if (scopeRef.current === streamScope) update({ streaming: false }) }
     source.onmessage = (event) => {
       let item: CloudStreamEvent & { private?: boolean }
       try { item = JSON.parse(event.data) as CloudStreamEvent & { private?: boolean } } catch { return }
-      if (current.current.selectedId !== id) return
+      if (!isAppVisible() || current.current.selectedId !== id || scopeRef.current !== streamScope) return
       const snapshot = current.current
       if (item.private && item.type === 'status') { void readRef.current({ full: true }); return }
       const nextCursor = item.private ? snapshot.cursor : item.id
@@ -561,7 +595,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     const privateSource = hasPrivateChannel ? qoderApi.privateStream(id) : null
     if (privateSource) privateSource.onmessage = source.onmessage
     return () => { source.close(); privateSource?.close(); update({ streaming: false }) }
-  }, [state.selectedId, state.loaded, hasPrivateChannel, clearStoppedLater, update])
+  }, [state.selectedId, state.loaded, hasPrivateChannel, visible, clearStoppedLater, update])
 
   const busy = state.pending || isRemoteBusy(state.session)
   const replyFeedback = state.replyFeedback?.phase === 'complete' ? null : state.replyFeedback

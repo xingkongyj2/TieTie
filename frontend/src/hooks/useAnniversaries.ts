@@ -1,3 +1,4 @@
+import { isAppVisible, onAppVisibilityChange } from '../lib/platform'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { anniversariesApi, type AnniversaryResult } from '../api/anniversaries'
 
@@ -35,7 +36,7 @@ export function useAnniversaries(sessionId?: string) {
     void reloadRef.current()
     // Refresh only the loaded pages, preserving keyset pagination and cursor.
     const timer = setInterval(() => {
-      if (document.visibilityState === 'visible') void refreshFeatured()
+      if (isAppVisible()) void refreshFeatured()
     }, 15000)
     const refreshFeatured = async () => {
       if (loadingRef.current) return
@@ -51,9 +52,8 @@ export function useAnniversaries(sessionId?: string) {
         } } : { sessionId, pages: 1, data: first })
       } catch { /* Explicit refresh reports errors without replacing live data. */ }
     }
-    const refresh = () => { if (document.visibilityState === 'visible') void refreshFeatured() }
-    window.addEventListener('focus', refresh)
-    return () => { clearInterval(timer); window.removeEventListener('focus', refresh) }
+    const dispose = onAppVisibilityChange(visible => { if (visible) void refreshFeatured() })
+    return () => { clearInterval(timer); dispose() }
   }, [sessionId])
   const pin = async (id: string, pinned: boolean) => {
     if (!sessionId) throw new Error('请先新建两人空间。')

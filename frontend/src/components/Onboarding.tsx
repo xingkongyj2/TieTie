@@ -1,4 +1,5 @@
-import { ArrowRight, CakeSlice, CalendarDays, Check, CircleUserRound, Link2, MessageCircle, Pencil, UserRound, UsersRound } from 'lucide-react'
+import { ScrollView } from '@tarojs/components'
+import { ArrowRight, CakeSlice, CalendarDays, Check, CircleUserRound, Link2, MessageCircle, Pencil, UserRound, UsersRound } from './Icons'
 import { useState } from 'react'
 import type { Member } from '../types'
 import { Avatar } from './Avatar'
@@ -26,7 +27,7 @@ export function Onboarding({ step, username, member, onSaveMember, onNext, onDon
 
   return <div className="app-shell onboarding-page">
     <header className="onboarding-header"><h1>贴贴清单</h1><span>初次见面</span></header>
-    <div className="onboarding-scroll" inert={pickerOpen}>
+    <ScrollView scrollY enhanced showScrollbar={false} className="onboarding-scroll" aria-hidden={pickerOpen} style={{ pointerEvents: pickerOpen ? 'none' : undefined }}>
       <div className="onboarding-progress" aria-label={`第 ${stepIndex + 1} 步，共 3 步`}>
         {steps.map((label, index) => <span className={index === stepIndex ? 'is-current' : index < stepIndex ? 'is-done' : ''} key={label}>
           {index > 0 && <i aria-hidden="true" />}<span>{index < stepIndex ? <Check size={13} /> : index + 1}</span>{label}
@@ -71,7 +72,7 @@ export function Onboarding({ step, username, member, onSaveMember, onNext, onDon
         </div>
         <button type="button" className="primary-button onboarding-done" onClick={onDone}>进入首页 <ArrowRight size={16} /></button>
       </>}
-    </div>
+    </ScrollView>
     {pickerOpen && <CharacterPicker selectedAvatar={avatar} onSelect={setAvatar} onClose={() => setPickerOpen(false)} />}
     {toast && <div className="toast" role="status">{toast}</div>}
   </div>
