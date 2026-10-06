@@ -15,6 +15,30 @@ test('WeChat login exchanges a fresh code on each attempt and returns the backen
   assert.deepEqual(exchanged, ['code-1', 'code-2'])
 })
 
+test('optional WeChat profile data is forwarded without becoming login proof', async () => {
+  let received: { code: string; profile?: { nickname: string; avatarUrl: string } } | undefined
+  const account = { token: 'account-jwt' }
+  const result = await completeWechatLogin({
+    getProfile: async () => ({ nickname: '小贴', avatarUrl: 'https://thirdwx.qlogo.cn/avatar' }),
+    login: async () => ({ code: 'fresh-code' }),
+    exchange: async (code, profile) => { received = { code, profile }; return account },
+  })
+  assert.equal(result, account)
+  assert.deepEqual(received, { code: 'fresh-code', profile: { nickname: '小贴', avatarUrl: 'https://thirdwx.qlogo.cn/avatar' } })
+})
+
+test('declining optional WeChat profile still completes login', async () => {
+  let exchanged = false
+  const account = { token: 'account-jwt' }
+  const result = await completeWechatLogin({
+    getProfile: async () => { throw new Error('user denied') },
+    login: async () => ({ code: 'fresh-code' }),
+    exchange: async (code, profile) => { exchanged = code === 'fresh-code' && profile === undefined; return account },
+  })
+  assert.equal(result, account)
+  assert.equal(exchanged, true)
+})
+
 test('missing WeChat code does not call the backend', async () => {
   let exchanged = false
   await assert.rejects(completeWechatLogin({

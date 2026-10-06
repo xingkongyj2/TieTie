@@ -39,7 +39,9 @@ button::after { border:0; }
 .mini-root .composer-input-wrap { position:relative; }
 .mini-root .composer-placeholder { position:absolute; top:11px; left:2px; right:2px; overflow:hidden; color:#a3a7b0; font-size:14px; line-height:22px; white-space:nowrap; text-overflow:ellipsis; pointer-events:none; }
 .mini-root input.line-input { height:46px; line-height:46px; }
-.mini-root .date-picker-readonly { display:flex; align-items:center; height:40px; line-height:1.4; }
+.mini-root .date-picker-readonly { display:flex; align-items:center; height:48px; min-height:48px !important; line-height:1.4; }
+.mini-root .onboarding-profile-form .gender-options { gap:12px; }
+.mini-root .onboarding-profile-form .gender-options button { display:flex; align-items:center; justify-content:center; height:48px; min-height:48px; padding:0 12px; line-height:1.4; }
 .mini-root .mine-profile-editor .gender-options button { display:flex; align-items:center; justify-content:center; height:44px; padding:0; line-height:1.4; }
 .mini-root .mine-profile-editor .hobby-input-row input { height:44px; line-height:44px; }
 .mini-root .mine-profile-editor .hobby-input-row button { display:flex; align-items:center; justify-content:center; height:36px; padding:0 14px; line-height:1.4; }

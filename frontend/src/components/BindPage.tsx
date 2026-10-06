@@ -46,7 +46,7 @@ export function BindPage({ code, onBind, onBack, notify, embedded = false, showH
     setError('');
     try {
       await onBind(target);
-      notify('绑定成功，小窝已就绪');
+      notify('绑定成功，欢迎来到你们的专属空间');
     } catch (e) {
       setError(e instanceof Error ? e.message : '绑定失败，请稍后重试。');
     } finally {

@@ -21,7 +21,36 @@
 .onboarding-avatar-button > span:last-child { position: absolute; right: -4px; bottom: -4px; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; color: #fff; background: var(--blue); }
 .onboarding-avatar-row strong { color: #34435c; font-size: 13px; font-weight: 600; }
 .onboarding-profile-form .form-card { background: #f7f8fa; }
-.onboarding-profile-form .gender-options button { min-height: 44px; }
+/* Native WeChat buttons ship with their own line-height and vertical padding.
+ * Reset the controls here so the two choices stay centered and readable on
+ * both H5 and the mini-program renderer. */
+.onboarding-profile-form .gender-options { gap: 12px; }
+.onboarding-profile-form .gender-options button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1px solid #edf0f5;
+  color: #65738a;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.onboarding-profile-form .gender-options button.selected {
+  border-color: #dbe7ff;
+  color: var(--blue);
+  background: var(--blue-pale);
+  font-weight: 600;
+}
+.onboarding-profile-form .field-label { font-size: 13px; }
+.onboarding-profile-form .date-picker-readonly {
+  min-height: 48px !important;
+  padding-top: 0;
+  padding-bottom: 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
 .onboarding-profile-form .primary-button { font-size: 14px; }
 .onboarding-profile-form .field-required { margin-left: 5px; color: #c06b78; font-size: 10px; font-weight: 500; }
 .onboarding-profile-form .member-field-error { margin: 8px 2px 0; color: #c0636d; font-size: 11px; line-height: 1.5; }

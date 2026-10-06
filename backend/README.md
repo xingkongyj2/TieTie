@@ -85,7 +85,7 @@ go run ./cmd/server           # 或 make dev
 
 ## 账号与绑定
 
-- `POST /api/auth/wechat {code}`：小程序用 `wx.login` 获取临时 code；服务端通过固定的微信 HTTPS `jscode2session` 接口验证身份，返回 `{token, user, binding, isNewUser}`。首次自动创建新账号和邀请码，`isNewUser=true` 时前端进入资料引导；重复登录使用原账号及绑定。不会自动合并历史账号密码账号。
+- `POST /api/auth/wechat {code, nickname?, avatarUrl?}`：小程序用 `wx.login` 获取临时 code，并可在用户同意 `wx.getUserProfile` 后提交昵称和头像；服务端通过固定的微信 HTTPS `jscode2session` 接口验证身份，返回 `{token, user, binding, isNewUser}`。展示资料仅作为个人档案保存，拒绝授权或头像不可用时随机使用本地默认头像；首次自动创建新账号和邀请码，`isNewUser=true` 时前端进入资料引导；重复登录使用原账号及绑定。不会自动合并历史账号密码账号。
 - 微信身份独立存储在 `wechat_identities`，`(app_id, open_id)` 复合主键保证唯一；用户和身份在同一事务中创建，并发重复登录回滚多余用户后读取已创建账号。用户名为随机值，不含 OpenID；微信账号没有可用于密码登录的密码。客户端传入的 OpenID 或 session key 不作为登录凭据，接口和日志均不包含 AppSecret 或 session key。
 - 首次启动更新后的后端会通过 AutoMigrate 新建 `wechat_identities`，无需手动改已有用户。部署时填写 `WECHAT_APP_ID` 和 `WECHAT_APP_SECRET` 并重启后端；缺少配置返回 503 `wechat_login_unavailable`，无效或已使用的 code 返回 401 `invalid_wechat_code`，微信请求超时返回 504 `wechat_login_timeout`，上游故障返回 502 `wechat_login_failed`。小程序需将后端 HTTPS 地址配置为 request 合法域名，后端需可访问 `api.weixin.qq.com`。
 - 部署后可向 `/api/auth/wechat` POST 空 JSON `{}` 检查接口：新版应返回 400 `invalid_wechat_code`，不会请求微信或创建账号；若仍返回 404 `unsupported_route`，当前服务尚未更新或请求被转发到旧实例。需要先构建并发布包含新版 Go 后端的镜像，再更新服务器容器；只上传小程序或仅拉取旧镜像不能增加此路由。

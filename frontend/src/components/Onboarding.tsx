@@ -22,6 +22,7 @@ interface Props {
 export function Onboarding({ step, username, member, onSaveMember, onNext, onDone, notify, toast }: Props) {
   const [avatar, setAvatar] = useState(member.avatar)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const displayName = member.name.trim() || username
   const stepIndex = step === 'profile' ? 0 : step === 'bind' ? 1 : 2
   const steps = ['填写资料', '连接彼此', '开始使用']
 
@@ -35,7 +36,7 @@ export function Onboarding({ step, username, member, onSaveMember, onNext, onDon
       </div>
 
       {step === 'profile' ? <>
-        <div className="onboarding-intro"><h2>先认识你，{username}</h2><p>填一点关于自己的信息，以后也能在「我的」里修改</p></div>
+        <div className="onboarding-intro"><h2>先认识你，{displayName}</h2><p>填一点关于自己的信息，以后也能在「我的」里修改</p></div>
         <div className="onboarding-avatar-row">
           <button type="button" className="onboarding-avatar-button" aria-label="选择头像" onClick={() => setPickerOpen(true)}><Avatar member={{ ...member, avatar }} size="large" /><span><Pencil size={12} /></span></button>
           <div><strong>选一张喜欢的头像</strong></div>

@@ -334,6 +334,11 @@ export default function TieTieApp() {
     const verified = chat.members.find((item) => item.userId === userId);
     return { ...member, userId, name: member.id === 'self' ? member.name : member.profileName || verified?.name || '另一位成员' };
   });
+  const welcomeMembers = sharedMembers.filter((member) => member.id !== 'ai');
+  const welcomeNames = welcomeMembers.map((member) => member.name).filter(Boolean);
+  const welcomeTitle = welcomeNames.length >= 2
+    ? `欢迎来到 ${welcomeNames[0]} 和 ${welcomeNames[1]} 的专属空间`
+    : '欢迎来到你们的专属空间';
   const reminders: Reminder[] = chat.reminders.map((reminder) => ({
     id: reminder.id, title: reminder.title, time: reminder.dueAt,
     recipientIds: reminder.recipientIds, status: reminder.status,
@@ -441,7 +446,20 @@ export default function TieTieApp() {
           userScrolledUp.current = !atBottom;
         }}>
 
-        {(nativeHistory || emptyMode) && <div hidden={!emptyMode} style={nativeHistory && !emptyMode ? { display: 'none' } : undefined} className={`cloud-empty${emptyMode === 'welcome' ? ' chat-welcome' : ''}`} role={emptyMode === 'loading' ? 'status' : undefined}>{emptyMode === 'loading' ? <><span className="spinner" /><p>{chat.slowLoading ? '云端连接较慢，正在继续尝试…' : '正在找回我们聊过的话…'}</p></> : emptyMode === 'welcome' ? <><span className="welcome-eyebrow"><Sparkles size={13} />我们的共享空间</span><SpaceBuddy variant="blue" className="chat-welcome-buddy" /><h2>共同的提醒，日常的分享</h2>{!chat.session && <p>正在准备我们的共享空间…</p>}</> : null}</div>}
+        {(nativeHistory || emptyMode) && <div hidden={!emptyMode} style={nativeHistory && !emptyMode ? { display: 'none' } : undefined} className={`cloud-empty${emptyMode === 'welcome' ? ' chat-welcome' : ''}`} role={emptyMode === 'loading' ? 'status' : undefined}>{emptyMode === 'loading' ? <><span className="spinner" /><p>{chat.slowLoading ? '云端连接较慢，正在继续尝试…' : '正在找回我们聊过的话…'}</p></> : emptyMode === 'welcome' ? <>
+          <span className="welcome-eyebrow"><Sparkles size={13} />贴贴的第一声问候</span>
+          <SpaceBuddy variant="blue" className="chat-welcome-buddy" />
+          <h2>{welcomeTitle}</h2>
+          <p className="chat-welcome-greeting">嗨{welcomeNames.length ? `，${welcomeNames.join(' 和 ')}` : ''}！我是贴贴，很高兴和你们见面。</p>
+          <p>这里是只属于你们的共享小窝。你们可以随时把想记住的事告诉我，我会帮你们：</p>
+          <ul className="chat-welcome-list">
+            <li><strong>记下共同提醒</strong><span>约会、待办和纪念日都不会忘</span></li>
+            <li><strong>照顾日常</strong><span>提供天气、穿搭和早晚关怀</span></li>
+            <li><strong>陪你们聊天</strong><span>分享心情，也可以随时 @ 对方</span></li>
+          </ul>
+          <p className="chat-welcome-prompt">准备好了吗？先说一句“你好”，我们就开始啦 ✨</p>
+          {!chat.session && <p>正在准备我们的共享空间…</p>}
+        </> : null}</div>}
         <div className="messages">{mountedMessages.map((message, index) => <Fragment key={message.renderKey ?? message.id}>
           {(index === 0 || messageDay(mountedMessages[index - 1].createdAt) !== messageDay(message.createdAt)) && <div className="chat-date"><span /><strong>{messageDayLabel(message.createdAt)}</strong><span /></div>}
           <ChatMessage message={message} members={sharedMembers} onError={notify} onOpenImage={(src, alt) => setPreviewImage({ src, alt })} onAnswer={chat.answerAsk} answerDisabled={chat.submitting || chat.busy} onLayoutChange={() => { if (nearBottom.current) showLatest(); }} />
