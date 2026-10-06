@@ -7,6 +7,7 @@ func (s *Server) initQueueWakes() {
 		s.conversationWake = make(chan struct{}, 1)
 		s.controlWake = make(chan struct{}, 1)
 		s.memoryWake = make(chan struct{}, 1)
+		s.welcomeWake = make(chan struct{}, 1)
 	})
 }
 
@@ -30,4 +31,9 @@ func (s *Server) wakeControl() {
 func (s *Server) wakeMemory() {
 	s.initQueueWakes()
 	signalQueue(s.memoryWake)
+}
+
+func (s *Server) wakeWelcome() {
+	s.initQueueWakes()
+	signalQueue(s.welcomeWake)
 }

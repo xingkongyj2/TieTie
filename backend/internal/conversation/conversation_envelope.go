@@ -245,6 +245,14 @@ func decodeV2(value string) (Input, bool) {
 			input.ReplyTo = e.ReplyTo
 		}
 		input.Hidden = true
+	case "binding_welcome":
+		// The binding bootstrap is a backend-authored prompt. It must never be
+		// rendered as a member message, while the assistant reply remains a
+		// normal visible chat bubble.
+		if e.Actor.Kind != "system" || strings.TrimSpace(e.Text) == "" {
+			return Input{}, false
+		}
+		input.Hidden = true
 	default:
 		return Input{}, false
 	}

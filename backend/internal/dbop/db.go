@@ -220,6 +220,7 @@ func Open(cfg MySQLConfig) (*DB, error) {
 		&MemoryPage{},
 		&MemoryRevision{},
 		&ControlJob{},
+		&ProactiveWelcome{},
 		&MemoryOperationReceipt{},
 	); err != nil {
 		return nil, err
@@ -276,6 +277,7 @@ func ensureIndex(gdb *gorm.DB, table, index, ddl string) error {
 const (
 	claimLockReminders            = "tietie_claim_reminders"
 	claimLockControls             = "tietie_claim_controls"
+	claimLockProactiveWelcomes    = "tietie_claim_proactive_welcomes"
 	claimLockSessionSync          = "tietie_claim_session_sync"
 	claimLockMemorySync           = "tietie_claim_memory_sync"
 	claimLockImpressions          = "tietie_claim_impressions"

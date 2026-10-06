@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -153,6 +152,12 @@ func (s *Server) handleMessagePreview(w http.ResponseWriter, r *http.Request) {
 }
 
 func cachedPublicMessage(row dbop.Message, binding *dbop.Binding, viewer int64) (qoder.PublicMessage, bool) {
+	// Older releases stored a locally fabricated welcome bubble. It is not an
+	// AI response and must not be shown after the cloud-authored bootstrap was
+	// introduced.
+	if strings.HasPrefix(row.ID, "evt_welcome_") {
+		return qoder.PublicMessage{}, false
+	}
 	if row.Sender != "ai" && row.Sender != "user" {
 		return qoder.PublicMessage{}, false
 	}
@@ -243,7 +248,6 @@ func (s *Server) getMessages(w http.ResponseWriter, r *http.Request, id string) 
 		writeError(w, err)
 		return
 	}
-	s.appendBindingWelcome(r.Context(), id, result)
 	writeJSON(w, http.StatusOK, struct {
 		*qoder.MessagesResult
 		Members        []conversation.Member `json:"members"`
@@ -252,73 +256,17 @@ func (s *Server) getMessages(w http.ResponseWriter, r *http.Request, id string) 
 	}{result, space.Members, reminders, warning})
 }
 
-// ensureBindingWelcomeForSession backfills the first AI greeting for spaces
-// created before the welcome message was introduced. SaveMessage is an
-// idempotent upsert keyed by the session-derived message ID.
+// ensureBindingWelcomeForSession backfills the cloud-authored greeting for
+// spaces created before the proactive queue was introduced.
 func (s *Server) ensureBindingWelcomeForSession(ctx context.Context, sessionID string, viewerID int64) {
 	if s.DB == nil || viewerID == 0 {
-		return
-	}
-	present, err := s.DB.HasMessage(ctx, "evt_welcome_"+sessionID)
-	if err != nil || present {
 		return
 	}
 	binding, err := s.DB.GetBindingBySessionID(ctx, sessionID)
 	if err != nil || binding == nil {
 		return
 	}
-	self, err := s.DB.GetUserByID(ctx, viewerID)
-	if err != nil || self == nil {
-		return
-	}
-	partner, err := s.DB.GetUserByID(ctx, binding.OtherUser(viewerID))
-	if err != nil || partner == nil {
-		return
-	}
-	s.storeBindingWelcome(ctx, sessionID, self, partner)
-}
-
-// appendBindingWelcome restores the deterministic greeting saved by the bind
-// handler when the upstream cloud session has not emitted any events yet.
-// It is appended after cursor filtering because it is a local event rather
-// than a Qoder event, and mergeMessages de-duplicates it by its stable ID.
-func (s *Server) appendBindingWelcome(ctx context.Context, sessionID string, result *qoder.MessagesResult) {
-	if s.DB == nil || result == nil {
-		return
-	}
-	rows, err := s.DB.ListMessages(ctx, sessionID, 300)
-	if err != nil {
-		return
-	}
-	present := make(map[string]struct{}, len(result.Messages))
-	for _, message := range result.Messages {
-		present[message.ID] = struct{}{}
-	}
-	for _, row := range rows {
-		if !strings.HasPrefix(row.ID, "evt_welcome_") || row.Sender != "ai" || row.Source != "chat" || row.Text == "" {
-			continue
-		}
-		if _, ok := present[row.ID]; ok {
-			continue
-		}
-		createdAt, parseErr := time.Parse(time.RFC3339Nano, row.CloudCreatedAt)
-		if parseErr != nil {
-			continue
-		}
-		result.Messages = append(result.Messages, qoder.PublicMessage{
-			ID: row.ID, Sender: "ai", Text: row.Text, DisplayName: row.DisplayName,
-			Source: "chat", Kind: "text", Visibility: "shared",
-			CreatedAt: row.CloudCreatedAt, Time: createdAt.In(time.FixedZone("Asia/Shanghai", 8*60*60)).Format("15:04"),
-		})
-		present[row.ID] = struct{}{}
-	}
-	sort.SliceStable(result.Messages, func(i, j int) bool {
-		left, right := result.Messages[i].CreatedAt, result.Messages[j].CreatedAt
-		if left == right {
-			return result.Messages[i].ID < result.Messages[j].ID
-		}
-		return left < right
-	})
+	s.enqueueBindingWelcome(ctx, binding)
 }
 
 // postMessage 发送消息（校验逻辑在 upload_handler.go parseMessage）。
