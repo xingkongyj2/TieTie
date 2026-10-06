@@ -20,7 +20,6 @@ import { Mine } from './components/Mine';
 import { WechatReminderBanner } from './components/WechatReminderBanner';
 import { MiniPageHeader } from './components/MiniPageHeader';
 import { Onboarding } from './components/Onboarding';
-import { SpaceBuddy } from './components/SpaceBuddies';
 import { Tools, type ToolName } from './components/Tools';
 import { useAccount } from './hooks/useAccount';
 import { useRelationship } from './hooks/useRelationship';
@@ -334,11 +333,6 @@ export default function TieTieApp() {
     const verified = chat.members.find((item) => item.userId === userId);
     return { ...member, userId, name: member.id === 'self' ? member.name : member.profileName || verified?.name || '另一位成员' };
   });
-  const welcomeMembers = sharedMembers.filter((member) => member.id !== 'ai');
-  const welcomeNames = welcomeMembers.map((member) => member.name).filter(Boolean);
-  const welcomeTitle = welcomeNames.length >= 2
-    ? `欢迎来到 ${welcomeNames[0]} 和 ${welcomeNames[1]} 的专属空间`
-    : '欢迎来到你们的专属空间';
   const reminders: Reminder[] = chat.reminders.map((reminder) => ({
     id: reminder.id, title: reminder.title, time: reminder.dueAt,
     recipientIds: reminder.recipientIds, status: reminder.status,
@@ -384,7 +378,7 @@ export default function TieTieApp() {
   };
 
 
-  const showWechatReminderBanner = nativeHistory && view === 'we' && wechatSubscription?.remaining === 0;
+  const showWechatReminderBanner = nativeHistory && view === 'we' && chat.loaded && chat.messages.length > 0 && wechatSubscription?.remaining === 0;
   return <div className={`app-shell view-${view} ${view !== 'details' ? 'has-bottom-nav' : ''}${keyboardOpen ? ' keyboard-open' : ''}${showWechatReminderBanner ? ' has-wechat-reminder' : ''}`} data-view={view} style={{ '--app-height': `${appHeight}px`, '--app-top': '0px', ...(nativeHistory ? { height: `${appHeight}px` } : {}) } as CSSProperties}>
     <NativeSlot shown={showWechatReminderBanner} overlay><WechatReminderBanner onOpen={() => goToView('mine')} /></NativeSlot>
     {nativeHistory && <NativeSlot shown={view !== 'details'} overlay>
@@ -447,8 +441,10 @@ export default function TieTieApp() {
         }}>
 
         {(nativeHistory || emptyMode) && <div hidden={!emptyMode} style={nativeHistory && !emptyMode ? { display: 'none' } : undefined} className={`cloud-empty${emptyMode === 'welcome' ? ' chat-welcome' : ''}`} role={emptyMode === 'loading' ? 'status' : undefined}>{emptyMode === 'loading' ? <><span className="spinner" /><p>{chat.slowLoading ? '云端连接较慢，正在继续尝试…' : '正在找回我们聊过的话…'}</p></> : emptyMode === 'welcome' ? <>
-          <SpaceBuddy variant="blue" className="chat-welcome-buddy" />
-          <p className="chat-welcome-message">{welcomeTitle}</p>
+          <div className="chat-welcome-card">
+            <span className="chat-welcome-icon" aria-hidden="true"><Sparkles size={15} /></span>
+            <p className="chat-welcome-message">欢迎来到两人专属空间</p>
+          </div>
         </> : null}</div>}
         <div className="messages">{mountedMessages.map((message, index) => <Fragment key={message.renderKey ?? message.id}>
           {(index === 0 || messageDay(mountedMessages[index - 1].createdAt) !== messageDay(message.createdAt)) && <div className="chat-date"><span /><strong>{messageDayLabel(message.createdAt)}</strong><span /></div>}

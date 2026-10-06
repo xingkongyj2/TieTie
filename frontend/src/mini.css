@@ -23,6 +23,7 @@ page,view,text,button,image,input,textarea,scroll-view { box-sizing:border-box; 
 .login-page { padding-top:max(28px,var(--mini-nav-top,env(safe-area-inset-top))); }
 .login-wechat-page { max-width:none; max-height:none; height:100vh; margin:0; border-radius:0; }
 .login-wechat-header,.mini-page-header { position:absolute; top:var(--mini-capsule-top,36px); left:0; width:100%; height:var(--mini-capsule-height,32px); display:flex; align-items:center; justify-content:center; text-align:center; z-index:1; }
+.mini-page-header { z-index:6; pointer-events:auto; }
 .login-wechat-header h1,.mini-page-header h1 { font-size:20px; min-width:0; max-width:max(0px,calc(var(--mini-capsule-left,calc(100vw - 100px)) + var(--mini-capsule-left,calc(100vw - 100px)) - 100vw - 24px)); margin:0; padding:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .mini-page-action { position:absolute; left:20px; top:50%; transform:translateY(-50%); }
 .mini-page-action:active:not(:disabled) { transform:translateY(-50%) scale(.975); }

@@ -89,9 +89,9 @@ h1, h2, h3, p { margin: 0; }
 .cloud-empty-mark { display: block; width: 76px; height: 76px; object-fit: contain; }
 .cloud-empty .spinner { border-color: #cddff8; border-top-color: var(--blue); }
 .chat-welcome { max-width: 365px; padding: 20px 14px 32px; gap: 0; border: 0; background: transparent; }
-.blue-companions { display: block; width: 250px; max-width: 100%; height: auto; pointer-events: none; }
-.chat-welcome-buddy { display: block; width: 120px; max-width: 100%; height: auto; margin: 0 auto 12px; pointer-events: none; }
-.chat-welcome-message { max-width: 330px; margin: 0 auto; color: #202b40; font-size: 18px; font-weight: 650; letter-spacing: -.5px; line-height: 1.6; text-align: center; }
+.chat-welcome-card { display: inline-flex; align-items: center; gap: 9px; padding: 8px 15px 8px 9px; border: 1px solid #e0eafe; border-radius: 999px; background: linear-gradient(135deg, #fbfdff 0%, #f1f6ff 100%); box-shadow: 0 8px 22px #7196d21c; color: #5478b8; }
+.chat-welcome-icon { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 50%; background: #e2ecff; color: #4f7ee0; }
+.chat-welcome-message { max-width: 330px; margin: 0; color: #57719e; font-size: 13px; font-weight: 550; letter-spacing: .1px; line-height: 1.5; text-align: center; }
 .is-spinning { animation: cloud-spin 1s linear infinite; }
 @keyframes cloud-spin { to { transform: rotate(360deg); } }
 .icon-button { display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 14px; background: white; flex-shrink: 0; }
@@ -537,7 +537,7 @@ h1, h2, h3, p { margin: 0; }
   .bind-code-card { padding-right: 15px; padding-left: 15px; }
   .bind-code-actions { gap: 8px; }
   .bind-code-actions button { padding-right: 7px; padding-left: 7px; gap: 5px; font-size: 11px; }
-  .chat-welcome-message { font-size: 17px; }
+  .chat-welcome-message { font-size: 12.5px; }
 }
 
 /* ---- 登录页 ---- */
