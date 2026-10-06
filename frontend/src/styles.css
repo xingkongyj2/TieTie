@@ -89,18 +89,9 @@ h1, h2, h3, p { margin: 0; }
 .cloud-empty-mark { display: block; width: 76px; height: 76px; object-fit: contain; }
 .cloud-empty .spinner { border-color: #cddff8; border-top-color: var(--blue); }
 .chat-welcome { max-width: 365px; padding: 20px 14px 32px; gap: 0; border: 0; background: transparent; }
-.welcome-eyebrow { display: inline-flex; align-items: center; gap: 6px; color: #6684ae; font-size: 11px; }
 .blue-companions { display: block; width: 250px; max-width: 100%; height: auto; pointer-events: none; }
-.chat-welcome-buddy { display: block; width: 120px; max-width: 100%; height: auto; margin: 14px auto 12px; pointer-events: none; }
-.chat-welcome h2 { color: #202b40; font-size: 20px; font-weight: 650; letter-spacing: -.5px; line-height: 1.6; }
-.chat-welcome p { max-width: 330px; margin: 9px auto 0; color: #75859e; font-size: 12px; line-height: 1.8; }
-.chat-welcome-greeting { color: #4f6380 !important; font-size: 13px !important; }
-.chat-welcome-list { width: 100%; max-width: 330px; margin: 14px auto 0; padding: 13px 15px; box-sizing: border-box; border: 1px solid rgba(126, 153, 201, .18); border-radius: 16px; background: rgba(255, 255, 255, .7); list-style: none; text-align: left; }
-.chat-welcome-list li { display: flex; align-items: baseline; gap: 8px; padding: 5px 0; color: #75859e; font-size: 11px; line-height: 1.5; }
-.chat-welcome-list li + li { border-top: 1px solid rgba(126, 153, 201, .12); }
-.chat-welcome-list strong { flex: none; color: #3f5f96; font-size: 12px; font-weight: 650; }
-.chat-welcome-list span { min-width: 0; }
-.chat-welcome-prompt { color: #6684ae !important; }
+.chat-welcome-buddy { display: block; width: 120px; max-width: 100%; height: auto; margin: 0 auto 12px; pointer-events: none; }
+.chat-welcome-message { max-width: 330px; margin: 0 auto; color: #202b40; font-size: 18px; font-weight: 650; letter-spacing: -.5px; line-height: 1.6; text-align: center; }
 .is-spinning { animation: cloud-spin 1s linear infinite; }
 @keyframes cloud-spin { to { transform: rotate(360deg); } }
 .icon-button { display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 14px; background: white; flex-shrink: 0; }
@@ -559,7 +550,7 @@ h1, h2, h3, p { margin: 0; }
   .bind-code-card { padding-right: 15px; padding-left: 15px; }
   .bind-code-actions { gap: 8px; }
   .bind-code-actions button { padding-right: 7px; padding-left: 7px; gap: 5px; font-size: 11px; }
-  .chat-welcome h2 { font-size: 18px; }
+  .chat-welcome-message { font-size: 17px; }
 }
 
 /* ---- 登录页 ---- */

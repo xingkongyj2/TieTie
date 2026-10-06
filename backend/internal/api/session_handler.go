@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -241,12 +242,56 @@ func (s *Server) getMessages(w http.ResponseWriter, r *http.Request, id string) 
 		writeError(w, err)
 		return
 	}
+	s.appendBindingWelcome(r.Context(), id, result)
 	writeJSON(w, http.StatusOK, struct {
 		*qoder.MessagesResult
 		Members        []conversation.Member `json:"members"`
 		Reminders      []dbop.Reminder       `json:"reminders"`
 		RemindersError string                `json:"remindersError,omitempty"`
 	}{result, space.Members, reminders, warning})
+}
+
+// appendBindingWelcome restores the deterministic greeting saved by the bind
+// handler when the upstream cloud session has not emitted any events yet.
+// It is appended after cursor filtering because it is a local event rather
+// than a Qoder event, and mergeMessages de-duplicates it by its stable ID.
+func (s *Server) appendBindingWelcome(ctx context.Context, sessionID string, result *qoder.MessagesResult) {
+	if s.DB == nil || result == nil {
+		return
+	}
+	rows, err := s.DB.ListMessages(ctx, sessionID, 300)
+	if err != nil {
+		return
+	}
+	present := make(map[string]struct{}, len(result.Messages))
+	for _, message := range result.Messages {
+		present[message.ID] = struct{}{}
+	}
+	for _, row := range rows {
+		if !strings.HasPrefix(row.ID, "evt_welcome_") || row.Sender != "ai" || row.Source != "chat" || row.Text == "" {
+			continue
+		}
+		if _, ok := present[row.ID]; ok {
+			continue
+		}
+		createdAt, parseErr := time.Parse(time.RFC3339Nano, row.CloudCreatedAt)
+		if parseErr != nil {
+			continue
+		}
+		result.Messages = append(result.Messages, qoder.PublicMessage{
+			ID: row.ID, Sender: "ai", Text: row.Text, DisplayName: row.DisplayName,
+			Source: "chat", Kind: "text", Visibility: "shared",
+			CreatedAt: row.CloudCreatedAt, Time: createdAt.In(time.FixedZone("Asia/Shanghai", 8*60*60)).Format("15:04"),
+		})
+		present[row.ID] = struct{}{}
+	}
+	sort.SliceStable(result.Messages, func(i, j int) bool {
+		left, right := result.Messages[i].CreatedAt, result.Messages[j].CreatedAt
+		if left == right {
+			return result.Messages[i].ID < result.Messages[j].ID
+		}
+		return left < right
+	})
 }
 
 // postMessage 发送消息（校验逻辑在 upload_handler.go parseMessage）。

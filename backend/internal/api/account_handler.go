@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"tietie/backend/internal/memoryspace"
@@ -255,11 +256,50 @@ func (s *Server) handleBind(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		sessionID = existing.SessionID
+	} else {
+		// The first binding gets one deterministic AI-authored welcome bubble.
+		// It is stored locally so it survives refreshes and is available even
+		// before the cloud event stream has any user messages.
+		s.storeBindingWelcome(r.Context(), sessionID, self, partner)
 	}
 	writeJSON(w, http.StatusOK, AccountResult{
 		User:    userPayload(self),
 		Binding: &BindingPayload{SessionID: sessionID, PartnerID: partner.ID},
 	})
+}
+
+// storeBindingWelcome creates the one proactive greeting for a newly-created
+// space. The ID is derived from the session, so retries and concurrent bind
+// responses cannot create duplicate bubbles.
+func (s *Server) storeBindingWelcome(ctx context.Context, sessionID string, self, partner *dbop.User) {
+	if s.DB == nil || self == nil || partner == nil || strings.TrimSpace(sessionID) == "" {
+		return
+	}
+	name := func(user *dbop.User) string {
+		fallback := strings.TrimSpace(user.Username)
+		if profile, err := s.DB.GetUserProfile(ctx, user.ID); err == nil && profile != nil && strings.TrimSpace(profile.Name) != "" {
+			return strings.TrimSpace(profile.Name)
+		}
+		if fallback == "" {
+			return "你们"
+		}
+		return fallback
+	}
+	left, right := name(self), name(partner)
+	now := time.Now().UTC()
+	message := &dbop.Message{
+		ID:             "evt_welcome_" + sessionID,
+		SessionID:      sessionID,
+		Sender:         "ai",
+		DisplayName:    "贴贴",
+		Source:         "chat",
+		Visibility:     "shared",
+		Text:           fmt.Sprintf("嗨，%s 和 %s！欢迎来到你们的专属空间，我是贴贴。\n我可以帮你们记住共同提醒、生日和纪念日，也能陪你们聊天、查看天气、照顾日常。有什么想记住的事，直接告诉我就好。", left, right),
+		CloudCreatedAt: now.Format(time.RFC3339Nano),
+	}
+	if err := s.DB.SaveMessage(ctx, message); err != nil {
+		logf("绑定欢迎语落库失败 %s: %v", sessionID, err)
+	}
 }
 
 // handleUnbind 处理 POST /api/account/unbind：退出当前会话，即解除绑定关系。

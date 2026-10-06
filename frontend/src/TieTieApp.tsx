@@ -447,18 +447,8 @@ export default function TieTieApp() {
         }}>
 
         {(nativeHistory || emptyMode) && <div hidden={!emptyMode} style={nativeHistory && !emptyMode ? { display: 'none' } : undefined} className={`cloud-empty${emptyMode === 'welcome' ? ' chat-welcome' : ''}`} role={emptyMode === 'loading' ? 'status' : undefined}>{emptyMode === 'loading' ? <><span className="spinner" /><p>{chat.slowLoading ? '云端连接较慢，正在继续尝试…' : '正在找回我们聊过的话…'}</p></> : emptyMode === 'welcome' ? <>
-          <span className="welcome-eyebrow"><Sparkles size={13} />贴贴的第一声问候</span>
           <SpaceBuddy variant="blue" className="chat-welcome-buddy" />
-          <h2>{welcomeTitle}</h2>
-          <p className="chat-welcome-greeting">嗨{welcomeNames.length ? `，${welcomeNames.join(' 和 ')}` : ''}！我是贴贴，很高兴和你们见面。</p>
-          <p>这里是只属于你们的共享小窝。你们可以随时把想记住的事告诉我，我会帮你们：</p>
-          <ul className="chat-welcome-list">
-            <li><strong>记下共同提醒</strong><span>约会、待办和纪念日都不会忘</span></li>
-            <li><strong>照顾日常</strong><span>提供天气、穿搭和早晚关怀</span></li>
-            <li><strong>陪你们聊天</strong><span>分享心情，也可以随时 @ 对方</span></li>
-          </ul>
-          <p className="chat-welcome-prompt">准备好了吗？先说一句“你好”，我们就开始啦 ✨</p>
-          {!chat.session && <p>正在准备我们的共享空间…</p>}
+          <p className="chat-welcome-message">{welcomeTitle}</p>
         </> : null}</div>}
         <div className="messages">{mountedMessages.map((message, index) => <Fragment key={message.renderKey ?? message.id}>
           {(index === 0 || messageDay(mountedMessages[index - 1].createdAt) !== messageDay(message.createdAt)) && <div className="chat-date"><span /><strong>{messageDayLabel(message.createdAt)}</strong><span /></div>}
