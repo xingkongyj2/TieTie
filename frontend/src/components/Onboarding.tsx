@@ -1,7 +1,6 @@
 import { ScrollView } from '@tarojs/components'
 import { ArrowRight, CakeSlice, CalendarDays, Check, CircleUserRound, Link2, MessageCircle, UserRound, UsersRound } from './Icons'
 import type { Member } from '../types'
-import { Avatar } from './Avatar'
 import { MemberForm } from './Details'
 import './Onboarding.css'
 
@@ -33,10 +32,6 @@ export function Onboarding({ step, username, member, onSaveMember, onNext, onDon
 
       {step === 'profile' ? <>
         <div className="onboarding-intro"><h2>先认识你，{displayName}</h2><p>填一点关于自己的信息，其他资料以后也能在「我的」里修改</p></div>
-        <div className="onboarding-avatar-row">
-          <div className="onboarding-avatar-preview"><Avatar member={member} size="large" /></div>
-          <div><strong>微信头像</strong><small>登录头像会自动用于贴贴清单</small></div>
-        </div>
         <div className="onboarding-profile-form"><MemberForm member={member} onSave={onSaveMember} onSaved={onNext} submitLabel="保存并继续" required notify={notify} /></div>
       </> : step === 'bind' ? <>
         <div className="onboarding-intro"><h2>先连接彼此</h2><p>引导结束后，在「我们」里和 TA 互换邀请码，完成绑定。</p></div>

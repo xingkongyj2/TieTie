@@ -12,7 +12,11 @@ await mkdir(path.join(output, 'avatars'), { recursive: true })
 await mkdir(path.join(output, 'ip/space-buddies-v1'), { recursive: true })
 await mkdir(path.join(output, 'decor'), { recursive: true })
 await mkdir(path.join(output, 'fonts'), { recursive: true })
-for (const name of (await readdir(path.join(source, 'avatars'))).filter(name => name.endsWith('.png'))) {
+// The Taro app only ships the small fallback set used when WeChat profile
+// data is unavailable. Character-picker artwork stays in the legacy H5 tree
+// and is intentionally excluded from the mini-program package.
+const runtimeAvatars = new Set(['cream-cat.png', 'peach-cat.png', 'golden-longhair-cat.png', 'zodiac-rabbit.png', 'corgi-dog.png', 'otter.png', 'penguin.png'])
+for (const name of (await readdir(path.join(source, 'avatars'))).filter(name => name.endsWith('.png') && runtimeAvatars.has(name))) {
   await sharp(path.join(source, 'avatars', name)).resize(240, 240, { fit: 'inside', withoutEnlargement: true }).png({ compressionLevel: 9 }).toFile(path.join(output, 'avatars', name))
 }
 await sharp(path.join(source, 'brand-notes.png')).resize(180, 180, { fit: 'inside' }).png({ compressionLevel: 9 }).toFile(path.join(output, 'brand-notes.png'))

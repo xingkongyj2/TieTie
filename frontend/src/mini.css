@@ -58,7 +58,6 @@ button::after { border:0; }
 .mini-root .date-picker-sheet .date-picker-options button.is-future:hover { color:#ccd2de; background:#fafbfc; }
 .mini-root .date-picker-sheet .date-picker-confirm { display:flex; align-items:center; justify-content:center; line-height:1.2; }
 .mini-root .onboarding-profile-form .gender-options { gap:12px; }
-.mini-root .onboarding-avatar-preview { display:flex; align-items:center; justify-content:center; padding:4px; }
 .mini-root .onboarding-profile-form .gender-options button { display:flex; align-items:center; justify-content:center; height:48px; min-height:48px; padding:0 12px; line-height:1.4; }
 .mini-root .onboarding-profile-form .primary-button.h5-button { display:flex; align-items:center; justify-content:center; height:48px; min-height:48px; padding:0 16px; border-radius:15px; line-height:1.4; appearance:none; -webkit-appearance:none; }
 .mini-root .hobby-input-row button.hobby-add-button { display:flex; align-items:center; justify-content:center; height:36px; min-height:36px; padding:0 14px; border:0; border-radius:10px; line-height:1.4; appearance:none; -webkit-appearance:none; }

@@ -14,11 +14,6 @@
 .onboarding-intro { margin-bottom: 23px; }
 .onboarding-intro h2 { color: #202b40; font-size: 26px; line-height: 1.35; letter-spacing: -.4px; }
 .onboarding-intro p { margin-top: 9px; color: #8190a5; font-size: 12px; line-height: 1.7; }
-.onboarding-avatar-row { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; padding: 16px; border-radius: 21px; background: #f4f7fc; }
-.onboarding-avatar-preview { display: flex; align-items: center; justify-content: center; flex: none; width: 66px; height: 66px; padding: 4px; border-radius: 19px; background: #e8f0fc; }
-.onboarding-avatar-preview .avatar-large { width: 58px; height: 58px; }
-.onboarding-avatar-row strong { color: #34435c; font-size: 13px; font-weight: 600; }
-.onboarding-avatar-row small { display: block; margin-top: 5px; color: #8190a5; font-size: 11px; line-height: 1.5; }
 .onboarding-profile-form .form-card { background: #f7f8fa; }
 /* Native WeChat buttons ship with their own line-height and vertical padding.
  * Reset the controls here so the two choices stay centered and readable on

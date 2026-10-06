@@ -383,15 +383,6 @@ h1, h2, h3, p { margin: 0; }
 .sheet-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 22px; }
 .sheet-header h2 { font-size: 20px; font-weight: 600; letter-spacing: -.5px; }
 .sheet-header .icon-button { width: 44px; height: 44px; border-radius: 50%; color: #8d97a8; background: #f0f2f5; box-shadow: none; border: 0; }
-.character-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; }
-.character-option { display: flex; flex-direction: column; align-items: stretch; min-width: 0; padding: 5px 5px 10px; border: 0; border-radius: 14px; background: white; text-align: center; }
-.character-option.selected { background: #edf4ff; }
-.character-image { position: relative; width: 100%; aspect-ratio: 1; border-radius: 10px; display: grid; place-items: center; overflow: hidden; }
-.character-image img { display: block; width: 100%; height: 100%; object-fit: contain; }
-.character-selected { position: absolute; top: 5px; right: 5px; width: 20px; height: 20px; border-radius: 50%; color: white; background: var(--blue); display: grid; place-items: center; }
-.character-info { display: flex; flex-direction: column; align-items: center; min-width: 0; }
-.character-option strong { margin-top: 8px; font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.character-option small { margin-top: 4px; color: #9ba4b3; font-size: 8px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .reminder-completed-divider { display: flex; align-items: center; gap: 12px; margin: 25px 0 16px; color: #8a95a7; }
 .reminder-completed-divider::before, .reminder-completed-divider::after { content: ''; flex: 1; border-top: 1px dashed #cfd6e2; }
 .reminder-completed-divider h2 { font-size: 12px; font-weight: 600; white-space: nowrap; }
@@ -489,10 +480,6 @@ h1, h2, h3, p { margin: 0; }
   .tone-options button { font-size: 9px; gap: 2px; }
   .form-card { padding: 15px; }
   .settings-card { padding: 0 13px; }
-  .character-grid { gap: 7px; }
-  .character-option { padding: 4px 4px 9px; }
-  .character-option strong { font-size: 10px; }
-  .character-option small { font-size: 7px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -597,10 +584,6 @@ h1, h2, h3, p { margin: 0; }
 .tab-page-scroll .tool-content { padding-bottom: 10px; }
 .mine-hero { display: flex; align-items: center; gap: 14px; padding: 13px 16px; margin-bottom: 14px; border: 0; border-radius: 19px; background: #fff; }
 .mine-hero .avatar-large { width: 72px; height: 72px; flex: none; }
-.mine-avatar-button { position: relative; display: block; width: 72px; height: 72px; padding: 0; flex: none; overflow: hidden; border-radius: 14px; background: #eaeef0; }
-.mine-avatar-overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; background: #0008; opacity: 0; transition: opacity .18s ease; }
-.mine-avatar-button:hover .mine-avatar-overlay, .mine-avatar-button:focus-visible .mine-avatar-overlay { opacity: 1; }
-.mine-avatar-button:disabled .mine-avatar-overlay { opacity: 0; }
 .mine-hero-copy { min-width: 0; }
 .mine-hero h2 { font-size: 19px; margin: 4px 0 5px; overflow-wrap: anywhere; }
 .mine-hero p { color: #4b5465; font-size: 13px; }
@@ -610,11 +593,6 @@ h1, h2, h3, p { margin: 0; }
 .gender-options button.selected { background: var(--blue-pale); color: var(--blue); font-weight: 600; }
 .account-bar { margin-bottom: 14px; }
 .account-logout { display: inline-flex; align-items: center; gap: 4px; }
-
-@media (hover: none) {
-  .mine-avatar-overlay { inset: auto 3px 3px auto; width: 26px; height: 26px; border-radius: 50%; background: #0009; opacity: 1; }
-  .mine-avatar-overlay svg { width: 14px; height: 14px; }
-}
 
 @media (max-width: 370px) {
   .things-tabs { margin-left: 16px; margin-right: 16px; gap: 8px; }

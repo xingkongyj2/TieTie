@@ -77,23 +77,10 @@ function loadState(scope: string): RelationshipState {
   const key = storageKey(scope)
   const stored = readStorage<unknown>(key, createInitialState)
   if (isState(stored)) {
-    // Retired avatar files must not leave broken images in profiles saved earlier.
-    const defaults = createInitialState().members
     const settings = currentSettings(stored.settings)
-    let changed = Object.keys(stored.settings).length !== Object.keys(settings).length
-    const members = stored.members.map((member) => {
-      if (member.avatar === '/avatars/bunny.png') {
-        changed = true
-        return { ...member, avatar: '/avatars/zodiac-rabbit.png' }
-      }
-      if (member.avatar === '/avatars/frog.png') {
-        changed = true
-        return { ...member, avatar: defaults.find((item) => item.id === member.id)?.avatar ?? '/avatars/ai-cat.png' }
-      }
-      return member
-    })
+    const changed = Object.keys(stored.settings).length !== Object.keys(settings).length
     if (changed) {
-      const migrated = { ...stored, members, settings }
+      const migrated = { ...stored, settings }
       writeStorage(key, migrated)
       return migrated
     }
