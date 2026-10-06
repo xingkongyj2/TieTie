@@ -2,6 +2,7 @@ import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from './Icons'
 import { useState } from 'react'
 import { ScrollView } from '@tarojs/components'
 import { Sheet } from './Sheet'
+import { calendarDayKey, isCalendarDayAfter } from '../lib/datePicker'
 import './DatePicker.css'
 
 interface Props { id: string; value: string; onChange: (value: string) => void; title?: string; clearLabel?: string; placeholder?: string; allowFuture?: boolean; disabled?: boolean }
@@ -25,8 +26,9 @@ function DateDialog({ id, title, value, clearLabel, allowFuture, onClose, onConf
 }) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
+  const todayKey = calendarDayKey(today)
   const parsed = parseDate(value)
-  const initial = parsed && (allowFuture || parsed <= today) ? parsed : today
+  const initial = parsed && (allowFuture || calendarDayKey(parsed) <= todayKey) ? parsed : today
   const [draft, setDraft] = useState<Date | null>(clearLabel && !value ? null : initial)
   const [cursor, setCursor] = useState(initial)
   const [view, setView] = useState<'days' | 'years' | 'months'>('days')
@@ -44,7 +46,7 @@ function DateDialog({ id, title, value, clearLabel, allowFuture, onClose, onConf
     setView('months')
   }
 
-  return <Sheet title={title} onClose={onClose}>{(close) => <div className="date-picker-dialog" id={`${id}-calendar`}>
+  return <Sheet title={title} className="date-picker-sheet" onClose={onClose}>{(close) => <div className="date-picker-dialog" id={`${id}-calendar`}>
     <div className="date-picker-summary">
       <span>已选日期</span>
       <strong aria-live="polite">{draft ? stamp(draft) : '未设置'}</strong>
@@ -69,8 +71,14 @@ function DateDialog({ id, title, value, clearLabel, allowFuture, onClose, onConf
         {view === 'years' ? <ScrollView className="date-picker-years" style={{ height: '248px' }} scrollY scrollTop={Math.max(0, Math.floor((year - firstYear) / 3) * 52 - 104)} showScrollbar={false}><div className="date-picker-options" style={{ height: 'auto' }} role="group" aria-label="选择年份">
           {Array.from({ length: lastYear - firstYear + 1 }, (_, index) => firstYear + index).map((option) => <button type="button" key={option} aria-label={`${option} 年`} aria-pressed={option === year} className={option === year ? 'is-selected' : ''} onClick={() => selectYear(option)}>{option} 年</button>)}
         </div></ScrollView> : view === 'months' ? <div className="date-picker-options date-picker-months" role="group" aria-label="选择月份">
-          {Array.from({ length: 12 }, (_, option) => <button type="button" key={option} aria-label={`${option + 1} 月`} aria-pressed={option === month} className={option === month ? 'is-selected' : ''}
-            disabled={!allowFuture && year === today.getFullYear() && option > today.getMonth()} onClick={() => { setCursor(new Date(year, option, 1)); setView('days') }}>{option + 1} 月</button>)}
+          {Array.from({ length: 12 }, (_, option) => <button type="button" key={option} aria-label={`${option + 1} 月`} aria-pressed={option === month}
+            className={`${option === month ? 'is-selected' : ''}${!allowFuture && (year > today.getFullYear() || year === today.getFullYear() && option > today.getMonth()) ? ' is-future' : ''}`}
+            aria-disabled={!allowFuture && (year > today.getFullYear() || year === today.getFullYear() && option > today.getMonth())}
+            tabIndex={!allowFuture && (year > today.getFullYear() || year === today.getFullYear() && option > today.getMonth()) ? -1 : undefined}
+            onClick={() => {
+              const isFutureMonth = !allowFuture && (year > today.getFullYear() || year === today.getFullYear() && option > today.getMonth())
+              if (!isFutureMonth) { setCursor(new Date(year, option, 1)); setView('days') }
+            }}>{option + 1} 月</button>)}
         </div> : <div role="group" aria-label={`选择日期，${year} 年 ${month + 1} 月`}>
           <div className="date-picker-week">{WEEKDAYS.map((day) => <span key={day}>{day}</span>)}</div>
           <div className="date-picker-days">
@@ -80,8 +88,10 @@ function DateDialog({ id, title, value, clearLabel, allowFuture, onClose, onConf
               const date = new Date(year, month, day)
               const selected = draft !== null && stamp(draft) === stamp(date)
               const isToday = stamp(today) === stamp(date)
-              return <button type="button" key={index} disabled={!allowFuture && date > today}
-                className={`${selected ? 'is-selected' : ''} ${isToday ? 'is-today' : ''}`} aria-label={dateLabel(date)} aria-pressed={selected} onClick={() => setDraft(date)}>{day}</button>
+              const isFuture = !allowFuture && isCalendarDayAfter(date, today)
+              return <button type="button" key={index}
+                className={`${selected ? 'is-selected' : ''} ${isToday ? 'is-today' : ''}${isFuture ? ' is-future' : ''}`} aria-label={dateLabel(date)} aria-pressed={selected} aria-disabled={isFuture}
+                tabIndex={isFuture ? -1 : undefined} onClick={() => { if (!isFuture) setDraft(date) }}>{day}</button>
             })}
           </div>
         </div>}
@@ -98,7 +108,7 @@ export function DatePicker({ id, title = '选择日期', clearLabel, placeholder
   const show = () => { if (!disabled) setOpen(true) }
   return <div className="date-picker">
     <div className="date-picker-field">
-      <div className="line-input date-picker-readonly" id={id} role="button" aria-label={title} aria-disabled={disabled} onClick={show} style={{ color: value ? undefined : '#a9b2c2', minHeight: '40px' }}>{value || placeholder}</div>
+      <div className="line-input date-picker-readonly" id={id} role="button" aria-label={title} aria-disabled={disabled} onClick={show} style={{ color: value ? undefined : '#a9b2c2' }}>{value || placeholder}</div>
       <button type="button" className="date-picker-toggle" disabled={disabled} aria-label={title} aria-haspopup="dialog" aria-controls={`${id}-calendar`} aria-expanded={open} onClick={show}>
         <CalendarDays size={17} aria-hidden="true" />
       </button>

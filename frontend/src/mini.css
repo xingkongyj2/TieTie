@@ -40,8 +40,28 @@ button::after { border:0; }
 .mini-root .composer-placeholder { position:absolute; top:11px; left:2px; right:2px; overflow:hidden; color:#a3a7b0; font-size:14px; line-height:22px; white-space:nowrap; text-overflow:ellipsis; pointer-events:none; }
 .mini-root input.line-input { height:46px; line-height:46px; }
 .mini-root .date-picker-readonly { display:flex; align-items:center; height:48px; min-height:48px !important; line-height:1.4; }
+/* Native mini-program buttons add their own padding, line-height and disabled
+ * opacity. Reset the calendar controls so the tap target and label stay
+ * centered, and keep historical dates visibly enabled. */
+.mini-root .date-picker-sheet { padding-left:18px; padding-right:18px; }
+.mini-root .date-picker-sheet button { margin:0; border:0; font-family:inherit; text-align:center; appearance:none; -webkit-appearance:none; }
+.mini-root .date-picker-sheet .date-picker-days button,
+.mini-root .date-picker-sheet .date-picker-options button,
+.mini-root .date-picker-sheet .date-picker-nav,
+.mini-root .date-picker-sheet .date-picker-heading button { touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+.mini-root .date-picker-sheet .date-picker-days button { display:flex; align-items:center; justify-content:center; line-height:1; }
+.mini-root .date-picker-sheet .date-picker-days button.is-future,
+.mini-root .date-picker-sheet .date-picker-days button.is-future:hover { color:#ccd2de; background:transparent; }
+.mini-root .date-picker-sheet .date-picker-days button:disabled { opacity:1; color:#ccd2de; background:transparent; }
+.mini-root .date-picker-sheet .date-picker-options button { display:flex; align-items:center; justify-content:center; line-height:1.2; }
+.mini-root .date-picker-sheet .date-picker-options button.is-future,
+.mini-root .date-picker-sheet .date-picker-options button.is-future:hover { color:#ccd2de; background:#fafbfc; }
+.mini-root .date-picker-sheet .date-picker-confirm { display:flex; align-items:center; justify-content:center; line-height:1.2; }
 .mini-root .onboarding-profile-form .gender-options { gap:12px; }
+.mini-root .onboarding-avatar-preview { display:flex; align-items:center; justify-content:center; padding:4px; }
 .mini-root .onboarding-profile-form .gender-options button { display:flex; align-items:center; justify-content:center; height:48px; min-height:48px; padding:0 12px; line-height:1.4; }
+.mini-root .onboarding-profile-form .primary-button.h5-button { display:flex; align-items:center; justify-content:center; height:48px; min-height:48px; padding:0 16px; border-radius:15px; line-height:1.4; appearance:none; -webkit-appearance:none; }
+.mini-root .hobby-input-row button.hobby-add-button { display:flex; align-items:center; justify-content:center; height:36px; min-height:36px; padding:0 14px; border:0; border-radius:10px; line-height:1.4; appearance:none; -webkit-appearance:none; }
 .mini-root .mine-profile-editor .gender-options button { display:flex; align-items:center; justify-content:center; height:44px; padding:0; line-height:1.4; }
 .mini-root .mine-profile-editor .hobby-input-row input { height:44px; line-height:44px; }
 .mini-root .mine-profile-editor .hobby-input-row button { display:flex; align-items:center; justify-content:center; height:36px; padding:0 14px; line-height:1.4; }

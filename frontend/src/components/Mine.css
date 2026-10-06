@@ -17,13 +17,8 @@
 .mine-buddy-back { transform-origin: 141px 89px; animation: mine-buddy-arrive .7s .08s both; }
 .mine-buddy-front { transform-origin: 80px 104px; animation: mine-buddy-arrive .7s .18s both; }
 .mine-identity { position: relative; }
-.mine-avatar-edit { position: relative; z-index: 1; display: flex; justify-content: center; align-items: center; width: 66px; height: 66px; padding: 5px; overflow: visible; border: 0; border-radius: 22px; background: #eaf1fb; }
-.mine-avatar-edit .avatar-large { width: 55px; height: 55px; }
-.mine-avatar-pencil { position: absolute; z-index: 2; right: -5px; bottom: -3px; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; border: 0; background: var(--mine-accent); color: white; }
-.mine-avatar-edit:hover:not(:disabled) { background: #e0eafa; }
-.mine-avatar-edit.is-busy { opacity: 1; }
-.mine-avatar-loading { position: absolute; inset: 0; display: grid; place-items: center; border-radius: inherit; background: #eaf1fbdd; }
-.mine-avatar-loading .spinner { width: 26px; height: 26px; border-color: #c6d8f5; border-top-color: var(--mine-accent); }
+.mine-avatar-preview { position: relative; z-index: 1; display: flex; justify-content: center; align-items: center; width: 66px; height: 66px; padding: 5px; border-radius: 22px; background: #eaf1fb; }
+.mine-avatar-preview .avatar-large { width: 55px; height: 55px; }
 .mine-name { margin-top: 17px; }
 .mine-name-heading { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .mine-name h2 { max-width: 100%; margin: 0; color: var(--mine-ink); font-size: 26px; font-weight: 650; letter-spacing: -.6px; line-height: 1.3; overflow-wrap: anywhere; }
@@ -118,5 +113,5 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mine-buddy-back, .mine-buddy-front, .mine-avatar-loading .spinner { animation: none; }
+  .mine-buddy-back, .mine-buddy-front { animation: none; }
 }

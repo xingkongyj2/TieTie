@@ -1,11 +1,9 @@
-import { assetUrl } from '../lib/assets'
 import { ScrollView } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { ArrowUpRight, Check, ChevronRight, Copy, LogOut, MessageCircle, Pencil, Plus, Sparkle, Unlink } from './Icons'
 import { useEffect, useRef, useState } from 'react'
 import type { Member, RelationshipState } from '../types'
 import { Avatar } from './Avatar'
-import { CharacterPicker } from './CharacterPicker'
 import { MemberForm } from './Details'
 import { Sheet } from './Sheet'
 import { SpaceBuddies } from './SpaceBuddies'
@@ -28,22 +26,19 @@ interface Props {
 
 export function Mine({ editProfileInitially, state, username, code, hasSession, onSaveMember, onLogout, onExitSession, notify, onWechatSubscriptionChange, onEditProfileInitialHandled }: Props) {
   const self = state.members.find((member) => member.id === 'self')!
-  const [pickerOpen, setPickerOpen] = useState(false)
   const [editorOpen, setEditorOpen] = useState(!!editProfileInitially)
   const [exitOpen, setExitOpen] = useState(false)
   const [softwarePanel, setSoftwarePanel] = useState<'about' | 'contact' | null>(null)
-  const [savingAvatar, setSavingAvatar] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
   const [exiting, setExiting] = useState(false)
   const [copied, setCopied] = useState(false)
-  const changingAvatar = useRef(false)
   const exitLock = useRef(false)
   const mounted = useRef(true)
   const mineScrollTop = useRef(0)
   const softwareScrollTop = useRef(0)
   const [restoreScrollTop, setRestoreScrollTop] = useState<number | undefined>()
-  const saving = savingAvatar || savingProfile
-  const pageOverlayOpen = pickerOpen || editorOpen || exitOpen
+  const saving = savingProfile
+  const pageOverlayOpen = editorOpen || exitOpen
   const gender = self.gender === 'male' ? '男生' : self.gender === 'female' ? '女生' : '暂不填写'
 
   useEffect(() => {
@@ -96,23 +91,6 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
     setRestoreScrollTop(softwareScrollTop.current)
   }
 
-  const selectAvatar = async (avatar: string) => {
-    if (avatar === self.avatar || changingAvatar.current || savingProfile) return
-    changingAvatar.current = true
-    setSavingAvatar(true)
-    try {
-      await Taro.getImageInfo({ src: assetUrl(avatar) })
-      if (!mounted.current) return
-      await onSaveMember({ ...self, avatar })
-      if (mounted.current) notify('头像已更新')
-    } catch {
-      if (mounted.current) notify('头像切换失败，请再试一次。')
-    } finally {
-      changingAvatar.current = false
-      if (mounted.current) setSavingAvatar(false)
-    }
-  }
-
   const exitSession = async (close: () => void) => {
     if (exitLock.current) return
     exitLock.current = true
@@ -138,10 +116,7 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
       <section className="mine-identity-card" aria-label="我的个人空间">
         <SpaceBuddies className="mine-buddies" />
         <div className="mine-identity">
-          <button type="button" className={`mine-avatar-edit${savingAvatar ? ' is-busy' : ''}`} aria-label={savingAvatar ? '正在切换头像' : '修改头像'} aria-busy={savingAvatar} disabled={saving} onClick={() => setPickerOpen(true)}>
-            <Avatar member={self} size="large" />
-            {savingAvatar ? <span className="mine-avatar-loading" role="status" aria-live="polite"><span className="spinner" aria-hidden="true" /><span className="sr-only">正在切换头像</span></span> : <span className="mine-avatar-pencil"><Pencil size={12} aria-hidden="true" /></span>}
-          </button>
+          <div className="mine-avatar-preview"><Avatar member={self} size="large" /></div>
           <div className="mine-name"><div className="mine-name-heading"><h2>{self.name || username}</h2><button type="button" className="mine-name-edit" aria-label="修改名称" title="修改名称" disabled={saving} onClick={() => setEditorOpen(true)}><Pencil size={14} aria-hidden="true" /></button></div><p>有自己的小宇宙，也有在意的人。</p></div>
         </div>
       </section>
@@ -206,7 +181,6 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
         </div>
       </div>}
     </Sheet>}
-    {pickerOpen && <CharacterPicker selectedAvatar={self.avatar} onSelect={(avatar) => { void selectAvatar(avatar) }} onClose={() => setPickerOpen(false)} />}
     {exitOpen && <Sheet title="退出专属空间" onClose={() => setExitOpen(false)}>{(close) => <div className="mine-exit-sheet">
       <p>退出后，你和 TA 都会回到绑定引导页，要重新输入对方邀请码才能继续聊天。</p>
       <p>重新绑定时会创建新的会话和记忆空间。</p>

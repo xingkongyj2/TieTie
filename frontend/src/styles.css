@@ -374,7 +374,9 @@ h1, h2, h3, p { margin: 0; }
 .hobby-input-row:has(input:focus) { box-shadow: 0 0 0 2px var(--blue); }
 .hobby-input-row input { border: 0; background: none; font-size: 14px; padding: 0; flex: 1; width: 0; min-height: 44px; }
 .hobby-input-row input:focus-visible { outline: none; }
-.hobby-input-row button { flex: none; background: var(--blue-pale); color: var(--blue); font-size: 12px; font-weight: 500; min-height: 36px; padding: 0 14px; border-radius: 10px; }
+.hobby-input-row button.hobby-add-button { display: flex; align-items: center; justify-content: center; flex: none; height: 36px; min-height: 36px; padding: 0 14px; border: 0; border-radius: 10px; background: var(--blue-pale); color: var(--blue); font-size: 12px; font-weight: 500; line-height: 1.4; appearance: none; -webkit-appearance: none; }
+.hobby-input-row button.hobby-add-button:disabled { opacity: 1; background: #f0f4ff; color: #9ab3e8; }
+.hobby-input-row button.hobby-add-button:not(:disabled):active { background: #dce8ff; }
 .form-card > textarea { background: #fff; font-size: 12px; line-height: 1.9; padding: 11px; border: 0; border-radius: 10px; width: 100%; }
 .input-counter { font-size: 8px; color: #b3bac6; text-align: right; margin: 7px 1px -2px; }
 
