@@ -185,7 +185,7 @@ func reminderClockNumber(value string) (int, bool) {
 }
 
 func directReminderTitle(title string) bool {
-	if title == "" || len([]rune(title)) > 500 || strings.ContainsAny(title, "?？\n\r\"“”‘’") {
+	if title == "" || len([]rune(title)) > ReminderTitleMaxRunes || strings.ContainsAny(title, "?？\n\r\"“”‘’") {
 		return false
 	}
 	for _, word := range []string{"每天", "每周", "每月", "每隔", "重复", "提醒", "然后", "如果", "或者", "还是", "取消"} {

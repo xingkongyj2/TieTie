@@ -42,7 +42,7 @@ type Config struct {
 	WechatReminderSubscriptionType string           // once / permanent；默认 once，长期模板才可 permanent
 	SchedulerPollInterval          time.Duration    // 到期队列检查间隔，默认 1s
 	SchedulerBatchSize             int              // 每次原子领取数量，默认 64
-	ConversationProtocolVersion    int              // 新会话协议为2；旧历史仍可读取
+	ConversationProtocolVersion    int              // 当前会话协议为2
 	CloudMemoryEnabled             bool             // 默认开启 Qoder 云端记忆同步
 	BackgroundWorkersEnabled       bool             // 默认开启后台队列；连接生产库的本地实例应关闭
 	LogDir                         string           // 系统与定时任务日志目录

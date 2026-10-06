@@ -48,7 +48,7 @@ func (c *Client) CreateSession(ctx context.Context, agentID, environmentID, titl
 	if len(memoryStores) > 0 {
 		resources := []map[string]any{}
 		for _, id := range memoryStores {
-			resources = append(resources, map[string]any{"type": "memory_store", "memory_store_id": id, "access": "read_only", "instructions": "本仓库仅属于当前贴贴会话，仅使用7种 JSON 模板及同模板分页，位于 /data/.qoder/awareness/<path>。消息传输协议在 rules/assistant-behavior.json 的 instructions 字段，遗忘时读取；保留云端原有人设。初始模板的未提供不是事实；相关事实按对应模板检索：profile/users、profile/habits、agreements/shared、tasks/todo-board、context/realtime、rules/assistant-behavior，以及 rules/memory-policy.json。目录中的 YYYY-MM/NNNNNN.json 是对应模板的分页，不是新类型。expiresAt 已到期的内容不能作为当前事实。写入、取消和定时调度由后台系统执行，不代替后台创建定时器。"})
+			resources = append(resources, map[string]any{"type": "memory_store", "memory_store_id": id, "access": "read_only", "instructions": "仅供当前会话读取的记忆仓库，挂载路径为 /data/.qoder/awareness/<path>。固定身份、行为和消息协议遵循云端内置系统提示词；写入与定时调度由后台执行。"})
 		}
 		body["resources"] = resources
 	}

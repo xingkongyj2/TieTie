@@ -58,8 +58,8 @@ func (s *Server) handleReminders(w http.ResponseWriter, r *http.Request) {
 		}
 		dueAt, dateErr := time.Parse(time.RFC3339, body.DueAt)
 		if dateErr != nil || !dueAt.After(time.Now()) || strings.TrimSpace(body.Title) == "" ||
-			utf8.RuneCountInString(body.Title) > 500 || !validRecipients(body.RecipientIDs, space) || conversation.ValidateRecurrence(body.Recurrence, dueAt) != nil {
-			writeError(w, qoder.NewApiError(400, "invalid_reminder", "请填写提醒内容、未来的首次提醒时间和本空间的提醒对象，并检查重复日期是否与首次时间一致。"))
+			utf8.RuneCountInString(body.Title) > conversation.ReminderTitleMaxRunes || !validRecipients(body.RecipientIDs, space) || conversation.ValidateRecurrence(body.Recurrence, dueAt) != nil {
+			writeError(w, qoder.NewApiError(400, "invalid_reminder", "请填写不超过80字的提醒标题、未来的首次提醒时间和本空间的提醒对象，并检查重复日期是否与首次时间一致。"))
 			return
 		}
 		var randomID [16]byte
@@ -240,7 +240,7 @@ func reminderAPIError(err error) error {
 	case errors.Is(err, dbop.ErrReminderState):
 		return qoder.NewApiError(409, "reminder_state", "提醒状态已经变化，请刷新提醒板后重试。")
 	case errors.Is(err, dbop.ErrReminderInvalid):
-		return qoder.NewApiError(400, "invalid_reminder", "提醒内容、首次时间、重复规则或提醒对象无效。")
+		return qoder.NewApiError(400, "invalid_reminder", "提醒标题（最多80字）、首次时间、重复规则或提醒对象无效。")
 	case errors.Is(err, dbop.ErrReminderAmbiguous):
 		return qoder.NewApiError(409, "reminder_ambiguous", "匹配到多条提醒，请说清楚要删除哪一条，或明确说全部删除。")
 	case errors.Is(err, dbop.ErrReminderTooMany):

@@ -92,10 +92,10 @@ func (s *Server) prepareProtocolInput(ctx context.Context, e conversation.Envelo
 		}
 	}
 	if previous == nil && s.Cfg != nil && s.Cfg.CloudMemoryEnabled {
-		// Durable outbox gives the fixed protocol a recoverable memory copy. Failure
-		// does not block chatting: this first frame contains the authoritative rules.
-		if err := s.storeProtocolMemory(ctx, e, binding.CreatedAt); err != nil {
-			logging.System().Warn("固定协议记忆暂未同步，首轮使用完整协议并保留重试", "event", "protocol.memory_pending", "session_id", e.SessionID, "error", err)
+		// Retire old backend prompt copies without overwriting dynamic style or
+		// additions. The cloud system prompt now owns all fixed protocol rules.
+		if err := s.retireProtocolMemory(ctx, e, binding.CreatedAt); err != nil {
+			logging.System().Warn("旧服务端提示词副本暂未清理，保留云端同步重试", "event", "protocol.memory_pending", "session_id", e.SessionID, "error", err)
 		}
 	}
 	e = conversation.ReminderGuidance(e)
@@ -105,11 +105,11 @@ func (s *Server) prepareProtocolInput(ctx context.Context, e conversation.Envelo
 		return "", nil, err
 	}
 	candidate := &dbop.ConversationProtocol{SessionID: e.SessionID, BindingCreatedAt: binding.CreatedAt, ContractHash: hash, StateJSON: string(body)}
-	logging.System().Info("准备 AI 消息：仅首次或升级附带完整协议", "event", "protocol.outbound", "session_id", e.SessionID, "kind", e.Kind, "bootstrap", previous == nil, "payload_chars", utf8.RuneCountInString(text), "payload_bytes", len(text))
+	logging.System().Info("准备 AI 消息：仅发送当前事实与动态上下文", "event", "protocol.outbound", "session_id", e.SessionID, "kind", e.Kind, "bootstrap", previous == nil, "payload_chars", utf8.RuneCountInString(text), "payload_bytes", len(text))
 	return text, candidate, nil
 }
-func (s *Server) storeProtocolMemory(ctx context.Context, e conversation.EnvelopeV2, epoch time.Time) error {
-	if err := s.DB.SetBehaviorInstructions(ctx, e.SessionID, epoch, conversation.TransportInstructions(e.Visibility)); err != nil {
+func (s *Server) retireProtocolMemory(ctx context.Context, e conversation.EnvelopeV2, epoch time.Time) error {
+	if err := s.DB.SetBehaviorInstructions(ctx, e.SessionID, epoch, conversation.CloudInstructionsNotice); err != nil {
 		return err
 	}
 	existing, err := s.DB.GetMemoryRecord(ctx, dbop.MemoryID(e.SessionID, conversation.ProtocolMemoryPath), e.SessionID)
@@ -117,7 +117,7 @@ func (s *Server) storeProtocolMemory(ctx context.Context, e conversation.Envelop
 		return err
 	}
 	if existing == nil {
-		return errors.New("protocol memory missing after enqueue")
+		return errors.New("behavior memory missing after enqueue")
 	}
 	return s.syncMemoryLocked(ctx, *existing)
 }

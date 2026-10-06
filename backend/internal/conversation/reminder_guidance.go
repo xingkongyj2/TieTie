@@ -2,8 +2,6 @@ package conversation
 
 import "time"
 
-const reminderReplyInstructions = "这条提醒已在数据库保存且云端记忆同步成功。直接输出完整 tietie.message JSON，text 用一句简短确认，完整保留准确时间、对象、事项，长事项不截断；使用 results[0].reminder 的北京时间，称呼按 replyTo，不重新换算、不读取工具或记忆、不提新建议或追问。requestId 逐字复制本信封，source=chat。"
-
 // ReminderGuidance supplies authoritative facts for the two existing AI turns.
 // It never creates an operation or substitutes for the model's final response.
 func ReminderGuidance(e EnvelopeV2) EnvelopeV2 {
@@ -49,6 +47,5 @@ func ReminderGuidance(e EnvelopeV2) EnvelopeV2 {
 	copyReminder.DueAt = reminder.DueAt.In(time.FixedZone("Asia/Shanghai", 8*60*60))
 	result.Reminder = &copyReminder
 	e.Results = []ActionResult{result}
-	e.ReplyInstructions = reminderReplyInstructions
 	return e
 }

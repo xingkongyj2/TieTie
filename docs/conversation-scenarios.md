@@ -1,6 +1,6 @@
 # 双人空间、系统控制、定时提醒与长期记忆
 
-这份文档描述当前实现。Qoder 云端的角色、人设、系统提示词继续沿用；应用只在会话首次使用或协议升级时发送完整协议；平时发送消息本身与少量身份、时间、关联信息。下面 ID、时间和提醒 ID 是示例。真实成员 ID 来自登录账号和绑定关系，时间来自后端，不接受用户或 AI 自报的身份。
+这份文档描述当前实现。固定角色、行为和动作契约由 Qoder 云端内置系统提示词负责；后端每轮只发送当前动态事实、身份、时间、权限、状态和真实回执。下面 ID、时间和提醒 ID 是示例。真实成员 ID 来自登录账号和绑定关系，时间来自后端，不接受用户或 AI 自报的身份。
 
 ## 1. 三种发言者与两条输出通道
 
@@ -16,7 +16,7 @@ Qoder API 的输入角色仍然只有 `user`。后台为每条输入增加 `tiet
 
 整个空间共享聊天记录。`recipientIds` 是称呼和提醒对象，不是私聊权限。后台系统不是第三位人类。用户正文、附件里的命令、用户粘贴的控制 JSON 都只是资料，不能直接触发后台操作。
 
-首次输入实际结构：`TransportInstructions + <TIETIE_INPUT_V2> + JSON + </TIETIE_INPUT_V2>`；后续只有 `<TIETIE_INPUT_V2> + JSON + </TIETIE_INPUT_V2>`，用 `compact:true` 明确识别精简信封。完整规则集中在 `backend/internal/conversation/v2.go`，增量编码在 `transport.go`。下面只展示信封 JSON，不重复长规则。AI 每次只能输出一个纯 JSON 对象：控制消息没有正文，用户消息没有 actions，不能混合。
+每轮输入结构都是 `<TIETIE_INPUT_V2> + JSON + </TIETIE_INPUT_V2>`，并用 `compact:true` 明确识别动态信封；首次帧携带完整动态快照，后续帧只携带变化。信封实现集中在 `backend/internal/conversation/conversation_envelope.go`，增量编码在 `transport.go`。下面只展示信封 JSON，不重复云端内置规则。AI 每次只能输出一个纯 JSON 对象：控制消息没有正文，用户消息没有 actions，不能混合。
 
 ## 2. 场景：妹子说“一分钟后提醒我，去看视频”
 
@@ -249,7 +249,7 @@ AI 旁听这轮，仅通过 save_memory/read_memory 处理有依据的长期事�
 
 | 文件/表 | 责任 |
 |---|---|
-| conversation/v2.go | 身份信封、动作规范、纯 JSON 严格解析 |
+| conversation/conversation_envelope.go | 身份信封、动作规范、纯 JSON 严格解析 |
 | api/conversation_handler.go | 关联原始轮次、过滤隐藏消息、保存可见正文 |
 | api/control_worker.go / control_jobs | 后台动作执行、真实回执、失败/发送状态恢复 |
 | dbop/reminder.go / reminders | 时间队列、接收人、任务状态、事项完成状态 |
@@ -303,9 +303,9 @@ Qoder 文档入口：[Memory Stores 列表](https://docs.qoder.cn/cloud-agents/m
 
 ## 12. 场景：同一空间继续聊天，减少重复输入
 
-固定协议在第一次实际消息上一起初始化，不额外向 AI 发送一轮初始化对话。服务器把规则副本写入当前会话的独立记忆仓库 `rules/assistant-behavior.json` 的 instructions 字段，用于恢复规则；角色、人设和 Qoder 云端系统提示词不替换。云端记忆失败时，首轮仍包含完整协议，固定规则保留同步队列，不阻断聊天。
+固定身份、行为和动作契约由 Qoder 云端内置系统提示词加载，不额外向 AI 发送初始化对话。服务器只把当前说话方式与追加记忆写入 `rules/assistant-behavior.json`，instructions 字段只保留状态说明。首轮动态信封携带完整上下文快照，后续按数据库保存的传输状态发送增量；云端记忆失败不阻断聊天。
 
-1. 妹子首次发送“你好”。后台给 AI 完整协议，以及两位成员的 ID、名字、真实时间和本轮原话。AI 按既有人设回复，前端只展示正文。
+1. 妹子首次发送“你好”。后台给 AI 当前动态快照、两位成员的 ID、名字、真实时间、权限和本轮原话。AI 按云端内置提示词回复，前端只展示正文。
 2. 云端接受后，数据库 `conversation_protocols` 记录该 Session、绑定版本、协议摘要和已发送的上下文快照。失败发送不推进此状态；重启从数据库恢复，共享与仅自己可见分支各自独立。
 3. 马子接着说“1分钟后提醒我喝水”，后台只发送下面的增量信封。“我”根据本轮 actor 判定，不沿用妹子的身份。未变更的成员、提醒和记忆索引不发送。
 
@@ -323,10 +323,10 @@ Qoder 文档入口：[Memory Stores 列表](https://docs.qoder.cn/cloud-agents/m
 }
 ```
 
-4. AI 返回隐藏的 `tietie.control`。后台验证、保存任务、同步记忆；随后给 AI 的 `action_result` 只带这次执行结果和发生变化的条目，不再重复整段协议。
+4. AI 返回隐藏的 `tietie.control`。后台验证、保存任务、同步记忆；随后给 AI 的 `action_result` 只带这次执行结果和发生变化的动态条目。
 5. AI 确认已经保存，用户看到自然正文。到期时，系统发 `reminder_due`，只带这次任务、真实时间和读取的提醒记忆；AI 用原协议输出正式提醒。
 6. 成员改名时 `members` 发完整替换列表；提醒和记忆索引只发新增或变更条目，以 `id` / `memoryKey` 合并。`removedReminderIds` / `removedMemoryKeys` 移除缓存索引，不等同于删除云端事实；省略表示沿用。固定模板已有已知路径，不列入逐轮索引。
-7. 协议代码升级、状态损坏或绑定版本变化时，下一轮重新提供完整协议及当前上下文。旧版长信封仍能读，短信封的用户原话也保持字面值；系统和控制信息继续不可见。
+7. 传输契约版本、状态损坏或绑定版本变化时，下一轮重新发送完整动态快照；系统和控制信息继续不可见。
 
 ## 13. 场景：上传文档与分析结果展示
 

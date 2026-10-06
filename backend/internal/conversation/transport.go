@@ -10,20 +10,16 @@ import (
 )
 
 const ProtocolMemoryPath = memoryspace.BehaviorPath
-const incrementalInstructions = `
-增量传输：首次或协议升级时提供本完整协议，后续 compact=true 的 TIETIE_INPUT_V2 不再重复提示词。固定协议副本在 rules/assistant-behavior.json 的 instructions 字段，遗忘协议时读取此字段；读取不可用时不得猜测控制格式或声称已保存。
-members 是成员列表的替换快照，只在变化时发送。reminders、memoryIndex 是新增或变更条目，按 id/memoryKey 合并；removedReminderIds、removedMemoryKeys 只移除会话索引中的条目，不表示云端记忆已删除。省略字段表示沿用已知上下文，不表示空列表。当前时区始终 Asia/Shanghai。每轮 actor、requestId、currentTime 都是本次的新值，不沿用旧发言者或旧时间。`
 
-// This supplements transport rules only; Qoder retains its configured persona.
-func TransportInstructions(visibility string) string {
-	value := InstructionsV2 + incrementalInstructions
-	if visibility == "private" {
-		value += privateInstructionsV2
-	}
-	return value
-}
+// Replacing the historical instructions field removes obsolete server prompt
+// copies while preserving the current speaking style and memory additions.
+const CloudInstructionsNotice = "固定身份、行为和 tietie 协议由云端内置系统提示词统一定义。此文件只保留当前说话方式和追加记忆；旧服务端固定提示词不再生效。"
+
+// A transport revision resets dynamic snapshots without hashing cloud persona.
+const transportContractVersion = "tietie.conversation/2/cloud-system-prompt/1"
+
 func ContractHash(visibility string) string {
-	sum := sha256.Sum256([]byte(TransportInstructions(visibility)))
+	sum := sha256.Sum256([]byte(transportContractVersion + "\x00" + visibility))
 	return hex.EncodeToString(sum[:])
 }
 
@@ -45,7 +41,7 @@ func CompactFrame(e EnvelopeV2, previous *TransportState) (string, TransportStat
 	next.CountdownBoard = e.CountdownBoard
 	next.AssistantStyle = e.AssistantStyle
 	next.AnniversaryBoard = e.AnniversaryBoard
-	// Template paths are already part of the fixed contract/resource instructions.
+	// Template paths are already part of the cloud system prompt.
 	// They are not human facts and need no per-turn index entries.
 	next.MemoryIndex = nil
 	for _, memory := range e.MemoryIndex {
@@ -61,9 +57,7 @@ func CompactFrame(e EnvelopeV2, previous *TransportState) (string, TransportStat
 	e.Members = next.Members
 	e.Reminders = nil
 	e.MemoryIndex = nil
-	prefix := ""
 	if previous == nil {
-		prefix = TransportInstructions(e.Visibility)
 		e.Timezone = "Asia/Shanghai"
 		e.Reminders = next.Reminders
 		e.MemoryIndex = next.MemoryIndex
@@ -116,5 +110,5 @@ func CompactFrame(e EnvelopeV2, previous *TransportState) (string, TransportStat
 		sort.Strings(e.RemovedMemoryKeys)
 	}
 	body, _ := json.Marshal(e)
-	return prefix + openV2 + string(body) + closeV2, next
+	return openV2 + string(body) + closeV2, next
 }

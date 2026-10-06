@@ -156,20 +156,7 @@ func isServerInputEcho(value string) bool {
 		return false
 	}
 	header := strings.TrimSpace(value[:at])
-	if header == "" {
-		return true
-	}
-	if strings.HasPrefix(header, "{") {
-		var supplement struct {
-			Type string `json:"type"`
-		}
-		decoder := json.NewDecoder(strings.NewReader(header))
-		if decoder.Decode(&supplement) != nil || supplement.Type != "assistant_behavior" {
-			return false
-		}
-		header = strings.TrimSpace(header[decoder.InputOffset():])
-	}
-	return strings.HasPrefix(header, v2ContractIntro) || strings.HasPrefix(header, "以下是贴贴应用的消息传输补充协议。") || strings.HasPrefix(header, "你是贴贴，一个两人共享空间里的贴心 AI 助手。")
+	return header == ""
 }
 
 // encoding/json accepts duplicate keys and keeps the last value. Rejecting them
@@ -244,7 +231,7 @@ func validateAction(action Action) error {
 	}
 	switch action.Type {
 	case "create_reminder":
-		if strings.TrimSpace(action.Title) == "" || len([]rune(action.Title)) > 500 ||
+		if strings.TrimSpace(action.Title) == "" || len([]rune(action.Title)) > ReminderTitleMaxRunes ||
 			!validRecipients(action.RecipientIDs, false) || action.ReminderID != "" {
 			return fmt.Errorf("invalid title, recipients, or reminderId")
 		}

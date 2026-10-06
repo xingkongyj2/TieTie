@@ -54,7 +54,7 @@ func TestReminderGuidanceGroundsOnlyExplicitFutureRequest(t *testing.T) {
 func TestReminderGuidanceKeepsActualSuccessfulReceipt(t *testing.T) {
 	e := guidanceReceipt()
 	guided := ReminderGuidance(e)
-	if guided.ReplyInstructions == "" || guided.Results[0].Reminder.DueAt.Format(time.RFC3339) != "2026-10-05T08:00:00+08:00" {
+	if guided.ReplyInstructions != "" || guided.Results[0].Reminder.DueAt.Format(time.RFC3339) != "2026-10-05T08:00:00+08:00" {
 		t.Fatalf("successful receipt must retain the saved instant in Shanghai time: %+v", guided)
 	}
 	if !guided.Results[0].Reminder.DueAt.Equal(e.Results[0].Reminder.DueAt) || guided.Results[0].MemoryStatus != "synced" || guided.Results[0].MemoryKey != "memory_test" || guided.Results[0].DatabaseStatus != "saved" {
@@ -86,8 +86,8 @@ func TestReminderGuidanceNeverShortcutsUnconfirmedResults(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			e := guidanceReceipt()
 			test.change(&e)
-			if got := ReminderGuidance(e); got.ReplyInstructions != "" {
-				t.Fatal("unconfirmed/mixed results must keep the ordinary truthful reply path")
+			if got := ReminderGuidance(e); got.ReplyInstructions != "" || got.Results[0].Reminder != e.Results[0].Reminder {
+				t.Fatal("unconfirmed/mixed results must retain their original facts without fixed reply instructions")
 			}
 		})
 	}
@@ -109,5 +109,18 @@ func TestReminderGuidanceSurvivesCompactTransport(t *testing.T) {
 	var compact EnvelopeV2
 	if err := json.Unmarshal([]byte(body), &compact); err != nil || compact.ReminderRequest == nil {
 		t.Fatal("normalized request guidance must be present in existing-session compact frames")
+	}
+}
+
+func TestReminderGuidanceDropsLegacyReplyInstructions(t *testing.T) {
+	e := guidanceReceipt()
+	e.ReplyInstructions = "旧后端确认提示词"
+	guided := ReminderGuidance(e)
+	body, err := json.Marshal(guided)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "replyInstructions") || strings.Contains(string(body), e.ReplyInstructions) {
+		t.Fatal("fixed reply rules belong in the cloud prompt, not successful receipts")
 	}
 }

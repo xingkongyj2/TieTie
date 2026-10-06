@@ -374,8 +374,8 @@ func (s *Server) processConversationFrom(ctx context.Context, id string, result 
 				// Validate against the original AI event, so delayed syncing can still
 				// recover an overdue reminder and history replay stays deterministic.
 				if err != nil || !dueAt.After(createdAt) || strings.TrimSpace(action.Title) == "" ||
-					utf8.RuneCountInString(action.Title) > 500 || !validRecipients(action.RecipientIDs, space) {
-					addWarning("提醒时间或对象无效，提醒未保存。可重新说明具体时间和提醒对象。")
+					utf8.RuneCountInString(action.Title) > conversation.ReminderTitleMaxRunes || !validRecipients(action.RecipientIDs, space) {
+					addWarning("提醒标题（最多80字）、时间或对象无效，提醒未保存。可重新说明简短事项、具体时间和提醒对象。")
 					continue
 				}
 				proposal.Type, proposal.Title, proposal.DueAt, proposal.RecipientIDs, proposal.Recurrence = "create", action.Title, dueAt, action.RecipientIDs, action.Recurrence

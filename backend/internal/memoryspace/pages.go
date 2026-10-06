@@ -40,7 +40,7 @@ func Page(base string, month string, page int, category string, facts []json.Raw
 	}
 	delete(doc, "recordDirectory")
 	if _, ok := doc["instructions"]; ok {
-		doc["instructions"] = "服务端对话协议位于根模板 rules/assistant-behavior.json 的 instructions 字段。"
+		doc["instructions"] = "固定身份与对话协议由云端内置系统提示词定义；根模板 instructions 仅保留状态说明。"
 	}
 	doc["pagination"] = map[string]any{"month": month, "page": page, "pageSize": 8}
 	switch category {

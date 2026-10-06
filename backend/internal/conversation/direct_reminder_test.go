@@ -2,6 +2,7 @@ package conversation
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -105,5 +106,25 @@ func TestDirectReminderRoutesRecurringRequestsToAI(t *testing.T) {
 		if parsed, ok := ParseDirectReminder(text, ctx); ok {
 			t.Errorf("recurring request must not create a one-time reminder: %q => %+v", text, parsed)
 		}
+	}
+}
+
+func TestReminderTitleMaxRunes(t *testing.T) {
+	ctx := reminderTestContext(time.Date(2026, 10, 4, 8, 8, 0, 0, time.FixedZone("CST", 8*60*60)))
+	base := strings.Repeat("好", ReminderTitleMaxRunes)
+	for _, test := range []struct {
+		name  string
+		title string
+		want  bool
+	}{
+		{"at limit", base, true},
+		{"over limit", base + "好", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			_, ok := ParseSingleReminder("1分钟后提醒我"+test.title, ctx)
+			if ok != test.want {
+				t.Fatalf("title length=%d parsed=%t, want %t", len([]rune(test.title)), ok, test.want)
+			}
+		})
 	}
 }

@@ -123,7 +123,7 @@ docker build -t tietie-backend .      # 镜像只含后端，静态文件用卷�
 
 ## 双人会话与定时任务
 
-`internal/conversation` 是无网络、无数据库副作用的协议模块。生产默认 V2：用户消息由 JWT 身份包装，区分两位成员和后台系统；AI 输出纯 JSON 的 `tietie.control` 或 `tietie.message`，两者互斥。控制消息严格校验后入持久化队列，后台执行数据库/云端记忆动作，给 AI 发送隐藏的 `action_result`，AI 再回复可见正文。控制 JSON、系统信封和流式片段不转发给浏览器。V1 历史仍可读取。完整格式与逐步场景见 [会话场景说明](../docs/conversation-scenarios.md)。
+`internal/conversation` 是无网络、无数据库副作用的协议模块。当前使用 V2：用户消息由 JWT 身份包装，区分两位成员和后台系统；AI 输出纯 JSON 的 `tietie.control` 或 `tietie.message`，两者互斥。控制消息严格校验后入持久化队列，后台执行数据库/云端记忆动作，给 AI 发送隐藏的 `action_result`，AI 再回复可见正文。控制 JSON、系统信封和流式片段不转发给浏览器。固定身份、行为与动作契约放在云端内置提示词，完整文本见 [云端系统提示词](../docs/cloud-system-prompt.txt)；后端只发送当前动态信封。完整格式与逐步场景见 [会话场景说明](../docs/conversation-scenarios.md)。
 
 `internal/scheduler` 只接收持久化队列提供的到期任务，提供批量领取、共享并发预算、任务超时和退出等待。`dbop/reminder.go` 根据 `status=scheduled AND run_at<=now` 查索引，单条 `UPDATE ... RETURNING` 原子领取每批任务，每个空间最多一条正在投递。`run_at` 初始等于用户的 `due_at`，繁忙时只后移执行时间，保留原提醒时间。查出提醒后再通过绑定找到空间与接收人，没有用户轮询或每用户 goroutine。
 
@@ -138,7 +138,7 @@ docker build -t tietie-backend .      # 镜像只含后端，静态文件用卷�
 `POST /api/qoder/sessions/:id/cancel` 接收 `{visibility:"shared"|"private"}`，在消息发送锁释放后请求云端停止当前回合。前端继续等待会话回到 idle，再开放输入；已经发送的用户消息仍保留在聊天记录中。
 
 - `GET /api/qoder/sessions/:id/reminders` 返回 `{reminders}`。
-- `POST .../reminders` 接收 `{title,dueAt,recipientIds,recurrence?}`，dueAt 为未来第一次触发的 RFC3339 时间；可选 recurrence 支持每天、间隔几天、每周、每月、每年、每周指定星期几及指定多个日历日期。recipientIds 必须来自当前空间，返回 `{reminder}`。
+- `POST .../reminders` 接收 `{title,dueAt,recipientIds,recurrence?}`；title 为提醒卡片上的简短大事项，最多 80 个 Unicode 字符，详细上下文应另存记忆。dueAt 为未来第一次触发的 RFC3339 时间；可选 recurrence 支持每天、间隔几天、每周、每月、每年、每周指定星期几及指定多个日历日期。同一事项的多个具体日期使用一个 `recurrence.type=dates` 系列，不拆成多条提醒；recipientIds 必须来自当前空间，返回 `{reminder}`。
 - `PATCH .../reminders/:reminderId` 接收 `{status:"completed"|"scheduled"|"cancelled"}`。完成/恢复仅接收者可操作，已到期或已投递的任务不能撤销完成。V2 中手动完成和恢复会在同一事务排入 AI 状态确认；聊天消息以 `source=reminder_update` 区分普通回复，到点主动提醒仍使用 `source=reminder`。
 - 消息历史额外包含 `members`、`reminders`、`remindersError`；消息包含 `userId`、`displayName`、`recipientIds`、`source`、提醒回执 ID/错误。原始云端 Events 与提醒操作 JSON 不对外公开。
 
@@ -158,7 +158,7 @@ docker build -t tietie-backend .      # 镜像只含后端，静态文件用卷�
 
 Qoder 已在云端配置角色和系统提示词，应用保留该人设。首轮或协议更新时初始化完整补充协议，并同步到 `rules/assistant-behavior.json` 的 instructions 字段。后续只补充当前消息、多人成员身份、后台时间和变更的提醒/记忆索引；`conversation_protocols` 保存在数据库，重启后继续增量发送。旧版本身份协议仍可读取。
 
-生产 V2 由 AI 判断是否建立提醒或长期记忆，后台只执行有效控制消息。数据库成功但云端写入失败时发送部分成功回执，并保留持久化同步任务；AI 不能提前承诺两边都保存成功。仅记忆操作不创建提醒，所有事实按7种 JSON 模板合并分页，数据库保留事实及更正历史，云端保存相同模板页面。旧请求的 `memory_only` 作为兼容值接受，实际按 `database_and_memory` 保存；同步成功后清除临时 pendingContent。提醒创建、取消、实际提醒完成和事项完成均更新云端记忆。旧 V1 请求保留相对时间兼容解析；新 V2 不绕过 AI 判断。聊天页只显示自然正文与必要失败提示，任务只在提醒页展示，@成员直接在正文中显示整体背景标记。
+生产 V2 由 AI 判断是否建立提醒或长期记忆，后台只执行有效控制消息。数据库成功但云端写入失败时发送部分成功回执，并保留持久化同步任务；AI 不能提前承诺两边都保存成功。仅记忆操作不创建提醒，所有事实按7种 JSON 模板合并分页，数据库保留事实及更正历史，云端保存相同模板页面。`memory_only` 作为兼容值接受，实际按 `database_and_memory` 保存；同步成功后清除临时 pendingContent。提醒创建、取消、实际提醒完成和事项完成均更新云端记忆。V2 不绕过 AI 判断。聊天页只显示自然正文与必要失败提示，任务只在提醒页展示，@成员直接在正文中显示整体背景标记。
 
 定时执行另有持久化的 `task_status`：`pending → running → completed`。只有 AI 实际提醒回复保存时，才写入 `task_completed_at`；云端仅接受唤醒时仍为 running。原提醒 `status=delivered` 表示已提醒，用户主动勾选事项后才为 `status=completed`。实际活动是否做完和定时提醒是否执行完分别记录。
 

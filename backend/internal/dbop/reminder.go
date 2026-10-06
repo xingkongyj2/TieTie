@@ -146,7 +146,7 @@ func (db *DB) ApplyReminderAction(ctx context.Context, sessionID, sourceEventID 
 				return err
 			}
 			title := strings.TrimSpace(action.Title)
-			if title == "" || len([]rune(title)) > 500 || action.DueAt.IsZero() || len(action.RecipientIDs) == 0 || len(action.RecipientIDs) > 2 || conversation.ValidateRecurrence(action.Recurrence, action.DueAt) != nil {
+			if title == "" || len([]rune(title)) > conversation.ReminderTitleMaxRunes || action.DueAt.IsZero() || len(action.RecipientIDs) == 0 || len(action.RecipientIDs) > 2 || conversation.ValidateRecurrence(action.Recurrence, action.DueAt) != nil {
 				return ErrReminderInvalid
 			}
 			recipients := slices.Clone(action.RecipientIDs)
