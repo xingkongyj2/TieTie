@@ -117,6 +117,9 @@ func (s *Server) handleBind(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if existing != nil {
+		// Older spaces may predate the welcome message. Replaying this helper is
+		// safe because the message ID is derived from the session.
+		s.storeBindingWelcome(r.Context(), existing.SessionID, self, partner)
 		writeJSON(w, http.StatusOK, AccountResult{
 			User:    userPayload(self),
 			Binding: &BindingPayload{SessionID: existing.SessionID, PartnerID: partner.ID},
@@ -256,6 +259,7 @@ func (s *Server) handleBind(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		sessionID = existing.SessionID
+		s.storeBindingWelcome(r.Context(), sessionID, self, partner)
 	} else {
 		// The first binding gets one deterministic AI-authored welcome bubble.
 		// It is stored locally so it survives refreshes and is available even

@@ -208,6 +208,7 @@ func (s *Server) getMessages(w http.ResponseWriter, r *http.Request, id string) 
 		writeError(w, apiErr)
 		return
 	}
+	s.ensureBindingWelcomeForSession(r.Context(), id, auth.UserIDFrom(r.Context()))
 	// Full event context is required to attribute AI actions to the preceding
 	// authenticated member even when a browser requests an incremental history.
 	result, err := s.Qoder.GetMessages(r.Context(), id, "")
@@ -249,6 +250,32 @@ func (s *Server) getMessages(w http.ResponseWriter, r *http.Request, id string) 
 		Reminders      []dbop.Reminder       `json:"reminders"`
 		RemindersError string                `json:"remindersError,omitempty"`
 	}{result, space.Members, reminders, warning})
+}
+
+// ensureBindingWelcomeForSession backfills the first AI greeting for spaces
+// created before the welcome message was introduced. SaveMessage is an
+// idempotent upsert keyed by the session-derived message ID.
+func (s *Server) ensureBindingWelcomeForSession(ctx context.Context, sessionID string, viewerID int64) {
+	if s.DB == nil || viewerID == 0 {
+		return
+	}
+	present, err := s.DB.HasMessage(ctx, "evt_welcome_"+sessionID)
+	if err != nil || present {
+		return
+	}
+	binding, err := s.DB.GetBindingBySessionID(ctx, sessionID)
+	if err != nil || binding == nil {
+		return
+	}
+	self, err := s.DB.GetUserByID(ctx, viewerID)
+	if err != nil || self == nil {
+		return
+	}
+	partner, err := s.DB.GetUserByID(ctx, binding.OtherUser(viewerID))
+	if err != nil || partner == nil {
+		return
+	}
+	s.storeBindingWelcome(ctx, sessionID, self, partner)
 }
 
 // appendBindingWelcome restores the deterministic greeting saved by the bind
