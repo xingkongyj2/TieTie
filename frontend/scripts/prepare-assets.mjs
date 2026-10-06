@@ -19,7 +19,7 @@ await sharp(path.join(source, 'brand-notes.png')).resize(180, 180, { fit: 'insid
 for (const name of ['blue-buddy', 'ice-buddy']) {
   await sharp(path.join(source, 'ip/space-buddies-v1', `${name}.svg`), { density: 192 }).resize({ width: 360 }).png({ compressionLevel: 9 }).toFile(path.join(output, 'ip/space-buddies-v1', `${name}.png`))
 }
-for (const name of ['reminder-titles-a3c80cd66a1e.woff2', 'OFL.txt']) await copyFile(path.join(source, 'fonts', name), path.join(output, 'fonts', name))
+for (const name of ['reminder-titles-b1adf8b8db9d.woff2', 'OFL.txt']) await copyFile(path.join(source, 'fonts', name), path.join(output, 'fonts', name))
 
 const svgs = {
   'pair-decor': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 170"><ellipse cx="111" cy="144" rx="87" ry="15" fill="none" stroke="#B7D3F2" stroke-dasharray="3 6" transform="rotate(-16 111 144)"/><path d="M46 14L50 27L63 31L50 35L46 48L42 35L29 31L42 27L46 14Z" fill="#F1D58D" fill-opacity=".8"/><path d="M186 37V47M181 42H191" stroke="#EAB7CB" stroke-width="2" stroke-linecap="round"/><circle cx="17" cy="118" r="3" fill="#B8DBFF"/></svg>',

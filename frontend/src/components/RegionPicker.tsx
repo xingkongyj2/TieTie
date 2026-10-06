@@ -29,7 +29,7 @@ function RegionColumn({ label, options, selected, placeholder, onSelect }: {
   }, [listId, selected])
   return <div className="region-picker-column">
     <span className="region-picker-label">{label}</span>
-    <ScrollView className="region-picker-options" id={listId} scrollY scrollTop={scrollTop} scrollWithAnimation
+    <ScrollView className="region-picker-options" id={listId} scrollY scrollTop={scrollTop} scrollWithAnimation showScrollbar={false}
       onScroll={(event) => { offset.current = event.detail.scrollTop }} aria-label={label}
       aria-disabled={!options.length} aria-activedescendant={selected ? `${id}-${selected}` : undefined}>
       {options.length ? options.map((option) => <button type="button" role="option" id={`${id}-${option.code}`} key={option.code}

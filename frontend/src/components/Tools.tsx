@@ -145,7 +145,7 @@ function ReminderCompose({ state, onAdd, onClose, notify, onPickTime }: Pick<Pro
   return <Form className="reminder-compose" onSubmit={(event) => void submit(event)}>
     <div className="reminder-editor">
       <label className="sr-only" htmlFor="quick-reminder-content">提醒内容</label>
-      <Textarea id="quick-reminder-content" rows={5} maxLength={500} placeholder="写下提醒内容…" value={content} disabled={busy} onChange={(event) => { setContent(event.target.value); setError(''); }} />
+      <Textarea id="quick-reminder-content" rows={5} maxLength={80} placeholder="写下简短提醒事项…" value={content} disabled={busy} onChange={(event) => { setContent(event.target.value); setError(''); }} />
       <div className="reminder-editor-footer">
         <label className="reminder-mention"><span className="sr-only">提醒对象</span><Select value={assignee} disabled={busy} onChange={(event) => setAssignee(event.target.value as typeof assignee)}><option value="both">@我们两人</option><option value="self">@我</option><option value="partner">@{state.members.find((member) => member.id === 'partner')?.name || '另一位成员'}</option></Select><ChevronDown size={14} aria-hidden="true" /></label>
       </div>

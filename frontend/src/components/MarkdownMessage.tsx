@@ -55,7 +55,7 @@ function messageComponents(onOpenImage: (src: string, alt: string) => void, name
     if (!src || !/^https:\/\//i.test(src)) return <span className="markdown-image-placeholder"><ImageIcon size={13} aria-hidden="true" />{alt || '图片'}</span>;
     return <button className="message-image-button" type="button" aria-label={`放大查看${alt || '图片'}`} onClick={() => onOpenImage(src, alt || '聊天图片')}><ChatImage src={src} alt={alt || '聊天图片'} onLayoutChange={onLayoutChange} /></button>;
   },
-  table({ children }) { return <ScrollView className="markdown-table-wrap" scrollX><View className="h5-table markdown-native-table" style={{ display: 'table' }}>{children}</View></ScrollView>; },
+  table({ children }) { return <ScrollView className="markdown-table-wrap" scrollX showScrollbar={false}><View className="h5-table markdown-native-table" style={{ display: 'table' }}>{children}</View></ScrollView>; },
   h1({ children }) { return <h1>{children}</h1>; },
   h2({ children }) { return <h2>{children}</h2>; },
   h3({ children }) { return <h3>{children}</h3>; },

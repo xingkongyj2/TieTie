@@ -1,15 +1,19 @@
 .countdowns { display: flex; flex-direction: column; gap: 17px; }
-.countdown-card { --countdown-color: var(--date-card-color, #5187d0); position: relative; isolation: isolate; overflow: hidden; padding: 22px; border-radius: 26px; background: var(--date-card-background, linear-gradient(135deg,#f4f8ff,#e4eefc)); }
-.countdown-art { position: absolute; z-index: -1; right: -15px; top: 70px; color: var(--countdown-color); opacity: .17; transform: rotate(var(--date-card-art-rotation, -8deg)); pointer-events: none; }
-.countdown-card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 17px; }
-.countdown-icon { width: 40px; height: 40px; display: grid; place-items: center; color: var(--countdown-color); border-radius: 14px; background: #ffffffbb; }
-.countdown-repeat { display: inline-flex; align-items: center; gap: 4px; color: var(--countdown-color); background: #ffffff99; border-radius: 8px; padding: 6px 8px; font-size: 10px; }
-.countdown-card h2 { font-size: 19px; font-weight: 550; color: #42516d; line-height: 1.5; overflow-wrap: anywhere; }
-.countdown-count-label { margin-top: 14px; font-size: 11px; color: #8391a8; }
-.countdown-number { display: flex; align-items: baseline; gap: 9px; margin: 4px 0 18px; color: var(--countdown-color); }
-.countdown-number strong { font-size: 58px; line-height: 1.15; font-weight: 550; letter-spacing: -2px; font-variant-numeric: tabular-nums; }
-.countdown-number span { color: #8b97ac; font-size: 12px; }
-.countdown-card-bottom { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.countdown-card-bottom time { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: #8390a8; }
-.countdown-leap-note { color: #8795a9; font-size: 10px; margin-top: 8px; }
+.countdown-card { --countdown-color: var(--date-card-color, #5187d0); position: relative; isolation: isolate; overflow: hidden; padding: 18px 20px 18px 24px; border-radius: 22px; background: var(--date-card-background, linear-gradient(135deg,#f4f8ff,#e4eefc)); }
+.countdown-art { position: absolute; z-index: -1; right: -10px; top: 50px; color: var(--countdown-color); opacity: .17; transform: rotate(var(--date-card-art-rotation, -8deg)); pointer-events: none; }
+.countdown-card-content { position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; min-width: 0; }
+.countdown-card-copy { min-width: 0; }
+.countdown-card-heading { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.countdown-icon { width: 34px; height: 34px; flex: none; display: grid; place-items: center; color: var(--countdown-color); border-radius: 11px; background: #ffffffbb; }
+.countdown-card h2 { min-width: 0; color: #42516d; font-size: 17px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.countdown-card-meta { display: flex; align-items: center; flex-wrap: nowrap; gap: 7px; min-width: 0; margin: 8px 0 0 6px; white-space: nowrap; }
+.countdown-card-meta time { display: inline-flex; flex: none; align-items: center; gap: 5px; min-width: 0; color: #8390a8; font-size: 10px; font-weight: 550; font-variant-numeric: tabular-nums; }
+.countdown-repeat { display: inline-flex; flex: none; align-items: center; gap: 3px; color: var(--countdown-color); background: #fff9; border-radius: 6px; padding: 2px 6px; font-size: 9px; font-weight: 550; }
+.countdown-number-block { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; min-width: 88px; padding-left: 8px; }
+.countdown-count-label { margin: 0 0 1px; color: #8391a8; font-size: 10px; text-align: right; }
+.countdown-number { display: flex; align-items: baseline; justify-content: flex-end; gap: 6px; margin: 0; color: var(--countdown-color); }
+.countdown-number strong { font-size: 44px; line-height: 1.1; font-weight: 550; letter-spacing: -1.5px; font-variant-numeric: tabular-nums; }
+.countdown-number span { color: #8b97ac; font-size: 11px; }
+.countdown-leap-note { color: #8795a9; font-size: 9px; margin: 8px 0 0 6px; }
 .countdown-more { color: #6b8dbc; background: #edf3fc; border-radius: 10px; padding: 10px; font-size: 11px; }
+@media (max-width: 370px) { .countdown-card { padding: 16px 18px 16px 20px; } .countdown-number-block { min-width: 82px; } .countdown-number strong { font-size: 40px; } }

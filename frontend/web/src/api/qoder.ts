@@ -2,6 +2,13 @@ import { ApiError, isAccountTokenInvalid, request } from './client'
 import type { CloudMember, CloudReminder, Message, ReminderRecurrence } from '../types'
 import uploadTypes from './upload-types.json'
 import { clearToken, getToken } from '../lib/token'
+import XLSX from 'xlsx/dist/xlsx.core.min.js'
+import * as cptable from 'xlsx/dist/cpexcel.full.mjs'
+
+// The ESM build keeps legacy code pages out of the main bundle. Loading the
+// complete code-page table is required for Chinese and other non-UTF-8 .xls
+// files.
+XLSX.set_cptable(cptable)
 
 export interface CloudSession {
   replyMode?: 'silent'
@@ -119,6 +126,7 @@ function authenticatedStream(id: string, after: string | null, privateChannel = 
 const imageTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 const imageExtensions: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' }
 const officeExtensions = /\.(xlsx|xls|xlsm|xlsb|docx|doc)$/i
+const excelExtensions = /\.(xlsx|xls|xlsm|xlsb)$/i
 const textApplicationMimes = new Set(uploadTypes.textApplicationMimes)
 const extensionlessNames = new Set(uploadTypes.extensionlessNames)
 
@@ -139,6 +147,7 @@ function imageMimeType(file: File): string | null {
 }
 
 export function isImageAttachment(file: File): boolean { return imageMimeType(file) !== null }
+export function isExcelAttachment(file: File): boolean { return excelExtensions.test(file.name) }
 export function isOfficeAttachment(file: File): boolean { return officeExtensions.test(file.name) }
 
 export function validateAttachments(files: File[]): void {
@@ -198,6 +207,54 @@ async function fileBase64(file: File): Promise<string> {
   return dataUrl.slice(dataUrl.indexOf(',') + 1)
 }
 
+const excelTextName = (name: string): string => name.replace(excelExtensions, '.txt')
+
+async function fileArrayBuffer(file: File): Promise<ArrayBuffer> {
+  if (typeof file.arrayBuffer === 'function') return file.arrayBuffer()
+  return new Promise<ArrayBuffer>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => reader.result instanceof ArrayBuffer
+      ? resolve(reader.result)
+      : reject(new Error(`读取文件失败：${file.name}`))
+    reader.onerror = () => reject(new Error(`读取文件失败：${file.name}`))
+    reader.readAsArrayBuffer(file)
+  })
+}
+
+/** Convert every worksheet to tab-separated text before sending it to Qoder. */
+async function excelText(file: File): Promise<string> {
+  let workbook: XLSX.WorkBook
+  try {
+    workbook = XLSX.read(await fileArrayBuffer(file), { type: 'array', cellDates: true, cellText: true, dense: true })
+  } catch {
+    throw new Error(`无法解析 Excel 文件：${file.name}。请确认文件未损坏或未加密。`)
+  }
+
+  let sections: string[]
+  try {
+    sections = workbook.SheetNames.map((sheetName) => {
+      const sheet = workbook.Sheets[sheetName]
+      if (!sheet) return `工作表：${sheetName}`
+      const content = XLSX.utils.sheet_to_csv(sheet, {
+        FS: '\t',
+        RS: '\n',
+        blankrows: false,
+        strip: false,
+      }).replace(/(?:\r\n|\n|\r)+$/, '')
+      return content ? `工作表：${sheetName}\n${content}` : `工作表：${sheetName}`
+    })
+  } catch {
+    throw new Error(`无法解析 Excel 文件：${file.name}。请确认文件未损坏或未加密。`)
+  }
+
+  const text = sections.join('\n\n').trim()
+  if (!text || text.includes('\0')) throw new Error(`Excel 文件没有可提取的文字内容：${file.name}。`)
+  if (new TextEncoder().encode(text).byteLength > 4 * 1024 * 1024) {
+    throw new Error(`${file.name} 提取后的文字超过 4 MB，请拆分文件后重试。`)
+  }
+  return text
+}
+
 const sessionPath = (id: string) => `/api/qoder/sessions/${encodeURIComponent(id)}/messages`
 const remindersPath = (id: string) => `/api/qoder/sessions/${encodeURIComponent(id)}/reminders`
 
@@ -228,6 +285,8 @@ export const qoderApi = {
       const imageMime = imageMimeType(file)
       return imageMime
         ? { kind: 'image', name: file.name, mimeType: imageMime, data: await imageBase64(file) }
+        : isExcelAttachment(file)
+          ? { kind: 'file', name: excelTextName(file.name), mimeType: 'text/plain', content: await excelText(file) }
         : isOfficeAttachment(file)
           ? { kind: 'document', name: file.name, mimeType: file.type || 'application/octet-stream', data: await fileBase64(file) }
         : { kind: 'file', name: file.name, mimeType: supportedTextMime(file.type) ? file.type.toLowerCase().split(';')[0].trim() : 'text/plain', content: await file.text() }

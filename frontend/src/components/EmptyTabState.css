@@ -1,5 +1,5 @@
 .empty-tab-state { display: flex; flex: 1; align-items: center; justify-content: center; width: 100%; min-height: 0; padding: 20px 0 32px; }
-.empty-tab-card { --empty-accent: #5688c6; --empty-icon: #e2eeff; --empty-surface: #f2f7ff; --empty-border: #e3ecf8; width: 100%; max-width: 340px; padding: 27px 20px 21px; border: 1px solid var(--empty-border); border-radius: 26px; background: linear-gradient(160deg, var(--empty-surface), #fff 84%); text-align: center; }
+.empty-tab-card { --empty-accent: #5688c6; --empty-icon: #e2eeff; --empty-surface: #f2f7ff; --empty-border: #e3ecf8; width: 100%; max-width: 340px; padding: 0 20px; border: 0; background: transparent; text-align: center; }
 .empty-tab-state.is-anniversary .empty-tab-card { --empty-accent: #b67496; --empty-icon: #fbe6ee; --empty-surface: #fff3f7; --empty-border: #f3e3e9; }
 .empty-tab-state.is-care .empty-tab-card { --empty-accent: #5e9b91; --empty-icon: #ddf2eb; --empty-surface: #f0faf6; --empty-border: #dfefe8; }
 .empty-tab-art { position: relative; display: grid; place-items: center; width: 68px; height: 68px; margin: 0 auto; border-radius: 23px; background: var(--empty-icon); color: var(--empty-accent); transform: rotate(-7deg); }
@@ -7,7 +7,7 @@
 .empty-tab-art::before, .empty-tab-art::after { content: '✦'; position: absolute; color: var(--empty-accent); font-size: 13px; font-weight: 400; }
 .empty-tab-art::before { top: -9px; right: -15px; }
 .empty-tab-art::after { bottom: -8px; left: -14px; font-size: 9px; opacity: .65; }
-.empty-tab-card h2 { margin: 19px 0 18px; color: #34435c; font-size: 18px; font-weight: 600; line-height: 1.4; }
-.empty-tab-example { padding: 13px 15px 14px; border: 1px solid var(--empty-border); border-radius: 16px; background: #fff; text-align: left; }
+.empty-tab-card h2 { margin: 0 0 20px; color: #34435c; font-size: 18px; font-weight: 600; line-height: 1.4; }
+.empty-tab-example { min-height: 0; padding: 12px 15px 13px; border: 0; border-radius: 16px; background: var(--empty-surface); text-align: left; }
 .empty-tab-example > span { display: flex; align-items: center; gap: 6px; color: var(--empty-accent); font-size: 11px; font-weight: 600; }
-.empty-tab-example p { margin-top: 8px; color: #42516b; font-size: 13px; line-height: 1.65; }
+.empty-tab-example p { margin-top: 6px; color: #42516b; font-size: 13px; line-height: 1.5; }

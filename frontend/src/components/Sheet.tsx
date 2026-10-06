@@ -5,7 +5,7 @@ import { ScrollView, View } from '@tarojs/components';
 import { nextFrame, cancelFrame, isAppVisible } from '../lib/platform';
 
 /** In-tree native sheet, using the same backdrop and slide transition classes. */
-export function Sheet({ title, children, onClose }: { title: string; children: ReactNode | ((close: () => void) => ReactNode); onClose: () => void }) {
+export function Sheet({ title, children, onClose, className = '' }: { title: string; children: ReactNode | ((close: () => void) => ReactNode); onClose: () => void; className?: string }) {
   const titleId = useId().replace(/:/g, '');
   const closeRef = useRef(onClose);
   const closingRef = useRef(false);
@@ -45,7 +45,7 @@ export function Sheet({ title, children, onClose }: { title: string; children: R
   return <div className={`sheet-backdrop ${visible ? 'is-open' : ''} ${closing ? 'is-closing' : ''}`} onClick={(event) => {
     if (process.env.TARO_ENV !== 'h5' || event.target === event.currentTarget) requestClose();
   }}>
-    <ScrollView className="sheet" scrollY enhanced showScrollbar={false} style={height ? { height: `${height}px` } : {}} onClick={process.env.TARO_ENV === 'h5' ? undefined : (event) => event.stopPropagation()}>
+    <ScrollView className={`sheet${className ? ` ${className}` : ''}`} scrollY enhanced showScrollbar={false} style={height ? { height: `${height}px` } : {}} onClick={process.env.TARO_ENV === 'h5' ? undefined : (event) => event.stopPropagation()}>
       <View id={`${titleId}-content`}>
         <div className="sheet-handle" />
         <header className="sheet-header"><h2 id={titleId}>{title}</h2><button type="button" className="icon-button" aria-label="关闭弹窗" onClick={requestClose}><X size={19} /></button></header>

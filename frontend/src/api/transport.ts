@@ -60,11 +60,14 @@ export function createTransport(deps: TransportDependencies) {
         else resolve(value as T)
       }
       const onAbort = () => { finish(abortError()); task?.abort() }
-      const authAction = path === '/api/auth/login' ? '登录' : path === '/api/auth/register' ? '注册' : undefined
+      const authAction = path === '/api/auth/login' || path === '/api/auth/wechat' ? '登录' : path === '/api/auth/register' ? '注册' : undefined
+      const subscriptionWrite = path === '/api/account/wechat-subscription' && method === 'POST'
       const uncertain = method === 'POST' ? '消息可能已送达，请刷新确认后再发送。' : ''
       const authHint = authAction === '注册' ? '请检查网络和服务地址，也可尝试登录确认账号状态。' : '请检查网络和服务地址后重试。'
-      const timeoutMessage = authAction ? `${authAction}请求超时，${authHint}` : `云端请求超时。${uncertain || '请刷新会话查看最新状态。'}`
-      const networkMessage = authAction ? `${authAction}连接失败，${authHint}` : `连接云端失败，请检查网络和服务地址。${uncertain}`
+      const timeoutMessage = subscriptionWrite ? '订阅结果保存超时，请点击重试保存。'
+        : authAction ? `${authAction}请求超时，${authHint}` : `云端请求超时。${uncertain || '请刷新会话查看最新状态。'}`
+      const networkMessage = subscriptionWrite ? '订阅结果保存失败，请检查网络后重试保存。'
+        : authAction ? `${authAction}连接失败，${authHint}` : `连接云端失败，请检查网络和服务地址。${uncertain}`
       signal?.addEventListener('abort', onAbort, { once: true })
       timer = setTimeout(() => {
         finish(new ApiError(timeoutMessage, 0, 'TIMEOUT'))
@@ -81,7 +84,10 @@ export function createTransport(deps: TransportDependencies) {
             if (response.statusCode < 200 || response.statusCode >= 300) {
               const error = (payload as { error?: { message?: unknown; code?: unknown } } | null)?.error
               const code = typeof error?.code === 'string' ? error.code : undefined
-              const message = typeof error?.message === 'string' ? error.message
+              const missingWechatLogin = path === '/api/auth/wechat' && method === 'POST'
+                && (response.statusCode === 404 || response.statusCode === 405)
+              const message = missingWechatLogin ? '当前服务暂不支持微信登录，请联系管理员更新服务。'
+                : typeof error?.message === 'string' ? error.message
                 : response.statusCode === 401 ? '登录已过期，请重新登录。'
                 : response.statusCode === 403 ? '没有访问这个空间的权限。'
                 : response.statusCode === 409 ? '这个会话正在处理消息，请等当前回复结束。'

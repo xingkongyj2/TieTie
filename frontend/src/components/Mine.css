@@ -7,18 +7,19 @@
 }
 
 .mine-page .tab-page-scroll.mine-scroll { padding: max(var(--page-title-top), env(safe-area-inset-top)) 24px 18px; }
+.mini-root .mine-page .tab-page-scroll.mine-scroll { padding-top: calc(var(--page-title-top, 20px) + 6px); }
 .mine-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
 .mine-header h1 { font-size: 20px; }
 .mine-header-sparkle { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 50%; background: #f6f8fb; color: var(--mine-accent); }
 
 .mine-identity-card { position: relative; isolation: isolate; padding: 16px 24px 24px; overflow: hidden; border: 0; border-radius: 28px; background: #f7f8fa; }
-.mine-buddies { position: absolute; z-index: -1; top: 8px; right: 2px; width: 177px; height: 144px; pointer-events: none; filter: drop-shadow(0 8px 9px #7ba9df17); }
+.mine-buddies { position: absolute; z-index: -1; top: 14px; right: 5px; width: 155px; height: 126px; pointer-events: none; filter: drop-shadow(0 8px 9px #7ba9df17); }
 .mine-buddy-back { transform-origin: 141px 89px; animation: mine-buddy-arrive .7s .08s both; }
 .mine-buddy-front { transform-origin: 80px 104px; animation: mine-buddy-arrive .7s .18s both; }
 .mine-identity { position: relative; }
-.mine-avatar-edit { position: relative; display: flex; justify-content: center; align-items: center; width: 66px; height: 66px; padding: 5px; border: 0; border-radius: 22px; background: #eaf1fb; }
+.mine-avatar-edit { position: relative; z-index: 1; display: flex; justify-content: center; align-items: center; width: 66px; height: 66px; padding: 5px; overflow: visible; border: 0; border-radius: 22px; background: #eaf1fb; }
 .mine-avatar-edit .avatar-large { width: 55px; height: 55px; }
-.mine-avatar-pencil { position: absolute; right: -5px; bottom: -3px; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; border: 0; background: var(--mine-accent); color: white; }
+.mine-avatar-pencil { position: absolute; z-index: 2; right: -5px; bottom: -3px; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; border: 0; background: var(--mine-accent); color: white; }
 .mine-avatar-edit:hover:not(:disabled) { background: #e0eafa; }
 .mine-avatar-edit.is-busy { opacity: 1; }
 .mine-avatar-loading { position: absolute; inset: 0; display: grid; place-items: center; border-radius: inherit; background: #eaf1fbdd; }
@@ -40,7 +41,6 @@
 .mine-copy-button.is-copied .mine-copy-mark { color: #438870; background: #e7f3ee; }
 
 .mine-about { margin-top: 22px; }
-.mine-about-note { margin-top: 10px; color: #8192ab; font-size: 10px; letter-spacing: .3px; text-align: center; }
 .mine-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 0 2px 10px; }
 .mine-edit-button { display: flex; align-items: center; justify-content: center; gap: 3px; min-height: 44px; padding: 0 0 0 8px; border-radius: 8px; background: transparent; color: #5278b4; font-size: 11px; }
 .mine-edit-button:hover:not(:disabled) { color: var(--mine-accent); }
@@ -57,9 +57,39 @@
 .mine-interest-tags li { display: flex; align-items: baseline; gap: 5px; max-width: 100%; padding: 7px 11px; border: 0; border-radius: 11px; background: #eaf0f8; color: #607694; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
 .mine-interest-tags li > span { flex: none; color: #8aabd6; }
 .mine-add-interests { display: flex; align-items: center; gap: 5px; min-height: 44px; margin-top: 7px; padding: 0; background: transparent; color: var(--mine-accent); font-size: 13px; }
+.mine-software { margin-top: 22px; }
+.mine-software-links { display: flex; flex-direction: column; gap: 8px; }
+.mine-software-link { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 64px; padding: 14px 20px; border: 0; border-radius: 20px; background: #f8f9fb; color: #49688f; text-align: left; line-height: 1.5; }
+.mine-software-icon { display: flex; flex: none; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 11px; background: #ffffffb8; color: #6388c0; }
+.mine-software-label { flex: 1; min-width: 0; color: #34435c; font-size: 14px; font-weight: 500; }
+.mine-software-link > .tietie-icon { color: #8192ab; }
+.mine-software-content { color: #60718b; font-size: 13px; line-height: 1.85; }
+.mine-software-content p { margin: 0 0 14px; }
+.mine-software-content .mine-software-intro { color: #34435c; font-size: 16px; font-weight: 600; line-height: 1.6; }
+.mine-software-ideas { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 16px; list-style: none; border-radius: 18px; background: #f0f4fb; }
+.mine-software-ideas li { position: relative; padding-left: 13px; }
+.mine-software-ideas li::before { content: ''; position: absolute; top: 10px; left: 0; width: 4px; height: 4px; border-radius: 50%; background: #89a6d0; }
+.mine-contact-list { display: flex; flex-direction: column; gap: 10px; }
+.mine-contact-row { display: flex; align-items: center; gap: 16px; width: 100%; padding: 16px 18px; border: 0; border-radius: 18px; background: #f0f4fb; color: #6a84a6; text-align: left; line-height: 1.5; }
+.mine-contact-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 5px; }
+.mine-contact-copy > span { color: #7c8ba2; font-size: 11px; }
+.mine-contact-copy strong { color: #49688f; font-size: 16px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .mine-footer { padding-top: 14px; }
 .mine-footer-actions { display: flex; gap: 10px; }
 .mine-footer-actions button { flex: 1; min-width: 0; }
+.mine-footer-actions .secondary-button { background: linear-gradient(115deg, #edf3fc, #f5f7fb 82%); }
+.mine-footer-actions .secondary-button:hover:not(:disabled) { background: linear-gradient(115deg, #edf3fc, #f5f7fb 82%); }
+.mine-wechat-reminders { margin-top: 14px; }
+.wechat-reminder-row { display: flex; align-items: center; gap: 12px; min-height: 80px; padding: 18px 20px 18px 24px; border: 0; border-radius: 22px; background: linear-gradient(115deg, #edf3fc, #f5f7fb 82%); }
+.wechat-reminder-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 7px; }
+.wechat-reminder-copy > span { color: #7c8ba2; font-size: 11px; line-height: 1.5; letter-spacing: .4px; }
+.wechat-reminder-copy strong { color: #49688f; font-family: ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace; font-size: 22px; line-height: 1.3; font-weight: 500; letter-spacing: 1.6px; }
+.wechat-reminder-button { display: grid; flex: none; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #2864ef; }
+.wechat-reminder-mark { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: #fff; color: currentColor; box-shadow: 0 3px 10px #7b9dd51f; }
+.wechat-reminder-button.is-disabled { opacity: 1; color: #89a6d9; background: transparent; cursor: default; }
+.wechat-reminder-button.is-disabled:active { transform: none; }
+.wechat-reminder-button:active:not(.is-disabled) .wechat-reminder-mark { background: #eaf1ff; }
+.mine-wechat-reminder-error { width: 100%; margin: 0; color: #e5484d; font-size: 11px; line-height: 1.7; }
 
 .mine-exit-sheet p { margin: 0 0 10px; color: var(--mine-muted, #7a8391); font-size: 13px; line-height: 1.7; }
 .mine-exit-actions { display: flex; gap: 10px; margin-top: 18px; }
@@ -79,7 +109,7 @@
   .mine-page .tab-page-scroll.mine-scroll { padding-right: 18px; padding-left: 18px; }
   .mine-header h1 { font-size: 20px; }
   .mine-identity-card { padding-right: 20px; padding-left: 20px; }
-  .mine-buddies { top: 17px; right: -9px; width: 158px; height: 128px; }
+  .mine-buddies { top: 19px; right: -2px; width: 142px; height: 115px; }
   .mine-name h2 { font-size: 24px; }
   .mine-invite { gap: 10px; padding-right: 14px; padding-left: 20px; }
   .mine-invite-copy strong { font-size: 20px; letter-spacing: 1.4px; }

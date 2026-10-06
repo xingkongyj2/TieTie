@@ -1,4 +1,6 @@
+import Taro from '@tarojs/taro'
 import { request } from './client'
+import { completeWechatLogin } from './wechat-login'
 
 export interface Binding {
   sessionId: string
@@ -15,10 +17,18 @@ export interface AccountResult {
   token?: string
   user: User
   binding: Binding | null
+  isNewUser?: boolean
 }
 
 /** The account hook commits a login token only if its request is still current. */
 export const authApi = {
+  async wechatLogin(): Promise<AccountResult> {
+    if (process.env.TARO_ENV !== 'weapp') throw new Error('请在微信小程序中使用微信登录。')
+    return completeWechatLogin({
+      login: () => Taro.login({ timeout: 10_000 }),
+      exchange: code => request<AccountResult>('/api/auth/wechat', { method: 'POST', body: { code } }),
+    })
+  },
   async register(username: string, password: string): Promise<AccountResult> {
     const result = await request<AccountResult>('/api/auth/register', { method: 'POST', body: { username, password } })
     return result

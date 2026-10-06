@@ -26,6 +26,10 @@ export function Composer({ members, sending, processing, stopping, disabled = fa
   const names = partner ? [partner.name] : [];
   const toPartner = mentionRanges(text, names).length > 0;
   const hasContent = !!text.trim() || files.length > 0;
+  // WeChat applies a native disabled color to the button. These icons are
+  // CSS-mask views, so paint the mask itself while the compact composer is
+  // showing the AI processing state.
+  const processingIconStyle = processing ? { color: '#7b879a', backgroundColor: '#7b879a' } : undefined;
   const focusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressCompactClickRef = useRef(false);
@@ -142,8 +146,8 @@ export function Composer({ members, sending, processing, stopping, disabled = fa
     <div className={`composer-stage${expanded && !processing ? ' is-expanded' : ''}`}>
     <div className="composer-compact" aria-hidden={expanded && !processing || voiceState !== 'idle'}>
       <button type="button" className="composer-compact-text" disabled={sending || disabled || processing} onTouchStart={(event) => compactTouchStart(event.touches[0]?.clientY ?? 0)} onTouchMove={(event) => touchMove(event.touches[0]?.clientY ?? 0)} onTouchEnd={touchEnd} onTouchCancel={cancelVoice} onClick={() => { if (suppressCompactClickRef.current) { suppressCompactClickRef.current = false; return; } openEditor(); }} aria-label={processing ? 'AI正在处理' : disabledReason ?? '发消息或按住说话'}><span>{processing ? 'AI正在处理' : text || (files.length ? `已选 ${files.length} 个附件，点此继续` : disabled && disabledReason || '发消息或按住说话')}</span></button>
-      <button type="button" className="attachment-button" aria-label="添加附件或图片" title="添加附件或图片" disabled={sending || disabled || processing} onClick={() => { void selectFiles(); }}><Paperclip size={19} strokeWidth={2} /></button>
-      <button type="button" className="voice-button" aria-label="语音转写尚未启用，按住可查看提示，上移取消" title="语音转写尚未启用" disabled={sending || disabled || processing} onTouchStart={(event) => startVoice(event.touches[0]?.clientY ?? 0)} onTouchMove={(event) => touchMove(event.touches[0]?.clientY ?? 0)} onTouchEnd={releaseVoice} onTouchCancel={cancelVoice} ><Mic size={19} strokeWidth={2} aria-hidden="true" /></button>
+      <button type="button" className="attachment-button" aria-label="添加附件或图片" title="添加附件或图片" disabled={sending || disabled || processing} onClick={() => { void selectFiles(); }}><Paperclip size={19} strokeWidth={2} style={processingIconStyle} /></button>
+      <button type="button" className="voice-button" aria-label="语音转写尚未启用，按住可查看提示，上移取消" title="语音转写尚未启用" disabled={sending || disabled || processing} onTouchStart={(event) => startVoice(event.touches[0]?.clientY ?? 0)} onTouchMove={(event) => touchMove(event.touches[0]?.clientY ?? 0)} onTouchEnd={releaseVoice} onTouchCancel={cancelVoice} ><Mic size={19} strokeWidth={2} aria-hidden="true" style={processingIconStyle} /></button>
       {processing ? <button type="button" className="send-button stop-button" aria-label="停止AI处理" aria-busy={stopping} disabled={stopping} onClick={() => void onStop().catch((error) => onError(error instanceof Error ? error.message : '停止失败，请再试一次。'))}>{stopping ? <span className="spinner" aria-hidden="true" /> : <Square size={15} fill="currentColor" strokeWidth={2} aria-hidden="true" />}</button>
         : <button type="button" className={`send-button${!hasContent || sending || disabled ? ' is-disabled' : ''}`} aria-label="发送消息" disabled={(!text.trim() && !files.length) || sending || disabled} onClick={() => void send()}>{sending ? <span className="spinner" /> : <ArrowUp size={22} strokeWidth={2.2} />}</button>}
     </div>
@@ -156,12 +160,13 @@ export function Composer({ members, sending, processing, stopping, disabled = fa
     </div>)}</div>}
     <div className={`composer${inputFocused ? ' is-focused' : ''}`}>
       <div className="composer-input-wrap">
-      <Textarea className="h5-textarea composer-textarea" aria-label="聊天消息" placeholder={processing ? 'AI正在处理' : placeholder}
+      <Textarea className="h5-textarea composer-textarea" aria-label="聊天消息" placeholder={process.env.TARO_ENV === 'weapp' ? '' : (processing ? 'AI正在处理' : placeholder)}
         autoHeight maxlength={2000} value={text} focus={inputFocused} cursor={caret} fixed adjustPosition={false}
         holdKeyboard showConfirmBar={false} disableDefaultPadding
         disabled={sending || disabled || processing} style={{ color: '#303641', minHeight: '44px', maxHeight: '188px' }}
         onFocus={() => setInputFocused(true)} onBlur={(event) => { setInputFocused(false); setCaret(event.detail.cursor); }}
         onInput={(event) => { editDraft(text, event.detail.value, event.detail.cursor); }} />
+      {process.env.TARO_ENV === 'weapp' && !text && <span className="composer-placeholder" aria-hidden="true">{processing ? 'AI正在处理' : placeholder}</span>}
       </div>
       <div className="composer-toolbar">
       <div className="composer-private-control">

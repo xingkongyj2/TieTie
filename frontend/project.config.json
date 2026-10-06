@@ -3,7 +3,7 @@
   "projectname": "tietie-miniprogram",
   "appid": "wx2b024606f9c7a021",
   "compileType": "miniprogram",
-  "miniprogramRoot": "dist/",
+  "miniprogramRoot": "./dist",
   "setting": {
     "urlCheck": true,
     "es6": false,

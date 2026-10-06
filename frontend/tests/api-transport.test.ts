@@ -67,8 +67,48 @@ test('network failures preserve account token and tell POST callers to confirm h
 
 const authFailures = [
   { path: '/api/auth/login', network: '登录连接失败，请检查网络和服务地址后重试。', timeout: '登录请求超时，请检查网络和服务地址后重试。' },
+  { path: '/api/auth/wechat', network: '登录连接失败，请检查网络和服务地址后重试。', timeout: '登录请求超时，请检查网络和服务地址后重试。' },
   { path: '/api/auth/register', network: '注册连接失败，请检查网络和服务地址，也可尝试登录确认账号状态。', timeout: '注册请求超时，请检查网络和服务地址，也可尝试登录确认账号状态。' },
 ]
+test('missing WeChat login routes explain a service update without retrying or losing the account token', async () => {
+  for (const statusCode of [404, 405]) for (const data of [
+    { error: { code: 'unsupported_route', message: '不支持此会话操作。' } },
+    'Not Found',
+  ]) {
+    const f = fixture()
+    const pending = f.request('/api/auth/wechat', { method: 'POST', body: { code: 'fresh-code' } })
+    assert.equal(f.options.url, 'https://api.example/api/auth/wechat')
+    assert.equal(f.options.method, 'POST')
+    f.options.success({ statusCode, data })
+    await assert.rejects(pending, e => e instanceof ApiError && e.status === statusCode
+      && e.message === '当前服务暂不支持微信登录，请联系管理员更新服务。')
+    assert.equal(f.requests, 1)
+    assert.deepEqual(f.invalid, [])
+  }
+})
+test('WeChat configuration and code errors, and unknown chat routes preserve their specific messages', async () => {
+  for (const response of [
+    { path: '/api/auth/wechat', statusCode: 503, code: 'wechat_login_unavailable', message: '微信登录尚未配置，请联系管理员。' },
+    { path: '/api/auth/wechat', statusCode: 401, code: 'invalid_wechat_code', message: '微信登录凭证已失效，请重新点击登录。' },
+    { path: '/api/qoder/sessions/space/messages', statusCode: 404, code: 'unsupported_route', message: '不支持此会话操作。' },
+  ]) {
+    const f = fixture()
+    const pending = f.request(response.path, { method: 'POST' })
+    f.options.success({ statusCode: response.statusCode, data: { error: { code: response.code, message: response.message } } })
+    await assert.rejects(pending, e => e instanceof ApiError && e.code === response.code && e.message === response.message)
+    assert.equal(f.requests, 1)
+  }
+})
+test('subscription result failures ask to save again rather than send a chat message', async () => {
+  for (const timeout of [false, true]) {
+    const f = fixture()
+    const pending = f.request('/api/account/wechat-subscription', { method: 'POST', body: { requestId: 'same-attempt' } })
+    f.options.fail({ errMsg: timeout ? 'request:fail timeout' : 'request:fail connection reset' })
+    await assert.rejects(pending, e => e instanceof ApiError && e.message === (timeout
+      ? '订阅结果保存超时，请点击重试保存。' : '订阅结果保存失败，请检查网络后重试保存。'))
+    assert.equal(f.requests, 1)
+  }
+})
 test('login and registration native failures show account-specific network and timeout guidance', async () => {
   for (const auth of authFailures) for (const timeout of [false, true]) {
     const f = fixture(); const pending = f.request(auth.path, { method: 'POST', body: { username: 'test', password: 'test-password' } })

@@ -1,5 +1,4 @@
 import { Image, ScrollView } from '@tarojs/components'
-import { ArrowRight, Bell } from './Icons'
 import { useState } from 'react'
 import type { RelationshipState } from '../types'
 import { ReminderBoard } from './Tools'
@@ -16,7 +15,6 @@ interface Props {
   sessionId?: string
   selfId?: number
   onEditRegion: () => void
-  onBind: () => void
   anniversaries: AnniversaryState
   state: RelationshipState
   reminderState?: RelationshipState
@@ -29,13 +27,14 @@ interface Props {
   notify: (text: string) => void
 }
 
-export function LittleThings({ sessionId, selfId, onEditRegion, onBind, state, anniversaries, reminderState = state, onToggle, onCancel, onDelete, reminderNotice, remindersLoading, onReloadReminders, notify }: Props) {
+export function LittleThings({ sessionId, selfId, onEditRegion, state, anniversaries, reminderState = state, onToggle, onCancel, onDelete, reminderNotice, remindersLoading, onReloadReminders, notify }: Props) {
   const [activeTab, setActiveTab] = useState<'care' | 'reminders' | 'anniversary' | 'countdown'>('reminders')
   const [activeFilter, setActiveFilter] = useState<'both' | 'self' | 'partner' | null>(null)
   const [countdownPlaceholder, setCountdownPlaceholder] = useState(true)
   const [carePlaceholder, setCarePlaceholder] = useState(true)
+  const remindersPlaceholder = !sessionId || !reminderState.reminders.length && !remindersLoading && !reminderNotice
   const anniversaryPlaceholder = !sessionId || !anniversaries.anniversaries.length && !anniversaries.featured && (!anniversaries.spaceCreatedAt || Number.isNaN(Date.parse(anniversaries.spaceCreatedAt))) && !anniversaries.error
-  const placeholder = activeTab === 'countdown' ? countdownPlaceholder : activeTab === 'care' ? carePlaceholder : activeTab === 'anniversary' && anniversaryPlaceholder
+  const placeholder = activeTab === 'reminders' ? remindersPlaceholder : activeTab === 'countdown' ? countdownPlaceholder : activeTab === 'care' ? carePlaceholder : anniversaryPlaceholder
   const pendingReminders = reminderState.reminders.filter((reminder) => reminderPhase(reminder) === 'pending')
   const pendingCount = pendingReminders.length
   const reminderStats = [
@@ -62,15 +61,10 @@ export function LittleThings({ sessionId, selfId, onEditRegion, onBind, state, a
           </div>
         </div>
       </header>
-    <ScrollView scrollY enhanced showScrollbar={false} className={`tab-page-scroll things-scroll${placeholder ? ' is-placeholder' : ''}${!sessionId && activeTab === 'reminders' ? ' is-unbound' : ''}`}>
+    <ScrollView scrollY enhanced showScrollbar={false} className={`tab-page-scroll things-scroll${placeholder ? ' is-placeholder' : ''}`}>
       <div className="things-scroll-content">
-      <section role="tabpanel" id="things-reminders-panel" aria-labelledby="things-reminders-tab" className={`things-tab-panel${activeTab === 'reminders' ? ' is-active' : ''}${!sessionId ? ' is-unbound' : ''}`} hidden={activeTab !== 'reminders'} style={{ display: activeTab === 'reminders' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
-        {!sessionId ? <div className="things-unbound">
-          <span className="things-unbound-icon"><Bell size={25} strokeWidth={1.7} aria-hidden="true" /></span>
-          <h2>一起记下要紧的事</h2>
-          <p>绑定两人空间后，提醒会在这里清楚地排好。</p>
-          <button type="button" className="primary-button" onClick={onBind}>去绑定 <ArrowRight size={16} aria-hidden="true" /></button>
-        </div> : <>
+      <section role="tabpanel" id="things-reminders-panel" aria-labelledby="things-reminders-tab" className={`things-tab-panel${activeTab === 'reminders' ? ' is-active' : ''}${remindersPlaceholder ? ' is-placeholder' : ''}`} hidden={activeTab !== 'reminders'} style={{ display: activeTab === 'reminders' ? 'flex' : 'none', flexDirection: 'column', flex: 1 }}>
+        {remindersPlaceholder ? <EmptyTabState kind="reminders" title="还没有待办" example="明天早上九点提醒我们出门" /> : <>
         <section className="things-hero" aria-label="待办概览">
           <div className="things-hero-top">
             <div className="things-hero-copy">

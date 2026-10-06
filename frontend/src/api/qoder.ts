@@ -7,7 +7,7 @@ import { isAppVisible, onAppVisibilityChange } from '../lib/platform'
 import { invalidateToken, getToken } from '../lib/token'
 import type { AbortSignalLike } from '../lib/abort'
 import { imagePreviewPath, prepareAttachments, type MiniFile } from '../lib/files'
-export { isImageAttachment, isOfficeAttachment, validateAttachments } from './attachment-contract'
+export { isExcelAttachment, isImageAttachment, isOfficeAttachment, validateAttachments } from './attachment-contract'
 import type { CloudMember, CloudReminder, Message, ReminderRecurrence } from '../types'
 
 export interface CloudSession {

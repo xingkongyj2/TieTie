@@ -1,8 +1,13 @@
 import uploadTypes from './upload-types.json'
+import { readXls, sheetToCsv } from 'xls-reader'
 
 export interface MiniFile { name: string; size: number; type: string; path: string }
+export const MAX_EXTRACTED_TEXT_BYTES = 4 * 1024 * 1024
 const imageTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif'])
 const imageExtensions: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.gif': 'image/gif' }
+const excelExtensions = /\.(xlsx|xls|xlsm|xlsb)$/i
+const legacyExcelExtensions = /\.xls$/i
+const officeExtensions = /\.(xlsx|xls|xlsm|xlsb|docx|doc)$/i
 const textApplicationMimes = new Set(uploadTypes.textApplicationMimes)
 const extensionlessNames = new Set(uploadTypes.extensionlessNames)
 export function imageMimeType(file: MiniFile): string | null {
@@ -11,7 +16,56 @@ export function imageMimeType(file: MiniFile): string | null {
   return extension ? imageExtensions[extension] ?? null : null
 }
 export function isImageAttachment(file: MiniFile) { return imageMimeType(file) !== null }
-export function isOfficeAttachment(file: MiniFile) { return /\.(xlsx|xls|xlsm|xlsb|docx|doc)$/i.test(file.name) }
+export function isExcelAttachment(file: MiniFile) { return excelExtensions.test(file.name) }
+export function isLegacyExcelAttachment(file: MiniFile) { return legacyExcelExtensions.test(file.name) }
+export function isOfficeAttachment(file: MiniFile) { return officeExtensions.test(file.name) }
+
+function utf8ByteLength(value: string): number {
+  let bytes = 0
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index)
+    if (code < 0x80) bytes += 1
+    else if (code < 0x800) bytes += 2
+    else if (code >= 0xd800 && code <= 0xdbff && index + 1 < value.length) {
+      const low = value.charCodeAt(index + 1)
+      if (low >= 0xdc00 && low <= 0xdfff) { bytes += 4; index += 1 }
+      else bytes += 3
+    } else bytes += 3
+  }
+  return bytes
+}
+
+function base64ToBytes(value: string): Uint8Array {
+  const comma = value.indexOf(',')
+  const raw = (value.trim().toLowerCase().startsWith('data:') && comma >= 0 ? value.slice(comma + 1) : value).replace(/\s+/g, '')
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+  const padding = raw.endsWith('==') ? 2 : raw.endsWith('=') ? 1 : 0
+  const bytes = new Uint8Array(Math.max(0, Math.floor(raw.length * 3 / 4) - padding))
+  let output = 0
+  for (let index = 0; index < raw.length; index += 4) {
+    const a = alphabet.indexOf(raw[index]); const b = alphabet.indexOf(raw[index + 1])
+    const c = raw[index + 2] === '=' ? 0 : alphabet.indexOf(raw[index + 2]); const d = raw[index + 3] === '=' ? 0 : alphabet.indexOf(raw[index + 3])
+    const word = (a << 18) | (b << 12) | (c << 6) | d
+    if (output < bytes.length) bytes[output++] = (word >> 16) & 0xff
+    if (output < bytes.length) bytes[output++] = (word >> 8) & 0xff
+    if (output < bytes.length) bytes[output++] = word & 0xff
+  }
+  return bytes
+}
+
+/** Decode a legacy BIFF8 workbook from base64 into titled TSV blocks. */
+export function excelBase64ToText(base64: string): string {
+  const workbook = readXls(base64ToBytes(base64))
+  const blocks = workbook.sheets.map(sheet => {
+    const tsv = sheetToCsv(sheet, { delimiter: '\t' }).replace(/(?:\r\n|\n|\r)+$/, '')
+    return tsv ? `工作表：${sheet.name}\n${tsv}` : `工作表：${sheet.name}`
+  })
+  const text = blocks.join('\n\n').trim()
+  if (utf8ByteLength(text) > MAX_EXTRACTED_TEXT_BYTES) throw new Error('提取后的文字超过 4 MB，请拆分文件后重试。')
+  if (!text || text.includes('\0')) throw new Error('Excel 文件没有可提取的文字内容。')
+  return text
+}
+
 export function supportedTextName(name: string): boolean {
   const lower = name.toLowerCase()
   return extensionlessNames.has(lower) || uploadTypes.textExtensions.some(extension => lower.endsWith(extension))
@@ -50,6 +104,18 @@ export async function serializeAttachments(files: MiniFile[], reader: Attachment
       const { width, height } = await reader.imageInfo(file)
       if (width <= 10 || height <= 10 || width > 8000 || height > 8000) throw new Error(`${file.name} 的宽高需各在 11 到 8000 像素之间。`)
       return { kind: 'image', name: file.name, mimeType: mime, data: await reader.read(file, 'base64') }
+    }
+    // The mini-program keeps modern OOXML files on the existing backend path;
+    // the full OOXML parser would exceed WeChat's 2 MiB main-package limit.
+    // Legacy .xls is handled locally with the lightweight BIFF8 reader.
+    if (isLegacyExcelAttachment(file)) {
+      let content: string
+      try { content = excelBase64ToText(await reader.read(file, 'base64')) }
+      catch (error) {
+        if (error instanceof Error && /超过 4 MB/.test(error.message)) throw new Error(`${file.name} ${error.message}`)
+        throw new Error(`${file.name} 无法解析，请确认文件未损坏或格式正确。`)
+      }
+      return { kind: 'file', name: file.name.replace(legacyExcelExtensions, '.txt'), mimeType: 'text/plain', content }
     }
     if (isOfficeAttachment(file)) return { kind: 'document', name: file.name, mimeType: file.type || 'application/octet-stream', data: await reader.read(file, 'base64') }
     const content = await reader.read(file, 'utf8')

@@ -166,8 +166,10 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
   const applyHistory = useCallback((id: string, history: CloudHistory, full = false) => {
     const pending = pendingTurns.current.get(id)
     const snapshot = current.current
-    let replyFeedback = snapshot.replyFeedback?.phase === 'complete' && history.session.status.toLowerCase() === 'idle'
-      ? null : snapshot.replyFeedback
+    // Keep the completed phase through the native history commit. The mini
+    // program mounts new rows in bounded frames; clearing it here would make
+    // the in-flight reply indicator blink before the new message is visible.
+    let replyFeedback = snapshot.replyFeedback
     let stopped = false
     if (!pending && (replyFeedback?.phase === 'proactive_reminder' || replyFeedback?.phase === 'proactive_update')) {
       if (history.session.status.toLowerCase() === 'terminated') {
@@ -580,7 +582,6 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
           ...(status === 'idle' ? { lastIdleEventId: item.id } : {}),
           ...(stopped ? { replyFeedback: { phase: 'stopped' } as ReplyFeedback, turnError: '' }
             : pendingTurn && !pendingTurn.silent && status === 'idle' ? { replyFeedback: { phase: 'syncing' } as ReplyFeedback } : {}),
-          ...(!pendingTurn && status === 'idle' && snapshot.replyFeedback?.phase === 'complete' ? { replyFeedback: null } : {}),
           ...((pendingTurn || hasProactiveFeedback) && status === 'terminated' ? { replyFeedback: { phase: 'error', message: 'AI 会话已中断，请重试。' } as ReplyFeedback } : {}),
         })
         if (status === 'idle' || status === 'terminated') void readRef.current({ full: true })
@@ -598,8 +599,15 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
   }, [state.selectedId, state.loaded, hasPrivateChannel, visible, clearStoppedLater, update])
 
   const busy = state.pending || isRemoteBusy(state.session)
-  const replyFeedback = state.replyFeedback?.phase === 'complete' ? null : state.replyFeedback
+  // A completed turn is retained for one native commit so the mounted chat
+  // row can replace the reply indicator without a blank frame. The view hides
+  // this phase as soon as the new row is mounted.
+  const replyFeedback = state.replyFeedback
     ?? (busy || state.thinking ? { phase: 'waiting' } as ReplyFeedback : null)
+  const clearReplyFeedback = useCallback(() => {
+    if (!mounted.current || current.current.replyFeedback?.phase !== 'complete') return
+    update({ replyFeedback: null })
+  }, [update])
   // 云端在等待工具应答时状态仍是 idle，但此时发消息会被上游拒 409，所以按忙处理。
   const awaitingAsk = state.messages.some((message) => message.kind === 'ask' && !message.answered)
   const canSend = state.loaded && !!state.selectedId && !state.error && !state.submitting
@@ -613,6 +621,6 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
     thinking: state.thinking, streaming: state.streaming, replyFeedback,
     silent: state.replyMode === 'silent',
     turnError: state.turnError,
-    reload, sendMessage, stopTurn, answerAsk, saveReminder, changeReminder, deleteReminder,
+    clearReplyFeedback, reload, sendMessage, stopTurn, answerAsk, saveReminder, changeReminder, deleteReminder,
   }
 }

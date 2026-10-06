@@ -3,7 +3,7 @@ import { imageMimeType, serializeAttachments, validateAttachments, type MiniFile
 import { createImageCache } from '../api/image-cache'
 
 export type { MiniFile } from '../api/attachment-contract'
-export { isImageAttachment, isOfficeAttachment, validateAttachments } from '../api/attachment-contract'
+export { isExcelAttachment, isImageAttachment, isOfficeAttachment, validateAttachments } from '../api/attachment-contract'
 
 function fileName(path: string, index: number) { return path.split('/').pop()?.split('?')[0] || `附件-${index + 1}` }
 function inferMime(name: string): string {

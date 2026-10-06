@@ -52,7 +52,7 @@ function currentSettings(value: AISettings): AISettings {
 
 function isReminder(value: unknown): value is Reminder {
   return isRecord(value) && typeof value.id === 'string' && value.id.length > 0
-    && typeof value.title === 'string' && value.title.trim().length > 0 && value.title.length <= 500
+    && typeof value.title === 'string' && value.title.trim().length > 0 && Array.from(value.title).length <= 80
     && (value.time === undefined || isReminderTime(value.time)) && (isMemberId(value.assignee) || value.assignee === 'both')
     && typeof value.completed === 'boolean'
 }
@@ -150,7 +150,7 @@ export const relationshipApi = {
 
   async addReminder(input: Omit<Reminder, 'id' | 'completed'>, scope: string): Promise<Reminder> {
     const reminder: Reminder = { ...input, id: makeId('reminder'), completed: false }
-    if (!isReminder(reminder)) throw new Error('请填写 500 字以内的提醒内容，并选择提醒对象。')
+    if (!isReminder(reminder)) throw new Error('请填写80字以内的简短提醒标题，并选择提醒对象。')
     if (reminder.time?.includes('T') && new Date(reminder.time).getTime() <= Date.now()) {
       throw new Error('这个时间已经过去啦，请选一个未来时间。')
     }

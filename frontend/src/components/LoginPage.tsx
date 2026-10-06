@@ -1,17 +1,56 @@
 import { ScrollView } from '@tarojs/components'
 import { Input, Form, SubmitButton } from './Fields';
-import { LogIn, UserPlus } from './Icons';
+import { LogIn, MessageCircle, UserPlus } from './Icons';
 import { useRef, useState, type FormEvent } from 'react';
 import { SpaceBuddies } from './SpaceBuddies';
 
 interface Props {
   onLogin: (username: string, password: string) => Promise<void>;
   onRegister: (username: string, password: string) => Promise<void>;
+  onWechatLogin: () => Promise<void>;
   notify: (text: string) => void;
 }
 
-/** 未登录时的全屏登录/注册页。 */
-export function LoginPage({ onLogin, onRegister, notify }: Props) {
+/** 小程序只显示微信登录，H5 保留现有账号入口。 */
+export function LoginPage(props: Props) {
+  return process.env.TARO_ENV === 'weapp' ? <WechatLoginPage onWechatLogin={props.onWechatLogin} notify={props.notify} /> : <PasswordLoginPage {...props} />;
+}
+
+function WechatLoginPage({ onWechatLogin, notify }: Pick<Props, 'onWechatLogin' | 'notify'>) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const submitting = useRef(false);
+  const login = async () => {
+    if (submitting.current) return;
+    submitting.current = true;
+    setBusy(true); setError('');
+    try {
+      await onWechatLogin();
+      notify('欢迎来到贴贴');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '微信登录失败，请稍后重试。');
+    } finally {
+      submitting.current = false;
+      setBusy(false);
+    }
+  };
+  return <div className="app-shell login-page login-wechat-page">
+    <header className="login-wechat-header"><h1>贴贴清单</h1></header>
+    <ScrollView scrollY enhanced showScrollbar={false} className="login-scroll">
+      <div className="login-scroll-content">
+        <SpaceBuddies className="login-buddies" />
+        <div className="login-form login-wechat-form">
+          <button type="button" className="primary-button login-wechat-button" disabled={busy} aria-busy={busy} onClick={() => void login()}>
+            <MessageCircle size={18} aria-hidden="true" />{busy ? '正在登录…' : '一键登录'}
+          </button>
+          {error && <p className="login-error" role="alert">{error}</p>}
+        </div>
+      </div>
+    </ScrollView>
+  </div>;
+}
+
+function PasswordLoginPage({ onLogin, onRegister, notify }: Props) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');

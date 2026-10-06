@@ -5,5 +5,4 @@ export default defineAppConfig({
     backgroundColor: '#ffffff', backgroundTextStyle: 'dark',
   },
   networkTimeout: { request: 120000 },
-  lazyCodeLoading: 'requiredComponents',
 })

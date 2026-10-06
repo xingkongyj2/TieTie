@@ -53,7 +53,7 @@ export function CareWithAnniversary({ sessionId, selfId, onEditRegion, notify, o
       if (mounted.current && seq === sequence.current) {
         setSettings(current => current ? { ...current, care: result } : current)
         setError('')
-        notify(timeOnly ? `提醒时间已改为 ${time}。` : enabled ? `${mode.mode === 'morning' ? '早安' : '晚安'}提醒已开启，每天 ${time} 发到群里。` : '已关闭这个模式。')
+        notify(timeOnly ? `提醒时间已改为 ${time}。` : enabled ? `${mode.mode === 'morning' ? '早安' : '晚安'}提醒已开启，每天 ${time} 发到群里。` : `已关闭${mode.mode === 'morning' ? '早安' : '晚安'}提醒。`)
       }
       return true
     } catch (e) {
@@ -99,7 +99,7 @@ export function CareWithAnniversary({ sessionId, selfId, onEditRegion, notify, o
         const title = night ? '晚安提醒' : '早安提醒'
         return <section className="setting-row care-mode-row" key={mode.mode} aria-label={`${title}设置`}>
           <span className="setting-icon">{night ? <Moon size={18} /> : <Sun size={18} />}</span>
-          <div className="setting-copy"><div className="care-mode-title"><strong>{title}</strong><button type="button" className="care-time" aria-label={`${title}时间 ${time}`} aria-haspopup="dialog" disabled={busy !== null} onClick={() => setEditingTime(mode)}><Clock3 size={10} aria-hidden="true" /><span>{time}</span></button></div><p>{night ? '看明天天气，把穿搭和出门准备好' : '今天的天气，还有要记得的小事'}</p>{mode.lastError && <p className="care-status" role="alert">{mode.lastError}</p>}</div>
+          <div className="setting-copy"><div className="care-mode-title"><strong>{title}</strong><button type="button" className={`care-time${busy !== null ? ' is-disabled' : ''}`} aria-label={`${title}时间 ${time}`} aria-haspopup="dialog" aria-disabled={busy !== null} onClick={() => { if (!mutating.current && busy === null) setEditingTime(mode) }}><Clock3 size={10} aria-hidden="true" /><span>{time}</span></button></div><p>{night ? '看明天天气，把穿搭和出门准备好' : '今天的天气，还有要记得的小事'}</p>{mode.lastError && <p className="care-status" role="alert">{mode.lastError}</p>}</div>
           <button type="button" role="switch" className={`toggle ${mode.enabled ? 'is-on' : ''}`} aria-label={title} aria-checked={mode.enabled} disabled={busy !== null} onClick={() => void save(mode, !mode.enabled)}><span /></button>
         </section>
       })}

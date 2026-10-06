@@ -46,12 +46,14 @@ function Hero({ item, spaceCreatedAt, style, onPin, pinDisabled = false, pinning
   const Graphic = anniversaryGraphic(item)
   const pinned = item ? item.pinned : originPinned
   return <article className={`anniversary-feature ${pinned ? 'is-pinned' : ''}`} style={style ?? recordCardStyle(item?.id || `origin:${spaceCreatedAt}`, item ? undefined : 'blue')} aria-label={item ? `${onPin ? '纪念日' : '首页展示'}：${item.title}` : '专属空间开始'}>
-    {item ? <Graphic className="anniversary-feature-art" size={132} strokeWidth={0.8} aria-hidden="true" /> : <span className="anniversary-origin-circle" aria-hidden="true" />}
-    <div className="anniversary-feature-top"><span className="anniversary-calendar"><Graphic size={22} aria-hidden="true" /></span>{onPin ? <button type="button" className={`anniversary-feature-tag anniversary-pin${pinned ? ' is-pinned' : ''}`} aria-label={item ? `${pinned ? '取消置顶' : '置顶'}：${item.title}` : '置顶：专属空间开始'} aria-pressed={pinned} disabled={pinDisabled || (!item && pinned)} onClick={onPin}><Pin size={12} aria-hidden="true" />{pinning ? '保存中' : pinned ? '已置顶' : '置顶'}</button> : <span className="anniversary-feature-tag">{pinned ? <><Pin size={12} aria-hidden="true" />已置顶</> : item ? kindLabels[item.kind] : '空间起点'}</span>}</div>
-    <h2>{item?.title || '专属空间开始'}</h2>
-    <p className="anniversary-count-label">{days >= 0 ? '已经' : '还有'}</p>
-    <div className="anniversary-day-count"><strong>{Math.abs(days)}</strong><span>天</span></div>
-    <div className="anniversary-feature-date"><Clock3 size={14} aria-hidden="true" /><time dateTime={date}>{date.replaceAll('-', '.')}{!item && valid ? ` · ${new Date(created.getTime() + 8 * 60 * 60_000).toISOString().slice(11, 16)}` : ''}</time></div>
+    {item ? <Graphic className="anniversary-feature-art" size={96} strokeWidth={0.8} aria-hidden="true" /> : <span className="anniversary-origin-circle" aria-hidden="true" />}
+    <div className="anniversary-feature-content">
+      <div className="anniversary-feature-copy">
+        <div className="anniversary-feature-heading"><span className="anniversary-calendar"><Graphic size={22} aria-hidden="true" /></span><h2>{item?.title || '专属空间开始'}</h2></div>
+        <div className="anniversary-feature-meta"><div className="anniversary-feature-date"><Clock3 size={14} aria-hidden="true" /><time dateTime={date}>{date.replaceAll('-', '.')}{!item && valid ? ` · ${new Date(created.getTime() + 8 * 60 * 60_000).toISOString().slice(11, 16)}` : ''}</time></div>{onPin ? <button type="button" className={`anniversary-feature-tag anniversary-pin${pinned ? ' is-pinned' : ''}`} aria-label={item ? `${pinned ? '取消置顶' : '置顶'}：${item.title}` : '置顶：专属空间开始'} aria-pressed={pinned} disabled={pinDisabled || (!item && pinned)} onClick={onPin}><Pin size={12} aria-hidden="true" />{pinning ? '保存中' : pinned ? '已置顶' : '置顶'}</button> : <span className="anniversary-feature-tag">{pinned ? <><Pin size={12} aria-hidden="true" />已置顶</> : item ? kindLabels[item.kind] : '空间起点'}</span>}</div>
+      </div>
+      <div className="anniversary-day-count-block"><p className="anniversary-count-label">{days >= 0 ? '已经' : '还有'}</p><div className="anniversary-day-count"><strong>{Math.abs(days)}</strong><span>天</span></div></div>
+    </div>
   </article>
 }
 

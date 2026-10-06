@@ -109,6 +109,21 @@ export function useAccount() {
     setAccount(result)
   }, [])
 
+  const wechatLogin = useCallback(async () => {
+    const generation = ++sequence.current
+    const result = await authApi.wechatLogin()
+    if (generation !== sequence.current) return
+    if (result.token) setToken(result.token)
+    saveInvite(result)
+    void clearImagePreviewCache()
+    setError(''); setReady(true)
+    if (result.isNewUser) {
+      writeOnboarding(result.user.userId, 'profile')
+      setOnboardingStep('profile')
+    } else setOnboardingStep(readOnboarding(result.user.userId))
+    setAccount(result)
+  }, [])
+
   const advanceOnboarding = useCallback(() => {
     if (!account || !onboardingStep || onboardingStep === 'usage') return
     const next = onboardingStep === 'profile' ? 'bind' : 'usage'
@@ -151,5 +166,5 @@ export function useAccount() {
     setReady(true)
   }, [])
 
-  return { account, ready, error, onboardingStep, advanceOnboarding, finishOnboarding, reload: bootstrap, login, register, bind, unbind, logout }
+  return { account, ready, error, onboardingStep, advanceOnboarding, finishOnboarding, reload: bootstrap, login, register, wechatLogin, bind, unbind, logout }
 }

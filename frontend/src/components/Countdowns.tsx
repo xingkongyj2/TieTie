@@ -46,11 +46,14 @@ export function Countdowns({ sessionId, onPlaceholderChange }: { sessionId?: str
   {items.map((item) => {
    const { Graphic } = countdownAppearance(item.id)
    return <article className="countdown-card" key={item.id} aria-label={item.title} style={styles.get(item.id)}>
-    <Graphic className="countdown-art" size={148} strokeWidth={.8} aria-hidden="true" />
-    <div className="countdown-card-top"><span className="countdown-icon"><Graphic size={21} strokeWidth={1.5} aria-hidden="true" /></span><span className="countdown-repeat">{item.repeat === 'annual' ? <><Repeat2 size={11} />每年重复</> : '提醒一次'}</span></div>
-    <h2>{item.title}</h2><p className="countdown-count-label">{item.expired ? '这个日期已经过去' : item.daysRemaining === 0 ? '就是今天' : '距离这一天还有'}</p>
-    <div className="countdown-number"><strong>{item.expired ? Math.abs(item.daysRemaining) : item.daysRemaining}</strong><span>{item.expired ? '天前' : '天'}</span></div>
-    <div className="countdown-card-bottom"><time dateTime={item.nextDate}><CalendarDays size={13} />{item.nextDate.replaceAll('-', '.')}</time></div>
+    <Graphic className="countdown-art" size={96} strokeWidth={.8} aria-hidden="true" />
+    <div className="countdown-card-content">
+      <div className="countdown-card-copy">
+        <div className="countdown-card-heading"><span className="countdown-icon"><Graphic size={21} strokeWidth={1.5} aria-hidden="true" /></span><h2>{item.title}</h2></div>
+        <div className="countdown-card-meta"><time dateTime={item.nextDate}><CalendarDays size={14} />{item.nextDate.replaceAll('-', '.')}</time><span className="countdown-repeat">{item.repeat === 'annual' ? <><Repeat2 size={10} />每年重复</> : '提醒一次'}</span></div>
+      </div>
+      <div className="countdown-number-block"><p className="countdown-count-label">{item.expired ? '已经' : item.daysRemaining === 0 ? '就是今天' : '还有'}</p><div className="countdown-number"><strong>{item.expired ? Math.abs(item.daysRemaining) : item.daysRemaining}</strong><span>{item.expired ? '天前' : '天'}</span></div></div>
+    </div>
     {item.leapAdjusted && <p className="countdown-leap-note">非闰年的 2 月 29 日按 2 月 28 日计算</p>}
    </article>
   })}
