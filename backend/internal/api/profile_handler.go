@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -78,7 +79,7 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 		today := time.Now().In(time.FixedZone("Asia/Shanghai", 8*3600)).Format("2006-01-02")
 		valid = valid && err == nil && date.Format("2006-01-02") == body.Birthday && body.Birthday <= today
 	}
-	valid = valid && len(body.Hobbies) <= 8 && utf8.RuneCountInString(body.Bio) <= 200 && len(body.Avatar) <= 200 && (body.Avatar == "" || strings.HasPrefix(body.Avatar, "/") && !strings.HasPrefix(body.Avatar, "//"))
+	valid = valid && len(body.Hobbies) <= 8 && utf8.RuneCountInString(body.Bio) <= 200 && len(body.Avatar) <= 512 && validProfileAvatar(body.Avatar)
 	hobbies := []string{}
 	seen := map[string]bool{}
 	for _, item := range body.Hobbies {
@@ -123,6 +124,20 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 		s.wakeMemory()
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"profile": saved, "memoryStatus": status})
+}
+
+// Local character assets are always accepted. WeChat profile avatars are
+// HTTPS URLs returned by wx.getUserProfile; limit them to HTTPS so a profile
+// cannot make clients load arbitrary insecure content.
+func validProfileAvatar(value string) bool {
+	if value == "" {
+		return true
+	}
+	if strings.HasPrefix(value, "/") && !strings.HasPrefix(value, "//") {
+		return true
+	}
+	u, err := url.Parse(value)
+	return err == nil && u.Scheme == "https" && u.Host != "" && u.User == nil
 }
 
 func (s *Server) handleRegions(w http.ResponseWriter, r *http.Request) {
