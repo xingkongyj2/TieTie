@@ -34,6 +34,7 @@ type Server struct {
 	conversationWake chan struct{}
 	controlWake      chan struct{}
 	memoryWake       chan struct{}
+	welcomeWake      chan struct{}
 }
 
 // NewRouter 是全后端唯一的路由注册点。

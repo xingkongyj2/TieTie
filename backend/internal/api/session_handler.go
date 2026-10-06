@@ -152,6 +152,12 @@ func (s *Server) handleMessagePreview(w http.ResponseWriter, r *http.Request) {
 }
 
 func cachedPublicMessage(row dbop.Message, binding *dbop.Binding, viewer int64) (qoder.PublicMessage, bool) {
+	// Older releases stored a locally fabricated welcome bubble. It is not an
+	// AI response and must not be shown after the cloud-authored bootstrap was
+	// introduced.
+	if strings.HasPrefix(row.ID, "evt_welcome_") {
+		return qoder.PublicMessage{}, false
+	}
 	if row.Sender != "ai" && row.Sender != "user" {
 		return qoder.PublicMessage{}, false
 	}
@@ -207,6 +213,7 @@ func (s *Server) getMessages(w http.ResponseWriter, r *http.Request, id string) 
 		writeError(w, apiErr)
 		return
 	}
+	s.ensureBindingWelcomeForSession(r.Context(), id, auth.UserIDFrom(r.Context()))
 	// Full event context is required to attribute AI actions to the preceding
 	// authenticated member even when a browser requests an incremental history.
 	result, err := s.Qoder.GetMessages(r.Context(), id, "")
@@ -247,6 +254,19 @@ func (s *Server) getMessages(w http.ResponseWriter, r *http.Request, id string) 
 		Reminders      []dbop.Reminder       `json:"reminders"`
 		RemindersError string                `json:"remindersError,omitempty"`
 	}{result, space.Members, reminders, warning})
+}
+
+// ensureBindingWelcomeForSession backfills the cloud-authored greeting for
+// spaces created before the proactive queue was introduced.
+func (s *Server) ensureBindingWelcomeForSession(ctx context.Context, sessionID string, viewerID int64) {
+	if s.DB == nil || viewerID == 0 {
+		return
+	}
+	binding, err := s.DB.GetBindingBySessionID(ctx, sessionID)
+	if err != nil || binding == nil {
+		return
+	}
+	s.enqueueBindingWelcome(ctx, binding)
 }
 
 // postMessage 发送消息（校验逻辑在 upload_handler.go parseMessage）。

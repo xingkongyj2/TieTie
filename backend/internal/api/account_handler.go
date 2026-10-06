@@ -116,6 +116,9 @@ func (s *Server) handleBind(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if existing != nil {
+		// Older spaces may predate the welcome queue. Replaying this enqueue is
+		// safe because its ID is derived from the session.
+		s.enqueueBindingWelcome(r.Context(), existing)
 		writeJSON(w, http.StatusOK, AccountResult{
 			User:    userPayload(self),
 			Binding: &BindingPayload{SessionID: existing.SessionID, PartnerID: partner.ID},
@@ -255,11 +258,35 @@ func (s *Server) handleBind(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		sessionID = existing.SessionID
+		s.enqueueBindingWelcome(r.Context(), existing)
+	} else {
+		binding, bindErr := s.DB.GetBindingBySessionID(r.Context(), sessionID)
+		if bindErr != nil {
+			// The binding is already committed. Keep the successful bind response,
+			// but leave an actionable log; the first messages request will retry
+			// enqueueBindingWelcome through ensureBindingWelcomeForSession.
+			logf("绑定欢迎任务读取绑定记录失败 %s: %v", sessionID, bindErr)
+		} else if binding != nil {
+			s.enqueueBindingWelcome(r.Context(), binding)
+		}
 	}
 	writeJSON(w, http.StatusOK, AccountResult{
 		User:    userPayload(self),
 		Binding: &BindingPayload{SessionID: sessionID, PartnerID: partner.ID},
 	})
+}
+
+// enqueueBindingWelcome durably schedules the hidden protocol input. The
+// worker performs the cloud request after the bind response has returned.
+func (s *Server) enqueueBindingWelcome(ctx context.Context, binding *dbop.Binding) {
+	if s.DB == nil || binding == nil || strings.TrimSpace(binding.SessionID) == "" {
+		return
+	}
+	if err := s.DB.EnqueueProactiveWelcome(ctx, binding.SessionID, binding.CreatedAt); err != nil {
+		logf("绑定欢迎任务入队失败 %s: %v", binding.SessionID, err)
+		return
+	}
+	s.wakeWelcome()
 }
 
 // handleUnbind 处理 POST /api/account/unbind：退出当前会话，即解除绑定关系。

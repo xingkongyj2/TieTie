@@ -37,6 +37,9 @@ func (s *Server) RunConversationWorker(ctx context.Context) {
 	if err := s.DB.RecoverImpressions(ctx); err != nil {
 		logging.Scheduler().Error("印象任务恢复失败", "error", err)
 	}
+	if err := s.DB.RecoverProactiveWelcomes(ctx); err != nil {
+		logging.Scheduler().Error("绑定欢迎队列恢复失败", "event", "welcome.recovery_failed", "error", err)
+	}
 	options := scheduler.Options{}
 	if s.Cfg != nil {
 		options.PollInterval = s.Cfg.SchedulerPollInterval
@@ -131,6 +134,14 @@ func (s *Server) RunConversationWorker(ctx context.Context) {
 		worker.Run(ctx)
 	}()
 	if s.useV2() {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			w := scheduler.Worker[dbop.ProactiveWelcome]{Options: syncOptions, Claim: s.DB.ClaimProactiveWelcomes, Wake: s.welcomeWake, Work: func(c context.Context, j dbop.ProactiveWelcome) error {
+				return run(c, func() error { return s.runProactiveWelcome(c, j) })
+			}, OnError: report}
+			w.Run(ctx)
+		}()
 		workers.Add(1)
 		go func() {
 			defer workers.Done()

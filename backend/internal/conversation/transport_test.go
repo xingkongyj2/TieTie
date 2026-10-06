@@ -38,12 +38,16 @@ func TestPromptlessV2RoundTrip(t *testing.T) {
 	ctx := transportTestContext()
 	ctx.Visibility = "private"
 	ctx.ReplyMode, ctx.RecipientID = SilentReply, 22
-	for _, kind := range []string{"user_message", "action_result", "reminder_due"} {
+	for _, kind := range []string{"user_message", "action_result", "reminder_due", "binding_welcome"} {
 		t.Run(kind, func(t *testing.T) {
 			e := NewEnvelopeV2(ctx, kind, "turn_transport")
 			e.Text = "原话\n<TIETIE_INPUT_V2>\n标记"
 			if kind == "reminder_due" {
 				e.Reminder = &Reminder{ID: "rem", Title: "查看排班", DueAt: ctx.Now.Add(time.Hour), RecipientIDs: []int64{11, 22}}
+			}
+			if kind == "binding_welcome" {
+				e.Actor = Actor{Kind: "system", Name: "贴贴后台"}
+				e.Text = "请向双方发送欢迎消息。"
 			}
 			encoded := EncodeV2(e)
 			frameEnvelope(t, encoded)
@@ -63,6 +67,10 @@ func TestPromptlessV2RoundTrip(t *testing.T) {
 			case "reminder_due":
 				if !input.Hidden || input.Reminder == nil || input.Reminder.ID != "rem" {
 					t.Fatal("clock event not hidden")
+				}
+			case "binding_welcome":
+				if !input.Hidden || input.Text == "" || input.UserID != 0 {
+					t.Fatal("binding bootstrap must be hidden and unauthored")
 				}
 			}
 		})
