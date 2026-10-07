@@ -3,7 +3,7 @@ import Taro from '@tarojs/taro';
 import { Button, ScrollView } from '@tarojs/components';
 import { ArrowLeft, Copy, Link, Link2 } from './Icons';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { SpaceBuddies } from './SpaceBuddies';
+import { PaperBuddyMotion } from './PaperBuddyMotion';
 
 interface Props {
   code: string;
@@ -60,7 +60,7 @@ export function BindPage({ code, onBind, onBack, notify, embedded = false, showH
     <div className="bind-scroll-content">
     {showHeader && <header className="bind-header">{onBack && <button type="button" className="icon-button bind-back" aria-label="返回我们首页" onClick={onBack}><ArrowLeft size={19} /></button>}<h1>贴贴清单</h1></header>}
     <div className="bind-welcome">
-      <SpaceBuddies className="bind-buddy" />
+      <PaperBuddyMotion variant="bump" purpose="welcome" className="bind-buddy" />
       <h2>两个人，刚刚好</h2>
     </div>
 

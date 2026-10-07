@@ -94,6 +94,7 @@ button::after { border:0; }
 .space-buddies-decor { position:absolute; inset:0; width:100%; height:100%; }
 .space-buddies .mine-buddy-back { position:absolute; left:38.095238%; top:7.647059%; width:55.714286%; height:77.647059%; transform-origin:52.136752% 57.575758%; }
 .space-buddies .mine-buddy-front { position:absolute; left:11.428571%; top:28.823529%; width:52.380952%; height:62.352941%; transform-origin:50.909091% 51.886792%; }
+.mini-root .bind-welcome .bind-buddy { width:216px; height:160px; margin:0 auto 8px; }
 .app-shell.keyboard-open.view-we .bottom-nav.frost-nav { max-height:0; padding-top:0; padding-bottom:0; opacity:0; pointer-events:none; }
 .composer-textarea { color:#303641; }
 .chat-scroll { height:0; flex:1; width:100%; box-sizing:border-box; }
