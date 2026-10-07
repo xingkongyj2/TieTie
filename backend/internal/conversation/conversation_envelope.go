@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strconv"
 	"strings"
 	"tietie/backend/internal/memoryspace"
 	"tietie/backend/internal/regions"
@@ -259,6 +260,36 @@ func decodeV2(value string) (Input, bool) {
 	return input, true
 }
 
+// Normalize the cloud's numeric string recipients at the reply boundary. The
+// public API still exposes int64 IDs, and validRecipients plus the conversation
+// processor retain recipient and membership validation.
+type assistantRecipientIDs []int64
+
+func (ids *assistantRecipientIDs) UnmarshalJSON(data []byte) error {
+	var values []json.RawMessage
+	if err := json.Unmarshal(data, &values); err != nil {
+		return err
+	}
+	normalized := make(assistantRecipientIDs, 0, len(values))
+	for _, value := range values {
+		var id int64
+		if err := json.Unmarshal(value, &id); err != nil {
+			var quoted string
+			if err := json.Unmarshal(value, &quoted); err != nil {
+				return fmt.Errorf("invalid recipient ID")
+			}
+			parsed, err := strconv.ParseInt(quoted, 10, 64)
+			if err != nil || parsed <= 0 || strconv.FormatInt(parsed, 10) != quoted {
+				return fmt.Errorf("invalid recipient ID")
+			}
+			id = parsed
+		}
+		normalized = append(normalized, id)
+	}
+	*ids = normalized
+	return nil
+}
+
 func parseV2Assistant(body string) Assistant {
 	// Reserved protocol objects are always hidden on parse failure: never expose
 	// partial control instructions or JSON to a member.
@@ -272,13 +303,13 @@ func parseV2Assistant(body string) Assistant {
 		return fail("duplicate or invalid JSON")
 	}
 	var p struct {
-		Protocol     string    `json:"protocol"`
-		Version      int       `json:"version"`
-		RequestID    string    `json:"requestId"`
-		Actions      *[]Action `json:"actions,omitempty"`
-		Text         *string   `json:"text,omitempty"`
-		RecipientIDs *[]int64  `json:"recipientIds,omitempty"`
-		Source       string    `json:"source,omitempty"`
+		Protocol     string                 `json:"protocol"`
+		Version      int                    `json:"version"`
+		RequestID    string                 `json:"requestId"`
+		Actions      *[]Action              `json:"actions,omitempty"`
+		Text         *string                `json:"text,omitempty"`
+		RecipientIDs *assistantRecipientIDs `json:"recipientIds,omitempty"`
+		Source       string                 `json:"source,omitempty"`
 	}
 	if err := strictDecode(body, &p); err != nil {
 		return fail("invalid protocol fields")

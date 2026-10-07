@@ -286,6 +286,12 @@ func (s *Server) processConversationFrom(ctx context.Context, id string, result 
 			message.ReminderError += value
 		}
 		message.Source = "chat"
+		if hasOrigin && origin.Kind == "binding_welcome" {
+			// A welcome addresses both authenticated members even if the model
+			// omits one of the mentions or narrows its recipient list.
+			message.RecipientIDs = memberIDs(space)
+			message.Text = reminderMentions(message.Text, message.RecipientIDs, space)
+		}
 		if hasOrigin && manualReminderNotice(origin) {
 			message.Source = "reminder_update"
 			if origin.ReplyTo != nil {

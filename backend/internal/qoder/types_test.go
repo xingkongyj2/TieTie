@@ -53,6 +53,35 @@ func TestPublicMessagesKeepsAssistantWelcomeReply(t *testing.T) {
 	}
 }
 
+func TestBindingWelcomeWithQuotedRecipientsReachesHistoryAndStream(t *testing.T) {
+	// The cloud's first greeting used string IDs despite the numeric protocol
+	// example. It must remain a visible AI reply after normalization.
+	space := conversation.Context{SessionID: "sess_binding", Now: time.Now(), Members: []conversation.Member{{ID: 20, Name: "甲"}, {ID: 21, Name: "乙"}}}
+	frame := conversation.NewEnvelopeV2(space, "binding_welcome", "bind_welcome_sess_binding")
+	frame.Text = "请主动欢迎双方。"
+	wakeup := Event{ID: "evt_hidden_welcome", Type: "user.message", Content: []ContentBlock{{Type: "text", Text: conversation.EncodeV2(frame)}}}
+	reply := Event{ID: "evt_cloud_welcome", Type: "agent.message", ProcessedAt: "2026-10-07T09:00:01Z", Content: []ContentBlock{{Type: "text", Text: `{"protocol":"tietie.message","version":2,"requestId":"bind_welcome_sess_binding","text":"欢迎来到你们的专属空间。","recipientIds":["20","21"],"source":"chat"}`}}}
+	messages := publicMessages([]Event{wakeup, reply})
+	if len(messages) != 1 || messages[0].ID != reply.ID || messages[0].Sender != "ai" || messages[0].Text != "欢迎来到你们的专属空间。" {
+		t.Fatalf("cloud greeting did not reach public history: %#v", messages)
+	}
+	if len(messages[0].RecipientIDs) != 2 || messages[0].RecipientIDs[0] != 20 || messages[0].RecipientIDs[1] != 21 || messages[0].RequestID != frame.RequestID {
+		t.Fatalf("greeting lost recipient identity or turn correlation: %#v", messages[0])
+	}
+	data, err := json.Marshal(reply)
+	if err != nil {
+		t.Fatal(err)
+	}
+	item := ParseStreamEvent(data)
+	if item == nil || item["type"] != "message" {
+		t.Fatalf("cloud greeting did not reach the live stream: %#v", item)
+	}
+	message, ok := item["message"].(PublicMessage)
+	if !ok || message.ID != reply.ID || message.Text != messages[0].Text || message.ProtocolError != "" {
+		t.Fatalf("stream greeting differs from public history: %#v", item)
+	}
+}
+
 func TestBindingWelcomeProtocolIsHiddenInput(t *testing.T) {
 	ctx := conversation.Context{
 		SessionID: "sess_binding",
