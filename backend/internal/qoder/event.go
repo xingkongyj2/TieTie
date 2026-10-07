@@ -251,6 +251,9 @@ func ParseStreamEvent(data []byte) map[string]any {
 		ev := Event{ID: p.ID, Type: p.Type, Content: p.Content, ProcessedAt: p.ProcessedAt, Error: p.Error}
 		msgs := publicMessages([]Event{ev})
 		if len(msgs) == 0 {
+			if message := replyParseError(ev); message != "" {
+				return map[string]any{"type": "session_error", "id": p.ID, "message": message}
+			}
 			return nil // Hidden server wakeups have no public message or placeholder.
 		}
 		return map[string]any{"type": "message", "id": p.ID, "message": msgs[0]}

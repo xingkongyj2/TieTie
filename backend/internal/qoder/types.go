@@ -151,6 +151,24 @@ type AskOption struct {
 	Description string `json:"description,omitempty"`
 }
 
+// Parse failures remain private; clients receive a readable error instead of
+// treating a completed but discarded assistant reply as an empty conversation.
+func replyParseError(event Event) string {
+	if event.Type != "agent.message" {
+		return ""
+	}
+	var parts []string
+	for _, block := range event.Content {
+		if block.Type == "text" {
+			parts = append(parts, block.Text)
+		}
+	}
+	if conversation.ParseAssistant(strings.Join(parts, "\n")).ProtocolError != "" {
+		return "AI 回复格式异常，暂时无法显示，请重新同步或稍后重试。"
+	}
+	return ""
+}
+
 // publicSession 转换并校验上游会话（对应 qoder.mjs publicSession）。
 func publicSession(s *rawSession) (*PublicSession, error) {
 	if s == nil || !sessionIDRe.MatchString(s.ID) {

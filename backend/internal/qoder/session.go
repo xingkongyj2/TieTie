@@ -162,6 +162,8 @@ func (c *Client) GetMessages(ctx context.Context, id, after string) (*MessagesRe
 		msg := ""
 		if lastError > lastReply {
 			msg = publicTurnError(&events[lastError])
+		} else if lastReply != -1 {
+			msg = replyParseError(events[lastReply])
 		}
 		result.TurnError = &msg
 	}

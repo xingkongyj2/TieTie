@@ -158,13 +158,13 @@ export default function TieTieApp() {
   // during that handoff so the AI status never flashes away before its bubble.
   const waitingForMessageMount = feedback?.phase === 'complete' && mountedMessages.length < chat.messages.length;
   const showFeedback = feedback && (feedback.phase !== 'complete' || waitingForMessageMount)
-    && !chat.error && !chat.turnError
+    && !chat.error && (!chat.turnError || feedback.phase === 'error')
     && !(feedback.phase === 'sending' && chat.silent)
     && !(feedback.phase === 'delayed' && feedback.message?.startsWith('消息发送状态待确认'));
-  const activeFeedback = !!feedback && feedback.phase !== 'complete';
+  const activeFeedback = !!showFeedback && feedback.phase !== 'complete';
   const showCloudError = !!chat.error && !activeFeedback;
   const showLoadingNotice = chat.slowLoading && !chat.error;
-  const emptyMode = !chat.messages.length && !activeFeedback ? chat.loading ? 'loading' : !chat.error ? 'welcome' : '' : '';
+  const emptyMode = !chat.messages.length && !activeFeedback ? chat.loading ? 'loading' : !chat.error && !chat.turnError ? 'welcome' : '' : '';
   const notify = useCallback((message: string) => {
     setToast(message);
     clearTimeout(timer.current);

@@ -183,7 +183,7 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
       const turnEnded = history.session.status.toLowerCase() === 'idle' && history.idleEventId !== null
         && history.idleEventId !== pending.idleEventId
       const failed = history.session.status.toLowerCase() === 'terminated'
-        || turnEnded && Date.now() - pending.startedAt > 120_000
+        || turnEnded && (!!history.turnError || Date.now() - pending.startedAt > 120_000)
       const silentDone = pending.silent && turnEnded
       stopped = !!pending.cancelAccepted && history.session.status.toLowerCase() === 'idle'
       if (replied || failed || silentDone || stopped) {

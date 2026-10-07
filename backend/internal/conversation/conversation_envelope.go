@@ -299,6 +299,17 @@ func parseV2Assistant(body string) Assistant {
 	if len(body) > 64*1024 {
 		return fail("protocol size limit")
 	}
+	// The cloud can insert an extra quote/comma between text and recipientIds.
+	// Recover only that separator in an otherwise complete user-facing message;
+	// control actions and all field/correlation checks retain strict validation.
+	repaired := false
+	const extraSeparator = `",","recipientIds":`
+	if !json.Valid([]byte(body)) && strings.Count(body, extraSeparator) == 1 {
+		candidate := strings.Replace(body, extraSeparator, `","recipientIds":`, 1)
+		if json.Valid([]byte(candidate)) {
+			body, repaired = candidate, true
+		}
+	}
 	if err := rejectDuplicateFields(body); err != nil {
 		return fail("duplicate or invalid JSON")
 	}
@@ -313,6 +324,9 @@ func parseV2Assistant(body string) Assistant {
 	}
 	if err := strictDecode(body, &p); err != nil {
 		return fail("invalid protocol fields")
+	}
+	if repaired && p.Protocol != "tietie.message" {
+		return fail("only user messages allow separator recovery")
 	}
 	if p.Version != 2 || p.RequestID == "" || len(p.RequestID) > 160 {
 		return fail("invalid version or requestId")
