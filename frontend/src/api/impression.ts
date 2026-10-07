@@ -7,6 +7,7 @@ export interface Impression {
   status: 'pending' | 'generating' | 'ready' | 'failed'
   error?: string
   generatedAt?: string
+  nextAnalysisAt?: string
 }
 export interface ImpressionResult { impression: Impression; memoryStatus?: 'synced' | 'pending' | '' }
 const path = (sessionId: string) => `/api/qoder/sessions/${encodeURIComponent(sessionId)}/partner-impression`

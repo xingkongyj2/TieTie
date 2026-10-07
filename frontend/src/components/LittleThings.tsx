@@ -4,7 +4,6 @@ import type { RelationshipState } from '../types'
 import { ReminderBoard } from './Tools'
 import { Anniversaries } from './Anniversaries'
 import type { AnniversaryState } from '../hooks/useAnniversaries'
-import { SpaceBuddy } from './SpaceBuddies'
 import { reminderPhase } from '../lib/reminders'
 import { Countdowns } from './Countdowns'
 import { CareWithAnniversary } from './CareModes'
@@ -74,12 +73,7 @@ export function LittleThings({ sessionId, selfId, onEditRegion, state, anniversa
               </h2>
             </div>
             <div className="things-buddy-scene" aria-hidden="true">
-              <SpaceBuddy variant="ice" className="things-buddy" mode="aspectFit" />
-              <span className="things-buddy-decor">
-                <Image className="h5-img things-decor-fragment things-decor-fragment-1" src="/assets/decor/things-decor-1.png" mode="scaleToFill" />
-                <Image className="h5-img things-decor-fragment things-decor-fragment-2" src="/assets/decor/things-decor-2.png" mode="scaleToFill" />
-                <Image className="h5-img things-decor-fragment things-decor-fragment-3" src="/assets/decor/things-decor-3.png" mode="scaleToFill" />
-              </span>
+              <Image className="h5-img things-buddy" src="/assets/ip/paper-buddies-v2/todo-duo.png" mode="aspectFit" />
             </div>
           </div>
         </section>

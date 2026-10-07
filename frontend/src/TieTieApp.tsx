@@ -4,7 +4,6 @@ import Taro from '@tarojs/taro';
 import { ScrollView, View } from '@tarojs/components';
 import type { MiniFile } from './lib/files';
 import { nextFrame, cancelFrame } from './lib/platform';
-import { assetUrl } from './lib/assets';
 import { Avatar } from './components/Avatar';
 import { BindPage } from './components/BindPage';
 import { BottomNav } from './components/BottomNav';
@@ -20,6 +19,7 @@ import { Mine } from './components/Mine';
 import { WechatReminderBanner } from './components/WechatReminderBanner';
 import { MiniPageHeader } from './components/MiniPageHeader';
 import { Onboarding } from './components/Onboarding';
+import { PaperBuddyMotion } from './components/PaperBuddyMotion';
 import { Tools, type ToolName } from './components/Tools';
 import { useAccount } from './hooks/useAccount';
 import { useRelationship } from './hooks/useRelationship';
@@ -30,7 +30,7 @@ import type { Message, Reminder } from './types';
 import { matchesMountedPrefix, mountedMessageKey, nextHistoryBatchEnd } from './lib/chatMounting';
 import { ChatScrollPolicy, chatMessageAnchor, chatMessageKey, chatTargetScrollTop, type ChatScrollTarget } from './lib/chatScroll';
 import { reminderLaunchStore } from './lib/reminderLaunch';
-import { wechatSubscriptionApi, type WechatSubscription } from './api/wechat-subscription';
+import { useWechatSubscription, WechatSubscriptionContext } from './hooks/useWechatSubscription';
 
 const nativeHistory = process.env.TARO_ENV === 'weapp';
 type AppView = 'we' | 'things' | 'mine' | 'details';
@@ -123,7 +123,7 @@ export default function TieTieApp() {
   const reloadAnniversaries = useRef(anniversaries.reload); reloadAnniversaries.current = anniversaries.reload;
   const [view, setView] = useState<AppView>('we');
   const [visitedViews, setVisitedViews] = useState<Set<AppView>>(() => new Set(['we']));
-  const [wechatSubscription, setWechatSubscription] = useState<WechatSubscription | null>(null);
+  const { subscription: wechatSubscription, controller: wechatSubscriptionController, refreshAfterReminder: refreshWechatSubscriptionAfterReminder } = useWechatSubscription(account.account?.user.userId, nativeHistory, view === 'mine');
   const [tool, setTool] = useState<ToolName | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
   const [toast, setToast] = useState('');
@@ -198,19 +198,6 @@ export default function TieTieApp() {
     seenReminders.current = { sessionId: '', ids: new Set() };
     nearBottom.current = true; userScrolledUp.current = false; autoScrollUntil.current = 0;
   }, [account.account?.user.userId]);
-  useEffect(() => {
-    if (!nativeHistory || !account.account) {
-      setWechatSubscription(null);
-      return;
-    }
-    let active = true;
-    void wechatSubscriptionApi.get().then((status) => {
-      if (active) setWechatSubscription(status);
-    }).catch(() => {
-      if (active) setWechatSubscription(null);
-    });
-    return () => { active = false; };
-  }, [account.account?.user.userId]);
   useEffect(() => { setComposerDismissSignal((value) => value + 1); }, [view, tool, previewImage]);
   useEffect(() => {
     if (account.account?.binding && !chat.loading && !chat.busy) void reloadAnniversaries.current();
@@ -219,6 +206,11 @@ export default function TieTieApp() {
     scrollPolicy.current.requestBottom();
     setScrollWake(value => value + 1);
   }, []);
+  useEffect(() => {
+    // Connection notices resize the viewport while cached rows are visible.
+    // Keep the latest preview in view unless the user has started reading up.
+    if (!chat.loaded && chat.messages.length && !chatTouching.current && nearBottom.current && !userScrolledUp.current) showLatest();
+  }, [showCloudError, showLoadingNotice, chat.loaded, chat.messages.length, showLatest]);
   const scrollToTarget = useCallback((target: ChatScrollTarget, anchor: string) => {
     const request = ++scrollSequence.current;
     if (scrollFrame.current !== undefined) cancelFrame(scrollFrame.current);
@@ -322,18 +314,21 @@ export default function TieTieApp() {
       return;
     }
     const userId = account.account?.user.userId;
+    let receivedReminder = false;
     for (const message of chat.messages) {
       if (seen.ids.has(message.id)) continue;
       seen.ids.add(message.id);
+      if (message.source === 'reminder' && userId && message.recipientIds?.includes(userId)) receivedReminder = true;
       if ((message.source === 'reminder' || message.source === 'reminder_update') && userId && message.recipientIds?.includes(userId)
         && Date.now() - Date.parse(message.createdAt ?? '') < 120_000
         && (view !== 'we' || !nearBottom.current)) notify(`${message.source === 'reminder' ? '消息提醒' : '提醒状态更新'}：${message.text.slice(0, 80)}`);
     }
-  }, [chat.selectedId, chat.loading, chat.messages, account.account?.user.userId, view, notify]);
+    if (nativeHistory && receivedReminder) refreshWechatSubscriptionAfterReminder();
+  }, [chat.selectedId, chat.loading, chat.messages, account.account?.user.userId, view, notify, refreshWechatSubscriptionAfterReminder]);
 
-  if (!account.ready) return <div className="app-shell loading-screen"><div className="brand-mark"><img src={assetUrl('/brand-notes.png')} alt="" /></div><h1>贴贴清单</h1><p>{account.error || '正在打开贴贴清单…'}</p>{account.error && <button className="primary-button" onClick={() => void account.reload()}>再试一次</button>}</div>;
+  if (!account.ready) return <div className="app-shell loading-screen"><PaperBuddyMotion variant="bump" purpose="loading" paused={Boolean(account.error)} /><h1>贴贴清单</h1><p>{account.error || '正在打开贴贴清单…'}</p>{account.error && <button className="primary-button" onClick={() => void account.reload()}>再试一次</button>}</div>;
   if (!account.account) return <LoginPage onLogin={login} onRegister={account.register} onWechatLogin={account.wechatLogin} notify={notify} />;
-  if (!state) return <div className="app-shell loading-screen"><div className="brand-mark"><img src={assetUrl('/brand-notes.png')} alt="" /></div><h1>贴贴清单</h1><p>{error || '正在打开贴贴清单…'}</p>{error && <button className="primary-button" onClick={() => void reload()}>再试一次</button>}</div>;
+  if (!state) return <div className="app-shell loading-screen"><PaperBuddyMotion variant="bump" purpose="loading" paused={Boolean(error)} /><h1>贴贴清单</h1><p>{error || '正在打开贴贴清单…'}</p>{error && <button className="primary-button" onClick={() => void reload()}>再试一次</button>}</div>;
   if (account.onboardingStep) return <Onboarding key={account.account.user.userId} step={account.onboardingStep} username={account.account.user.username} member={state.members.find((member) => member.id === 'self')!} onSaveMember={saveMember} onNext={account.advanceOnboarding} onDone={() => { goToView('we'); account.finishOnboarding(); }} notify={notify} toast={toast} />;
 
   const ai = state.members.find((m) => m.id === 'ai')!;
@@ -403,7 +398,7 @@ export default function TieTieApp() {
 
 
   const showWechatReminderBanner = nativeHistory && view === 'we' && chat.loaded && chat.messages.length > 0 && wechatSubscription?.remaining === 0;
-  return <div className={`app-shell view-${view} ${view !== 'details' ? 'has-bottom-nav' : ''}${keyboardOpen ? ' keyboard-open' : ''}${showWechatReminderBanner ? ' has-wechat-reminder' : ''}`} data-view={view} style={{ '--app-height': `${appHeight}px`, '--app-top': '0px', ...(nativeHistory ? { height: `${appHeight}px` } : {}) } as CSSProperties}>
+  return <WechatSubscriptionContext.Provider value={wechatSubscriptionController}><div className={`app-shell view-${view} ${view !== 'details' ? 'has-bottom-nav' : ''}${keyboardOpen ? ' keyboard-open' : ''}${showWechatReminderBanner ? ' has-wechat-reminder' : ''}`} data-view={view} style={{ '--app-height': `${appHeight}px`, '--app-top': '0px', ...(nativeHistory ? { height: `${appHeight}px` } : {}) } as CSSProperties}>
     <NativeSlot shown={showWechatReminderBanner} overlay><WechatReminderBanner onOpen={() => goToView('mine')} /></NativeSlot>
     {nativeHistory && <NativeSlot shown={view !== 'details'} overlay>
       <MiniPageHeader title={view === 'mine' ? '我的' : view === 'things' ? '提醒' : '我们'} onDismiss={() => setComposerDismissSignal(value => value + 1)} onAction={view === 'we' && account.account.binding ? () => goToView('details') : undefined} />
@@ -433,6 +428,7 @@ export default function TieTieApp() {
           const touch = (event as unknown as { touches?: Array<{ clientY?: number }> }).touches?.[0];
           const y = touch?.clientY;
           if (chatTouching.current && chatTouchStartY.current !== null && Number.isFinite(y) && Math.abs(y! - chatTouchStartY.current) > 8) {
+            scrollPolicy.current.cancelBottom();
             nearBottom.current = false;
             userScrolledUp.current = true;
             autoScrollUntil.current = 0;
@@ -475,12 +471,12 @@ export default function TieTieApp() {
       </> : <BindPage code={account.account.user.code} onBind={account.bind} notify={notify} embedded showHeader={!nativeHistory} />}
     </div>
     <NativeSlot shown={view === 'things'} panel>{visitedViews.has('things') && <LittleThings sessionId={account.account.binding?.sessionId} selfId={selfId} onEditRegion={() => { setEditProfileInitially(true); goToView('mine'); }} state={state} anniversaries={anniversaries} reminderState={sharedState} onToggle={toggleReminder} onCancel={cancelReminder} onDelete={deleteReminder} remindersLoading={chat.loading} reminderNotice={account.account.binding ? chat.remindersError || chat.error : undefined} onReloadReminders={account.account.binding ? chat.reload : undefined} notify={notify} />}</NativeSlot>
-    <NativeSlot shown={view === 'mine'} panel>{visitedViews.has('mine') && <Mine editProfileInitially={editProfileInitially} state={state} username={account.account.user.username} code={account.account.user.code} hasSession={!!account.account.binding} onSaveMember={saveMember} onLogout={account.logout} onExitSession={account.unbind} notify={notify} onWechatSubscriptionChange={setWechatSubscription} onEditProfileInitialHandled={() => setEditProfileInitially(false)} />}</NativeSlot>
+    <NativeSlot shown={view === 'mine'} panel>{visitedViews.has('mine') && <Mine editProfileInitially={editProfileInitially} state={state} username={account.account.user.username} code={account.account.user.code} hasSession={!!account.account.binding} onSaveMember={saveMember} onLogout={account.logout} onExitSession={account.unbind} notify={notify} onEditProfileInitialHandled={() => setEditProfileInitially(false)} />}</NativeSlot>
     <NativeSlot shown={view === 'details'} panel>{visitedViews.has('details') && <Details state={sharedState} sessionId={account.account.binding?.sessionId} onBack={() => goToView('we')} onSaveMember={saveMember} onSaveSettings={saveSettings} notify={notify} />}</NativeSlot>
     </div>
     <NativeSlot shown={view !== 'details'}>{view !== 'details' && <BottomNav view={view} onChange={(next) => { setEditProfileInitially(false); goToView(next); }} />}</NativeSlot>
     <NativeSlot shown={!!tool} overlay>{tool && <Tools tool={tool} state={sharedState} anniversaries={anniversaries} onClose={() => setTool(null)} onAdd={addReminder} notify={notify} />}</NativeSlot>
     <NativeSlot shown={!!previewImage} overlay>{previewImage && <ImageViewer src={previewImage.src} alt={previewImage.alt} onClose={() => setPreviewImage(null)} />}</NativeSlot>
     <NativeSlot shown={!!toast} overlay>{toast && <div className="toast" role="status"><Sparkles size={16} />{toast}</div>}</NativeSlot>
-  </div>;
+  </div></WechatSubscriptionContext.Provider>;
 }

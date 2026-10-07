@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ type notificationStoreMock struct {
 	prepareErr                   error
 	prepared, released, finished bool
 	state                        string
+	reason                       string
 	retryable, unauthorized      bool
 }
 
@@ -22,9 +24,10 @@ func (m *notificationStoreMock) PrepareWechatNotification(context.Context, dbop.
 	m.prepared = true
 	return "verified-openid", m.ready, m.prepareErr
 }
-func (m *notificationStoreMock) FinishWechatNotification(_ context.Context, _ dbop.WechatNotification, state, _ string, retryable, unauthorized bool, _ time.Time) error {
+func (m *notificationStoreMock) FinishWechatNotification(_ context.Context, _ dbop.WechatNotification, state, reason string, retryable, unauthorized bool, _ time.Time) error {
 	m.finished = true
 	m.state = state
+	m.reason = reason
 	m.retryable = retryable
 	m.unauthorized = unauthorized
 	return nil
@@ -65,7 +68,7 @@ func TestWechatNotificationWorkerRecordsOutcomes(t *testing.T) {
 			if !errors.Is(err, tc.err) || !store.finished || !sender.sent || store.state != tc.state || store.retryable != tc.retryable || store.unauthorized != tc.unauthorized {
 				t.Fatalf("store=%+v sent=%v err=%v", store, sender.sent, err)
 			}
-			if sender.notification.Page != job.Page || sender.notification.Content != job.Content || sender.notification.NotificationType != "待办到期提醒" {
+			if sender.notification.Page != job.Page || sender.notification.Content != job.Content || sender.notification.NotificationType != "待办提醒" {
 				t.Fatal("lost notification content or chat link")
 			}
 		})
@@ -73,7 +76,7 @@ func TestWechatNotificationWorkerRecordsOutcomes(t *testing.T) {
 }
 
 func TestWechatNotificationWorkerUsesCareNotificationType(t *testing.T) {
-	for _, title := range []string{"早安提醒", "晚安提醒", "纪念日提醒"} {
+	for _, title := range []string{"早安提醒", "晚安提醒", "纪念日提醒", "倒计时提醒"} {
 		t.Run(title, func(t *testing.T) {
 			store := &notificationStoreMock{ready: true}
 			sender := &notificationSenderMock{}
@@ -85,6 +88,24 @@ func TestWechatNotificationWorkerUsesCareNotificationType(t *testing.T) {
 				t.Fatalf("wrong care notification type: %+v", sender.notification)
 			}
 		})
+	}
+}
+
+func TestWechatNotificationWorkerPersistsSafeErrorCode(t *testing.T) {
+	store := &notificationStoreMock{ready: true}
+	sender := &notificationSenderMock{sendErr: &wechat.MessageError{Kind: wechat.MessagePermanent, Code: 47003}}
+	if err := deliverWechatNotification(context.Background(), store, sender, dbop.WechatNotification{}); err == nil {
+		t.Fatal("lost WeChat rejection")
+	}
+	if store.state != dbop.WechatNotificationFailed || !strings.Contains(store.reason, "47003") {
+		t.Fatalf("missing persisted WeChat error code: %+v", store)
+	}
+
+	store = &notificationStoreMock{ready: true}
+	sender.sendErr = errors.New("private-openid access_token=secret-token")
+	_ = deliverWechatNotification(context.Background(), store, sender, dbop.WechatNotification{})
+	if store.state != dbop.WechatNotificationUncertain || strings.Contains(store.reason, "private-openid") || strings.Contains(store.reason, "secret-token") {
+		t.Fatalf("unsafe failure reason: %+v", store)
 	}
 }
 func TestWechatNotificationWorkerDoesNotSendWithoutReservation(t *testing.T) {

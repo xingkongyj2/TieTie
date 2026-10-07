@@ -326,7 +326,7 @@ func TestSendReminderTemplate3377HasAllFourFields(t *testing.T) {
 	options.ReminderSourceKey = " thing3 "
 	options.ReminderContentKey = "thing5"
 	options.ReminderTimeKey = "time6"
-	for _, notificationType := range []string{"", "早安提醒", "晚安提醒", "纪念日提醒"} {
+	for _, notificationType := range []string{"", "待办提醒", "倒计时提醒", "纪念日提醒", "早安提醒", "晚安提醒"} {
 		t.Run(notificationType, func(t *testing.T) {
 			client := NewMessageClient(options)
 			notification := reminderTestNotification()
@@ -347,10 +347,10 @@ func TestSendReminderTemplate3377HasAllFourFields(t *testing.T) {
 				}
 				wantType := notificationType
 				if wantType == "" {
-					wantType = "待办到期提醒"
+					wantType = "待办提醒"
 				}
 				if body.TemplateID != options.ReminderTemplateID || len(body.Data) != 4 ||
-					body.Data["thing1"].Value != wantType || body.Data["thing3"].Value != "贴贴清单" ||
+					body.Data["thing1"].Value != wantType || body.Data["thing3"].Value != "贴贴AI清单" ||
 					body.Data["thing5"].Value != strings.Repeat("贴", 20) || body.Data["time6"].Value != "2026-10-05 12:30" {
 					t.Fatalf("template 3377 payload mismatch: %+v", body)
 				}

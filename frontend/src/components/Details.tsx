@@ -7,6 +7,8 @@ import { Avatar } from './Avatar';
 import { DatePicker } from './DatePicker';
 import { PartnerImpression } from './PartnerImpression';
 import { RegionPicker } from './RegionPicker';
+import { WechatProfileFields } from './WechatProfileFields';
+import { profileApi } from '../api/profile';
 interface Props { sessionId?: string; state: RelationshipState; onBack: () => void; onSaveMember: (member: Member) => Promise<void>; onSaveSettings: (settings: AISettings) => Promise<void>; notify: (text: string) => void }
 
 function AIForm({ state, onSave, notify }: { state: RelationshipState; onSave: Props['onSaveSettings']; notify: Props['notify'] }) {
@@ -52,7 +54,9 @@ const parseBirthday = (shown: string): string | null => {
 type RequiredField = 'name' | 'gender' | 'birthday' | 'region';
 
 export function MemberForm({ member, onSave, onSaved, submitLabel = '保存', required = false, showName = false, notify }: { member: Member; onSave: Props['onSaveMember']; onSaved?: () => void; submitLabel?: string; required?: boolean; showName?: boolean; notify: Props['notify'] }) {
-  const [draft, setDraft] = useState({ name: member.name, gender: member.gender, hobbies: member.hobbies, region: member.region });
+  const [draft, setDraft] = useState({ name: member.name, avatar: member.avatar, gender: member.gender, hobbies: member.hobbies, region: member.region });
+  const [selectedAvatarPath, setSelectedAvatarPath] = useState('');
+  const uploadedAvatar = useRef<{ tempPath: string; avatar: string }>();
   const [birthday, setBirthday] = useState(displayBirthday(member.birthday));
   const [regionValid, setRegionValid] = useState(true);
   const [hobby, setHobby] = useState('');
@@ -68,9 +72,11 @@ export function MemberForm({ member, onSave, onSaved, submitLabel = '保存', re
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (saving.current) return;
+    const formValues = (event as FormEvent & { detail?: { value?: { wechatNickname?: unknown } } }).detail?.value;
+    const name = process.env.TARO_ENV === 'weapp' && showName && typeof formValues?.wechatNickname === 'string' ? formValues.wechatNickname.trim() : draft.name.trim();
     const iso = parseBirthday(birthday);
     const hobbies = hobby.trim() && !draft.hobbies.includes(hobby.trim()) && draft.hobbies.length < 8 ? [...draft.hobbies, hobby.trim()] : draft.hobbies;
-    if (showName && !draft.name.trim()) { setFieldErrors((current) => ({ ...current, name: '请输入名称' })); return; }
+    if (showName && !name) { setFieldErrors((current) => ({ ...current, name: '请输入昵称' })); return; }
     if (required) {
       const errors: Partial<Record<RequiredField, string>> = {};
       if (draft.gender !== 'male' && draft.gender !== 'female') errors.gender = '请选择性别';
@@ -84,13 +90,31 @@ export function MemberForm({ member, onSave, onSaved, submitLabel = '保存', re
     if (!regionValid || draft.region && !draft.region.cityCode) { notify('选好城市和区／县，再保存吧。'); return; }
     saving.current = true;
     setBusy(true);
-    try { await onSave({ ...member, ...draft, name: draft.name.trim(), birthday: iso, hobbies }); setDraft({ ...draft, name: draft.name.trim(), hobbies }); setHobby(''); notify('小档案收好啦，懂你又多一点点 ♡'); onSaved?.(); }
-    catch { notify('小档案还没存好，再试一次吧。'); }
+    try {
+      let avatar = draft.avatar;
+      if (selectedAvatarPath) {
+        if (uploadedAvatar.current?.tempPath !== selectedAvatarPath) {
+          uploadedAvatar.current = { tempPath: selectedAvatarPath, avatar: await profileApi.uploadAvatar(selectedAvatarPath) };
+        }
+        avatar = uploadedAvatar.current.avatar;
+      }
+      await onSave({ ...member, ...draft, name, avatar, birthday: iso, hobbies });
+      setDraft({ ...draft, name, avatar, hobbies });
+      setSelectedAvatarPath('');
+      uploadedAvatar.current = undefined;
+      setHobby('');
+      notify('小档案收好啦，懂你又多一点点 ♡');
+      onSaved?.();
+    }
+    catch (error) { notify(error instanceof Error ? error.message : '小档案还没存好，再试一次吧。'); }
     finally { saving.current = false; setBusy(false); }
   };
   return <Form className="detail-form" onSubmit={(event) => void submit(event)}>
     <fieldset className="form-fields" disabled={busy}>
-    {showName && <section className="form-card profile-card"><label className="field-label" htmlFor="member-name">名称</label><Input className="line-input" id="member-name" disabled={busy} value={draft.name} maxLength={24} autoComplete="nickname" aria-invalid={!!fieldErrors.name} onChange={(event) => { setDraft({ ...draft, name: event.target.value }); clearError('name'); }} />{fieldErrors.name && <p className="member-field-error" role="alert">{fieldErrors.name}</p>}</section>}
+    {showName && <section className="form-card profile-card">{process.env.TARO_ENV === 'weapp' ? <WechatProfileFields nickname={draft.name} avatar={draft.avatar} disabled={busy}
+      onNicknameChange={(name) => { setDraft((current) => ({ ...current, name })); clearError('name'); }}
+      onAvatarChange={(avatar) => { setDraft((current) => ({ ...current, avatar })); setSelectedAvatarPath(avatar); uploadedAvatar.current = undefined; }}
+      onError={(message) => { setFieldErrors((current) => ({ ...current, name: message })); notify(message); }} /> : <><label className="field-label" htmlFor="member-name">名称</label><Input className="line-input" id="member-name" disabled={busy} value={draft.name} maxLength={24} autoComplete="nickname" aria-invalid={!!fieldErrors.name} onChange={(event) => { setDraft((current) => ({ ...current, name: event.target.value })); clearError('name'); }} /></>}{fieldErrors.name && <p className="member-field-error" role="alert">{fieldErrors.name}</p>}</section>}
     <section className="form-card profile-card">
       <div className="field-label" id="member-gender-label"><span>性别 {required && <span className="field-required">必填</span>}</span></div><div className="gender-options" role="group" aria-labelledby="member-gender-label" aria-invalid={!!fieldErrors.gender}>{([{ value: 'male', label: '男' }, { value: 'female', label: '女' }] as const).map((option) => <button type="button" key={option.value} className={draft.gender === option.value ? 'selected' : ''} aria-pressed={draft.gender === option.value} disabled={busy} onClick={() => { setDraft({ ...draft, gender: option.value }); clearError('gender'); }}>{option.label}</button>)}</div>{fieldErrors.gender && <p className="member-field-error" role="alert">{fieldErrors.gender}</p>}
       <label className="field-label spaced-label" htmlFor="birthday"><span>生日 {required && <span className="field-required">必填</span>}</span><Cake size={15} /></label><DatePicker disabled={busy} id="birthday" title="选择生日" placeholder="请选择生日" clearLabel={required ? undefined : '清空生日'} value={birthday} onChange={(value) => { setBirthday(value); clearError('birthday'); }} />{fieldErrors.birthday && <p className="member-field-error" role="alert">{fieldErrors.birthday}</p>}

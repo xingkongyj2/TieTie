@@ -573,7 +573,21 @@ func (db *DB) RecordReminderDispatch(ctx context.Context, id string, eventIDs []
 	if err != nil {
 		return err
 	}
-	return db.updateReminderDispatch(ctx, id, map[string]any{"dispatch_event_ids": string(encoded)})
+	if !db.enabled() {
+		return errNoDB
+	}
+	// 接受回执不是提醒事实变化，无需重建提醒记忆和历史页。
+	// 单条条件更新本身具有原子性，避免跨远端数据库的额外事务往返。
+	result := db.gdb.WithContext(ctx).Session(&gorm.Session{SkipDefaultTransaction: true}).
+		Model(&Reminder{}).Where("id = ? AND status = ?", id, ReminderDispatching).
+		Updates(map[string]any{"dispatch_event_ids": string(encoded)})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return fmt.Errorf("%w: dispatch %s is no longer active", ErrReminderState, id)
+	}
+	return nil
 }
 
 // FinishReminderDispatch 记录 AI 实际回复完成及全部云端事件 ID；已完成的重放保持幂等。

@@ -39,6 +39,23 @@ button::after { border:0; }
 .mini-root .composer .composer-textarea { min-height:44px; padding:11px 2px 7px; line-height:22px; }
 .mini-root .composer-input-wrap { position:relative; }
 .mini-root .composer-placeholder { position:absolute; top:11px; left:2px; right:2px; overflow:hidden; color:#a3a7b0; font-size:14px; line-height:22px; white-space:nowrap; text-overflow:ellipsis; pointer-events:none; }
+/* Keep the held control mounted and stationary while native touch events drain. */
+.mini-root .composer-area.is-voice-active .composer-stage { pointer-events:auto; }
+.mini-root .composer-area.is-voice-active .composer-voice-panel { pointer-events:none; }
+.mini-root .composer-area.is-voice-active .composer-voice-panel.is-transcribing { pointer-events:auto; }
+.mini-root .composer-voice-panel { height:122px; gap:8px; border-radius:20px; background:linear-gradient(180deg,#fff9,#fff 28%); }
+.mini-root .composer-voice-hint { justify-content:center; height:32px; padding:0 4px; text-align:center; font-size:16px; line-height:24px; }
+.mini-root .composer-voice-field { justify-content:center; height:82px; padding:12px 15px; border:1px solid #dce8ff; border-radius:20px; background:linear-gradient(115deg,#edf4ff,#e7efff); }
+.mini-root .composer-voice-wave { flex:none; width:84px; height:40px; gap:5px; color:#608ada; }
+.mini-root .composer-voice-wave i { width:3px; }
+.mini-root .composer-area.is-voice-cancel .composer-voice-field { background:#fff0ed; border-color:#f2d9d2; }
+.mini-root .composer-area.is-voice-cancel .composer-voice-field::before { display:none; }
+.mini-root .composer-area.is-voice-cancel .composer-voice-wave { color:#b4695e; }
+.mini-root .composer-voice-field .spinner { flex:none; width:26px; height:26px; margin:0; color:#608ada; }
+.mini-root .composer-dictation-overflow { margin-top:8px; padding:10px 12px; border-radius:12px; background:#fff6ec; color:#936b46; font-size:11px; line-height:1.6; }
+.mini-root .composer-dictation-preview { max-height:48px; margin:6px 0; overflow:hidden; word-break:break-all; color:#616b7a; }
+.mini-root .composer-dictation-actions { display:flex; gap:10px; flex-wrap:wrap; }
+.mini-root .composer-dictation-actions button { padding:4px 0; background:transparent; color:#5175ae; font-size:11px; }
 .mini-root input.line-input { height:46px; line-height:46px; }
 .mini-root .date-picker-readonly { display:flex; align-items:center; height:48px; min-height:48px !important; line-height:1.4; }
 /* Native mini-program buttons add their own padding, line-height and disabled

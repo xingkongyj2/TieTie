@@ -70,6 +70,9 @@ go run ./cmd/server           # 或 make dev
 | `QODER_ENVIRONMENT_ID` | 绑定新建会话使用的运行环境；留空优先取名为 Default 的环境 |
 | `JWT_SECRET` | JWT 签名密钥，生产环境必须设置为随机长字符串 |
 | `JWT_TTL_HOURS` | 令牌有效期（小时），默认 720（30 天） |
+| `TENCENT_ASR_APP_ID` | 腾讯云账号的数字 AppID，用于实时语音识别，不能填写微信小程序 AppID |
+| `TENCENT_ASR_SECRET_ID` / `TENCENT_ASR_SECRET_KEY` | 腾讯云 ASR 签名凭据，仅保存在后端环境中，不提交到 Git |
+| `TENCENT_ASR_ENGINE_MODEL` | 16 kHz 识别模型，默认 `16k_zh` |
 | `WECHAT_APP_ID` | 微信小程序 AppID，必须与 `frontend/project.config.json` 中的 AppID 一致 |
 | `WECHAT_APP_SECRET` | 微信公众平台的小程序 AppSecret，仅保存在后端环境变量中 |
 | `WECHAT_TIMEOUT_SECONDS` | 微信登录及订阅消息请求超时，默认 10 秒，范围 1–60 |
@@ -86,16 +89,27 @@ go run ./cmd/server           # 或 make dev
 
 ## 账号与绑定
 
-- `POST /api/auth/wechat {code, nickname?, avatarUrl?}`：小程序用 `wx.login` 获取临时 code，并可在用户同意 `wx.getUserProfile` 后提交昵称和头像；服务端通过固定的微信 HTTPS `jscode2session` 接口验证身份，返回 `{token, user, binding, isNewUser}`。展示资料仅作为个人档案保存，拒绝授权或头像不可用时随机使用本地默认头像；首次自动创建新账号和邀请码，`isNewUser=true` 时前端进入资料引导；重复登录使用原账号及绑定。不会自动合并历史账号密码账号。
+- `POST /api/auth/wechat {code}`：先调用 `wx.login` 获取新 code，服务端通过 `jscode2session` 验证身份后只读查询原账号。已有昵称和头像的账号直接签发 `{token, user, binding, isNewUser:false, needsProfileSetup?}`，保留原资料和绑定。未知身份或缺少昵称/头像返回 400 `wechat_profile_required`，本次不创建账号、不签发令牌；查询故障返回服务错误，不视为新用户。
+- 仅收到 `wechat_profile_required` 后展示资料表单：用户通过微信 `chooseAvatar` 选择头像、`type="nickname"` 填写昵称，重新调用 `wx.login` 获取新 code，再提交 `POST /api/auth/wechat {code, nickname, avatarBase64}`。昵称 1–24 字，头像为不带 data URL 前缀的 PNG/JPEG Base64 原文，解码后不超过 2 MiB。服务端先校验资料、再验证身份，创建或读取账号；头像和昵称保存成功后才签发登录结果。已有客户端显式提交资料的流程继续兼容，保存本次明确选择的昵称和头像，其他资料保持不变。两种登录方式都会在缺少性别、生日或地区时返回 `needsProfileSetup:true`，继续引导尚未完成的个人档案。
 - 微信身份独立存储在 `wechat_identities`，`(app_id, open_id)` 复合主键保证唯一；用户和身份在同一事务中创建，并发重复登录回滚多余用户后读取已创建账号。用户名为随机值，不含 OpenID；微信账号没有可用于密码登录的密码。客户端传入的 OpenID 或 session key 不作为登录凭据，接口和日志均不包含 AppSecret 或 session key。
 - 首次启动更新后的后端会通过 AutoMigrate 新建 `wechat_identities`，无需手动改已有用户。部署时填写 `WECHAT_APP_ID` 和 `WECHAT_APP_SECRET` 并重启后端；缺少配置返回 503 `wechat_login_unavailable`，无效或已使用的 code 返回 401 `invalid_wechat_code`，微信请求超时返回 504 `wechat_login_timeout`，上游故障返回 502 `wechat_login_failed`。小程序需将后端 HTTPS 地址配置为 request 合法域名，后端需可访问 `api.weixin.qq.com`。
 - 部署后可向 `/api/auth/wechat` POST 空 JSON `{}` 检查接口：新版应返回 400 `invalid_wechat_code`，不会请求微信或创建账号；若仍返回 404 `unsupported_route`，当前服务尚未更新或请求被转发到旧实例。需要先构建并发布包含新版 Go 后端的镜像，再更新服务器容器；只上传小程序或仅拉取旧镜像不能增加此路由。
 - `POST /api/auth/register {username, password}`：注册即登录，返回 `{token, user, binding}`；密码明文存储，邀请码 4 位数字自动生成防碰撞。
 - `POST /api/auth/login {username, password}`：登录，返回同上。
 - `GET /api/account/me`：JWT 换取当前账号与绑定状态。
+- `POST /api/account/avatar {avatarBase64}`：登录后上传个人头像，限制同上；实际解码、限制像素并重新编码为最长边 512 像素的 JPEG，返回 `{avatar:"/api/assets/avatars/<随机ID>"}`，再通过 `PUT /api/account/profile` 保存头像与完整个人资料。受管头像只能保存到所属用户的档案。
+- 头像内容持久保存在 MySQL `user_avatars`（启动时自动建表），无需本地上传目录或新增环境变量。`GET/HEAD /api/assets/avatars/{id}` 用不可猜测地址提供图片及缓存；小程序显示时将相对路径拼到当前 API 域名，生产环境按微信要求配置 HTTPS 图片下载域名。
 - `POST /api/account/bind {code}`：先校验双方没有和其他人绑定，同一对已绑定则返回原会话。数据库触发器防止并发请求让一个人绑定多个对象；冲突返回 409，多建的云端会话会清理。
 - 旧数据库启动时自动迁移用户 ID 与绑定关系；重复的历史绑定保留最早记录，其他记录归档到 `archived_bindings`。`users` 表不含 `legacy_password_hash` 列；旧账号哈希暂存 `legacy_passwords` 表，首次成功登录后转存明文密码并删除哈希。旧 JWT 需重新登录。
 - 消息/SSE 接口校验会话属于当前用户的绑定，越权返回 403 `session_forbidden`。
+
+## 实时语音识别
+
+`POST /api/account/voice-session` 使用现有 JWT 鉴权，无需请求体。后端根据上述四项配置签发 `{url, voiceId, expiresAt}`；`expiresAt` 为 UTC RFC3339 时间。客户端请求参数不能改变识别主机、AppID、模型、音频格式或有效期。每次连接使用新的 32 位随机十六进制 `voiceId` 和 10 位随机正整数 nonce，签名最多有效 2 分钟。响应为 `Cache-Control: no-store`，每用户滚动一分钟最多申请 20 次；超额返回 429 和 `Retry-After`。缺少或无效配置返回 503 `voice_unavailable`，不影响文字聊天。
+
+音频直接送至 `wss://asr.cloud.tencent.com/asr/v2/{腾讯云AppID}`。客户端使用 16000 Hz、16-bit、单声道 PCM（`voice_format=1`），开启 VAD（`needvad=1`），并自行限制每次录音最长 60 秒；签名有效期用于握手鉴权，不等于云端录音时长限制。建议每 200 ms 发送约 6400 字节音频，结束时发送 `{"type":"end"}`，读取最终识别结果。连接重建须重新申请会话。
+
+开通腾讯云 ASR 服务并填写后端环境变量后重启后端；小程序需将 `wss://asr.cloud.tencent.com` 加入 socket 合法域名，并将后端 HTTPS API 地址加入 request 合法域名。不要记录或持久保存返回的临时 URL，SecretKey 始终留在后端。实现采用官方的参数字典序、未转义签名原文、HMAC-SHA1 和 Base64 签名，最后再进行 URL 编码。参见[腾讯云实时语音识别 WebSocket 文档](https://cloud.tencent.com/document/product/1093/48982)。单元测试验证签名和接口约束，实际账号开通状态及真机音频识别仍需联调。
 
 ## 构建
 
@@ -145,17 +159,19 @@ docker build -t tietie-backend .      # 镜像只含后端，静态文件用卷�
 
 一次性和重复提醒都由数据库调度；重复规则按 Asia/Shanghai 的日历日期计算，既保留每次触发的历史，也排定下一次。服务需常驻，页面关闭不影响保存与唤醒；微信推送需配置模板并获得用户授权。MySQL 下每类队列的「挑候选 + 改状态」由一把 advisory lock 串起来，跨连接不会重复领取；但多副本运行仍需分布式租约与跨实例空间锁，会话内的串行也还依赖进程内互斥，不能直接运行多个进程各自在启动时恢复相同队列。
 
+倒计时使用独立索引队列，在目标日期的北京时间 08:00 向双方发送群内消息并进入微信订阅队列。当天 08:00–23:00 新增可即时提醒；23:00 后及错过的一次性日期不补发。年度重复自动排定下一年，2 月 29 日在非闰年按 2 月 28 日；重启保持幂等，修改、删除或解绑使旧投递失效。已有倒计时在启动迁移时补建队列。
+
 ## 微信订阅提醒
 
 `GET /api/account/wechat-subscription` 返回 `{enabled, templateId, hasWechatIdentity, remaining, subscriptionType}`；`POST` 接收 `{templateId, result:"accept"|"reject"|"ban", requestId}`。用户身份来自 JWT 和当前 AppID 的微信身份记录，客户端不能指定 OpenID。每次原生授权使用独立 requestId，保存重试复用同一 ID，重复提交不会增加次数；拒绝本次授权不抹除之前已接受的次数。一次性模板每次 accept 增加一次预留额度，长期模板授权成功时 remaining 为 `-1`。
 
-普通 AI/手动提醒实际投递完成、早晚关怀及纪念日报告插入时，在同一事务创建 `wechat_notifications`，按来源和接收人去重。模板未启用时不入队；普通聊天和提醒更新不入队。独立 worker 发送前再次检查绑定版本、实际提醒接收人、当前微信身份和额度；一次性额度原子预留。私密提醒只投递给本人，跳转链接使用共享空间 ID，聊天接口只加载当前账号有权看到的消息。
+待办的 AI/手动提醒实际投递完成，以及倒计时、纪念日、贴贴早晚关怀报告插入时，在同一事务创建 `wechat_notifications`，按来源和接收人去重。模板未启用时不入队；普通聊天和提醒更新不入队。独立 worker 发送前再次检查绑定版本、实际提醒接收人、当前微信身份和额度；一次性额度原子预留。私密提醒只投递给本人，跳转链接使用共享空间 ID，聊天接口只加载当前账号有权看到的消息。
 
 发送通过固定微信 HTTPS 地址获取并缓存 stable token，再调用订阅消息接口。明确限流或忙碌最多重试三次；授权版本未变时，明确拒绝退回预留次数，微信拒绝授权则作废对应额度。发送期间若用户重新授权，旧错误结果不清除新额度，也不退回旧版本预留次数，保守避免恢复已撤销的授权。发送超时、未知响应或进程在发送中退出标记 uncertain，不重复发送。领取后尚未发送的租约可以恢复，超过 24 小时的积压停止发送。后台队列关闭时也不发送微信消息。
 
-当前选用模板 3377「聊天消息通知」，模板 ID 为 `CInFuaL7JKsYeYecbmanbsZy8TY_31jj77fSZhUH9iM`。按 [`.env.example`](.env.example) 配置：`WECHAT_REMINDER_TITLE_KEY=`（留空），`WECHAT_REMINDER_TYPE_KEY=thing1`，`WECHAT_REMINDER_SOURCE_KEY=thing3`，`WECHAT_REMINDER_CONTENT_KEY=thing5`，`WECHAT_REMINDER_TIME_KEY=time6`。通知类型为「待办到期提醒」或早安/晚安/纪念日提醒，消息来自「贴贴清单」，备注是实际提醒内容（thing 字段最多 20 个字符），消息时间使用北京时间。
+当前选用模板 3377「聊天消息通知」，模板 ID 为 `CInFuaL7JKsYeYecbmanbsZy8TY_31jj77fSZhUH9iM`。按 [`.env.example`](.env.example) 配置：`WECHAT_REMINDER_TITLE_KEY=`（留空），`WECHAT_REMINDER_TYPE_KEY=thing1`，`WECHAT_REMINDER_SOURCE_KEY=thing3`，`WECHAT_REMINDER_CONTENT_KEY=thing5`，`WECHAT_REMINDER_TIME_KEY=time6`。通知类型为「待办提醒」「倒计时提醒」「纪念日提醒」「早安提醒」「晚安提醒」，消息来源统一为「贴贴AI清单」。普通消息的备注展示实际提醒内容；天气卡片展示接收者的天气摘要，并保留「进入小程序查看」提示（thing 字段最多 20 个字符，超长摘要截短）。消息时间使用北京时间。
 
-在服务器填写 AppID、AppSecret 和上述模板配置，更新后端镜像并重新创建应用容器以加载环境变量。开发/体验版分别使用 `WECHAT_MINIPROGRAM_STATE=developer/trial`；服务实例的 `BACKGROUND_WORKERS_ENABLED=true`，共用生产数据库的本地实例保持 `false`。用手机微信登录小程序，在「我的 → 提醒剩余次数」点击右侧铃铛并允许订阅，确认次数增加，再发送「1分钟后提醒我喝水」，检查任务已保存后退出小程序等待微信通知。实际提醒回复保存后进入微信队列，每 5 秒检查一次；在 `logs/scheduler.log` 中搜索 `wechat.notification_result` / `wechat.notification_failed` 检查发送状态。默认一次授权只可收到一条提醒；长期模板必须事先获得微信批准。mock 测试不代表真实发送已验收。参考 [稳定 token](https://developers.weixin.qq.com/miniprogram/dev/server/API/mp-access-token/api_getstableaccesstoken.html)及[消息发送接口](https://developers.weixin.qq.com/miniprogram/dev/server/API/mp-message-management/subscribe-message/api_sendmessage.html)。
+在服务器填写 AppID、AppSecret 和上述模板配置，更新后端镜像并重新创建应用容器以加载环境变量。开发/体验版分别使用 `WECHAT_MINIPROGRAM_STATE=developer/trial`；服务实例的 `BACKGROUND_WORKERS_ENABLED=true`，共用生产数据库的本地实例保持 `false`。用手机微信登录小程序，在「我的 → 提醒剩余次数」点击右侧铃铛并允许订阅，确认次数增加，再发送「1分钟后提醒我喝水」，检查任务已保存后退出小程序等待微信通知。实际提醒回复保存后进入微信队列，每 5 秒检查一次；在 `logs/scheduler.log` 中搜索 `wechat.worker_started` / `wechat.notification_result` / `wechat.notification_failed` / `wechat.notification_skipped` 检查启动及发送状态；微信明确拒绝时，通知记录和日志均保留数值错误码。进程环境变量优先于 `.env.local`，若启动命令带有 `BACKGROUND_WORKERS_ENABLED=false`，仅修改文件为 true 不会启用投递，需要移除覆盖并重启。默认一次授权只可收到一条提醒；长期模板必须事先获得微信批准。mock 测试不代表真实发送已验收。参考 [稳定 token](https://developers.weixin.qq.com/miniprogram/dev/server/API/mp-access-token/api_getstableaccesstoken.html)及[消息发送接口](https://developers.weixin.qq.com/miniprogram/dev/server/API/mp-message-management/subscribe-message/api_sendmessage.html)。
 
 ## 提醒落库、记忆与运行日志
 

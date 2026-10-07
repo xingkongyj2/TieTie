@@ -161,6 +161,9 @@ func (db *DB) Unbind(ctx context.Context, userID int64) (*Binding, error) {
 		if err := tx.Model(&AnniversaryReminderSettings{}).Where("session_id=? AND binding_created_at=?", binding.SessionID, binding.CreatedAt).Updates(map[string]any{"enabled": false, "token": ""}).Error; err != nil {
 			return err
 		}
+		if err := tx.Model(&CountdownReminderSchedule{}).Where("session_id=? AND binding_created_at=?", binding.SessionID, binding.CreatedAt).Updates(map[string]any{"active": false, "token": ""}).Error; err != nil {
+			return err
+		}
 		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&ArchivedBinding{
 			UserA: binding.UserA, UserB: binding.UserB, SessionID: binding.SessionID, CreatedAt: binding.CreatedAt,
 		}).Error; err != nil {

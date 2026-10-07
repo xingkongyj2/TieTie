@@ -13,6 +13,7 @@ import (
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"tietie/backend/internal/logging"
 )
 
 const (
@@ -107,7 +108,7 @@ func (db *DB) enqueueWechatReminder(tx *gorm.DB, reminder Reminder, content Wech
 	return db.enqueueWechatNotifications(tx, "reminder", reminder.ID, reminder.SessionID, *b, reminder.RecipientIDs, reminder.Title, text, reminder.DueAt, wechatNotificationPage(spaceID, messageID, reminder.ID))
 }
 func (db *DB) enqueueWechatCare(tx *gorm.DB, report CareReport, b Binding, due time.Time) error {
-	if !db.wechatNotifications.Enabled || (report.Mode != "morning" && report.Mode != "night" && report.Mode != "anniversary") {
+	if !db.wechatNotifications.Enabled || (report.Mode != "morning" && report.Mode != "night" && report.Mode != "anniversary" && report.Mode != "countdown") {
 		return nil
 	}
 	title := "纪念日提醒"
@@ -117,8 +118,59 @@ func (db *DB) enqueueWechatCare(tx *gorm.DB, report CareReport, b Binding, due t
 	if report.Mode == "night" {
 		title = "晚安提醒"
 	}
-	return db.enqueueWechatNotifications(tx, "care", report.ID, report.SessionID, b, []int64{b.UserA, b.UserB}, title, report.Text, due, wechatNotificationPage(report.SessionID, report.ID, ""))
+	if report.Mode == "countdown" {
+		title = "倒计时提醒"
+	}
+	page := wechatNotificationPage(report.SessionID, report.ID, "")
+	if len(report.Cards) == 0 {
+		return db.enqueueWechatNotifications(tx, "care", report.ID, report.SessionID, b, []int64{b.UserA, b.UserB}, title, report.Text, due, page)
+	}
+	for _, recipient := range []int64{b.UserA, b.UserB} {
+		if err := db.enqueueWechatNotifications(tx, "care", report.ID, report.SessionID, b, []int64{recipient}, title, wechatWeatherContent(report, recipient), due, page); err != nil {
+			return err
+		}
+	}
+	return nil
 }
+
+func wechatWeatherContent(report CareReport, recipient int64) string {
+	summary := "天气提醒已更新"
+	for _, card := range report.Cards {
+		if len(card.RecipientIDs) > 0 && !slices.Contains(card.RecipientIDs, recipient) {
+			continue
+		}
+		day := "今天"
+		if card.Mode == "night" || card.Mode == "query_tomorrow" {
+			day = "明天"
+		}
+		if strings.TrimSpace(card.Description) != "" {
+			summary = fmt.Sprintf("%s%s %.0f-%.0f℃", day, card.Description, card.Day.Min, card.Day.Max)
+		}
+		for _, view := range card.Views {
+			if len(view.RecipientIDs) > 0 && !slices.Contains(view.RecipientIDs, recipient) {
+				continue
+			}
+			for _, line := range view.Summary {
+				if strings.TrimSpace(line) != "" {
+					summary = line
+					break
+				}
+			}
+			break
+		}
+		break
+	}
+	// Reserve the call to action before the template's 20-character truncation.
+	const suffix = "，进入小程序查看"
+	summary = strings.TrimRight(strings.Join(strings.Fields(summary), " "), "，。；、,. ;")
+	runes := []rune(summary)
+	limit := 20 - len([]rune(suffix))
+	if len(runes) > limit {
+		summary = string(runes[:limit-1]) + "…"
+	}
+	return summary + suffix
+}
+
 func (db *DB) enqueueWechatNotifications(tx *gorm.DB, kind, id, session string, b Binding, recipients []int64, title, text string, due time.Time, page string) error {
 	options := db.wechatNotifications
 	if !options.Enabled {
@@ -188,6 +240,7 @@ func (db *DB) PrepareWechatNotification(ctx context.Context, job WechatNotificat
 	if !db.enabled() {
 		return "", false, errNoDB
 	}
+	skippedReason := ""
 	err = db.gdb.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var current WechatNotification
 		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND token = ? AND state = ?", job.ID, job.Token, WechatNotificationLeased).Take(&current).Error; errors.Is(err, gorm.ErrRecordNotFound) {
@@ -196,7 +249,11 @@ func (db *DB) PrepareWechatNotification(ctx context.Context, job WechatNotificat
 			return err
 		}
 		skip := func(reason string) error {
-			return tx.Model(&current).Updates(map[string]any{"state": WechatNotificationSkipped, "last_error": reason, "finished_at": now.UTC(), "token": ""}).Error
+			err := tx.Model(&current).Updates(map[string]any{"state": WechatNotificationSkipped, "last_error": reason, "finished_at": now.UTC(), "token": ""}).Error
+			if err == nil {
+				skippedReason = reason
+			}
+			return err
 		}
 		options := db.wechatNotifications
 		if !options.Enabled || current.AppID != options.AppID || current.TemplateID != options.TemplateID {
@@ -213,7 +270,7 @@ func (db *DB) PrepareWechatNotification(ctx context.Context, job WechatNotificat
 		if binding == nil || !binding.CreatedAt.Equal(current.BindingCreatedAt) || (current.RecipientID != binding.UserA && current.RecipientID != binding.UserB) {
 			return skip("绑定关系已变更")
 		}
-		valid, err := validWechatNotificationSource(tx, current)
+		valid, err := validWechatNotificationSource(tx, current, now)
 		if err != nil {
 			return err
 		}
@@ -247,9 +304,12 @@ func (db *DB) PrepareWechatNotification(ctx context.Context, job WechatNotificat
 		openID, ready = identity.OpenID, true
 		return nil
 	})
+	if err == nil && skippedReason != "" {
+		logging.Scheduler().Info("微信提醒未发送", "event", "wechat.notification_skipped", "notification_id", job.ID, "source_type", job.SourceType, "source_id", job.SourceID, "reason", skippedReason)
+	}
 	return
 }
-func validWechatNotificationSource(tx *gorm.DB, job WechatNotification) (bool, error) {
+func validWechatNotificationSource(tx *gorm.DB, job WechatNotification, now time.Time) (bool, error) {
 	if job.SourceType == "reminder" {
 		var reminder Reminder
 		if err := tx.Where("id = ?", job.SourceID).Take(&reminder).Error; errors.Is(err, gorm.ErrRecordNotFound) {
@@ -276,7 +336,13 @@ func validWechatNotificationSource(tx *gorm.DB, job WechatNotification) (bool, e
 		} else if err != nil {
 			return false, err
 		}
-		return report.SessionID == job.SessionID && report.BindingCreatedAt.Equal(job.BindingCreatedAt) && (report.Mode == "morning" || report.Mode == "night" || report.Mode == "anniversary"), nil
+		if report.SessionID != job.SessionID || !report.BindingCreatedAt.Equal(job.BindingCreatedAt) {
+			return false, nil
+		}
+		if report.Mode == "countdown" {
+			return validWechatCountdownSource(tx, report, now)
+		}
+		return report.Mode == "morning" || report.Mode == "night" || report.Mode == "anniversary", nil
 	}
 	return false, nil
 }

@@ -13,12 +13,13 @@
 .mine-header-sparkle { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 50%; background: #f6f8fb; color: var(--mine-accent); }
 
 .mine-identity-card { position: relative; isolation: isolate; padding: 16px 24px 24px; overflow: hidden; border: 0; border-radius: 28px; background: #f7f8fa; }
-.mine-buddies { position: absolute; z-index: -1; top: 14px; right: 5px; width: 155px; height: 126px; pointer-events: none; filter: drop-shadow(0 8px 9px #7ba9df17); }
+.mine-buddy { position: absolute; z-index: -1; top: 10px; right: 19px; width: 120px; height: 120px; pointer-events: none; }
 .mine-buddy-back { transform-origin: 141px 89px; animation: mine-buddy-arrive .7s .08s both; }
 .mine-buddy-front { transform-origin: 80px 104px; animation: mine-buddy-arrive .7s .18s both; }
 .mine-identity { position: relative; }
-.mine-avatar-preview { position: relative; z-index: 1; display: flex; justify-content: center; align-items: center; width: 66px; height: 66px; padding: 5px; border-radius: 22px; background: #eaf1fb; }
-.mine-avatar-preview .avatar-large { width: 55px; height: 55px; }
+.mine-avatar-preview { position: relative; z-index: 1; display: flex; justify-content: center; align-items: center; width: 66px; height: 66px; margin: 0; padding: 5px; border: 0; border-radius: 22px; background: transparent; }
+.mine-avatar-preview .avatar-large { width: 55px; height: 55px; overflow: hidden; border-radius: 16px; background: transparent; }
+.mine-avatar-preview .h5-img { border-radius: 16px; }
 .mine-name { margin-top: 17px; }
 .mine-name-heading { display: flex; align-items: center; gap: 7px; min-width: 0; }
 .mine-name h2 { max-width: 100%; margin: 0; color: var(--mine-ink); font-size: 26px; font-weight: 650; letter-spacing: -.6px; line-height: 1.3; overflow-wrap: anywhere; }
@@ -44,8 +45,6 @@
 .mine-facts > div { display: grid; grid-template-columns: 58px minmax(0, 1fr); align-items: baseline; gap: 16px; min-width: 0; }
 .mine-facts dt { color: var(--mine-muted); font-size: 12px; line-height: 1.7; }
 .mine-facts dd { margin: 0; color: #34435c; font-size: 14px; font-weight: 450; line-height: 1.7; text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.mine-facts .mine-region dd { color: #607694; font-size: 13px; font-weight: 400; }
-.mine-facts dd.is-empty { color: var(--mine-muted); font-size: 13px; font-weight: 400; }
 .mine-interests { margin-top: 20px; padding-top: 18px; border-top: 1px solid #e9edf3; }
 .mine-interests h3 { color: var(--mine-muted); font-size: 12px; font-weight: 400; }
 .mine-interest-tags { display: flex; flex-wrap: wrap; gap: 8px; padding: 0; margin: 12px 0 0; list-style: none; }
@@ -111,7 +110,7 @@
   .mine-page .tab-page-scroll.mine-scroll { padding-right: 18px; padding-left: 18px; }
   .mine-header h1 { font-size: 20px; }
   .mine-identity-card { padding-right: 20px; padding-left: 20px; }
-  .mine-buddies { top: 19px; right: -2px; width: 142px; height: 115px; }
+  .mine-buddy { top: 15px; right: 11px; width: 112px; height: 112px; }
   .mine-name h2 { font-size: 24px; }
   .mine-invite { gap: 10px; padding-right: 14px; padding-left: 20px; }
   .mine-invite-copy strong { font-size: 20px; letter-spacing: 1.4px; }

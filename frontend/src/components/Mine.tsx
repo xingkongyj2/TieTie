@@ -1,4 +1,4 @@
-import { ScrollView } from '@tarojs/components'
+import { Image, ScrollView } from '@tarojs/components'
 import Taro from '@tarojs/taro'
 import { ArrowUpRight, Check, ChevronRight, Copy, LogOut, MessageCircle, Pencil, Plus, Sparkle, Unlink } from './Icons'
 import { useEffect, useRef, useState } from 'react'
@@ -6,7 +6,6 @@ import type { Member, RelationshipState } from '../types'
 import { Avatar } from './Avatar'
 import { MemberForm } from './Details'
 import { Sheet } from './Sheet'
-import { SpaceBuddies } from './SpaceBuddies'
 import { WechatReminderSettings } from './WechatReminderSettings'
 import './Mine.css'
 
@@ -115,9 +114,9 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
       </header>}
 
       <section className="mine-identity-card" aria-label="我的个人空间">
-        <SpaceBuddies className="mine-buddies" />
+        <Image className="h5-img mine-buddy" src="https://mayjimages.s3.bitiful.net/tietie/blue-buddy.png" mode="aspectFit" aria-hidden="true" />
         <div className="mine-identity">
-          <div className="mine-avatar-preview"><Avatar member={self} size="large" /></div>
+          <button type="button" className="mine-avatar-preview" aria-label="修改头像和昵称" disabled={saving} onClick={() => setEditorOpen(true)}><Avatar member={self} size="large" /></button>
           <div className="mine-name"><div className="mine-name-heading"><h2>{self.name || username}</h2><button type="button" className="mine-name-edit" aria-label="修改名称" title="修改名称" disabled={saving} onClick={() => setEditorOpen(true)}><Pencil size={14} aria-hidden="true" /></button></div><p>有自己的小宇宙，也有在意的人。</p></div>
         </div>
       </section>
@@ -160,18 +159,18 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
 
       <footer className="mine-footer"><div className="mine-footer-actions">{hasSession && <button type="button" className="secondary-button" disabled={saving || exiting} onClick={() => setExitOpen(true)}><Unlink size={14} aria-hidden="true" />退出专属空间</button>}<button type="button" className="secondary-button" disabled={saving || exiting} onClick={() => { onLogout(); notify('已退出登录') }}><LogOut size={14} aria-hidden="true" />退出登录</button></div></footer>
     </ScrollView>
-    {reminderHelp && <Sheet title="关于微信提醒次数" className="wechat-reminder-help-sheet" onClose={() => setReminderHelp(null)}>{(close) => <div className="wechat-reminder-help-content">
-      {reminderHelp === 'permanent' ? <p>你已开启长期微信提醒，无需为每条提醒单独补充次数。可随时在微信中管理订阅。</p> : <>
-        <p>受微信订阅消息规则限制，<strong>每成功订阅一次，贴贴就能向你发送一条微信提醒。</strong></p>
-        <p>点击“提醒剩余次数”右侧的铃铛即可补充次数，每成功订阅一次，增加 1 次提醒机会。</p>
-        <p>每发送一条微信提醒，会使用 1 次机会。次数用完后，记得再点铃铛补充，让重要的小事都能及时送达。</p>
+    {reminderHelp && <Sheet title="微信提醒" className="wechat-reminder-help-sheet" onClose={() => setReminderHelp(null)}>{(close) => <div className="wechat-reminder-help-content">
+      {reminderHelp === 'permanent' ? <p>已开启长期提醒，无需补充次数。可在微信中管理订阅。</p> : <>
+        <p>受微信限制，每点击铃铛并允许订阅一次，贴贴才能向你发送 <strong>一条微信提醒</strong>。</p>
+        <p>若授权弹窗中有「总是保持以上选择」（始终同意），建议勾选。之后多点几次铃铛，提前累积通知次数。</p>
+        <p>提醒次数用完后，记得回来点击铃铛补充，避免错过提醒。</p>
       </>}
       <button type="button" className="primary-button" onClick={close}>我知道了</button>
     </div>}</Sheet>}
     {softwarePanel && <Sheet title={softwarePanel === 'about' ? '关于贴贴' : '联系贴贴'} className="mine-software-sheet" onClose={closeSoftwarePanel}>
       {softwarePanel === 'about' ? <div className="mine-software-content">
         <p className="mine-software-intro">让 AI 走进生活，主动记住小事。</p>
-        <p>女朋友比我细心，我却常忘记家务、取快递。于是想做一个会主动提醒的小助手，让两个人的日常少一点遗漏。</p>
+        <p>女朋友比我细心，我却常忘记家务、取快递。于是做了贴贴，让女朋友设置提醒：可以提醒我们两个人一起做，也可以只提醒我去做。</p>
         <p>这就是贴贴的初衷：让 AI 从等你开口，变成主动关心。</p>
         <ul className="mine-software-ideas">
           <li>为自己、为两个人，或直接为 TA 设置提醒。</li>

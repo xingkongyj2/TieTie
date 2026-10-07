@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -25,17 +26,23 @@ type WechatIdentity struct {
 
 func (WechatIdentity) TableName() string { return "wechat_identities" }
 
+// GetWechatUser only reads an account for the verified identity. An unknown
+// identity returns nil without creating an account or modifying its profile.
+func (db *DB) GetWechatUser(ctx context.Context, appID, openID string) (*User, error) {
+	if !db.enabled() {
+		return nil, errNoDB
+	}
+	if strings.TrimSpace(appID) == "" || len(appID) > 32 || strings.TrimSpace(openID) == "" || len(openID) > 128 {
+		return nil, errors.New("invalid verified wechat identity")
+	}
+	return db.getWechatUser(ctx, appID, openID)
+}
+
 // GetOrCreateWechatUser returns the existing account or atomically creates the
 // account and identity. Conflicting concurrent logins roll back their new user
 // before reading the winner, so they cannot leave orphan accounts.
 func (db *DB) GetOrCreateWechatUser(ctx context.Context, appID, openID string) (*User, bool, error) {
-	if !db.enabled() {
-		return nil, false, errNoDB
-	}
-	if appID == "" || len(appID) > 32 || openID == "" || len(openID) > 128 {
-		return nil, false, errors.New("invalid verified wechat identity")
-	}
-	if user, err := db.getWechatUser(ctx, appID, openID); user != nil || err != nil {
+	if user, err := db.GetWechatUser(ctx, appID, openID); user != nil || err != nil {
 		return user, false, err
 	}
 	for attempt := 0; attempt < 10; attempt++ {

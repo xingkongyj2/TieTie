@@ -8,6 +8,7 @@ export type ChatScrollTarget = { kind: 'reply'; key: string } | { kind: 'bottom'
 export class ChatScrollPolicy {
   private owner = ''
   private initialized = false
+  private previewed = false
   private seen = new Set<string>()
   private completed = new Set<string>()
   pending: ChatScrollTarget | null = null
@@ -16,16 +17,27 @@ export class ChatScrollPolicy {
     if (owner !== this.owner) {
       this.owner = owner
       this.initialized = false
+      this.previewed = false
       this.seen.clear()
       this.completed.clear()
       this.pending = null
     }
-    if (!loaded) return
+    if (!loaded) {
+      if (!this.initialized && !this.previewed && messages.length) {
+        this.previewed = true
+        if (followBottom && !this.pending) this.pending = { kind: 'bottom' }
+      }
+      return
+    }
     if (!this.initialized) {
       this.initialized = true
-      const last = messages.at(-1)
-      if (last) this.pending = last.sender === 'ai' && !last.streaming
-        ? { kind: 'reply', key: chatMessageKey(last) } : { kind: 'bottom' }
+      if (messages.length && followBottom && !this.pending) this.pending = { kind: 'bottom' }
+      for (const message of messages) {
+        const key = chatMessageKey(message)
+        this.seen.add(key)
+        if (message.sender === 'ai' && !message.streaming) this.completed.add(key)
+      }
+      return
     } else {
       // A full history refresh can backfill older rows before the known tail.
       // Only appended replies or a previously streaming row can finish a turn.

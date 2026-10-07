@@ -1,5 +1,6 @@
 import { request } from './client'
 import type { Member, RegionLocation } from '../types'
+import { readWechatAvatar } from '../lib/wechat-avatar'
 
 export interface ProvinceOption {
   code: string
@@ -20,6 +21,12 @@ export interface UserProfile {
 }
 
 export const profileApi = {
+  async uploadAvatar(tempPath: string): Promise<string> {
+    const avatarBase64 = await readWechatAvatar(tempPath)
+    const result = await request<{ avatar: string }>('/api/account/avatar', { method: 'POST', body: { avatarBase64 } })
+    if (!/^\/api\/assets\/avatars\/[a-f0-9]{32}$/.test(result.avatar)) throw new Error('头像保存失败，请重试。')
+    return result.avatar
+  },
   regions(): Promise<{ version: string; provinces: ProvinceOption[] }> {
     return request('/api/account/regions')
   },

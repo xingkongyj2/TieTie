@@ -6,6 +6,7 @@
 .impression-refresh { display: grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 50%; background: #fff; color: #8898b2; }
 .impression-refresh:disabled { opacity: .45; }
 .impression-summary { margin: 0; font-size: 14px; line-height: 1.95; color: #4b576c; white-space: pre-wrap; overflow-wrap: anywhere; }
+.impression-update-note { margin: 0 0 12px; color: #8996ad; font-size: 11px; line-height: 1.6; }
 .impression-loading { display: flex; align-items: center; gap: 9px; margin: 15px 0 5px; color: #8996ad; font-size: 12px; line-height: 1.6; }
 .impression-loading .typing-dots { display: inline-flex; }
 .impression-supplement { padding: 0 3px; }

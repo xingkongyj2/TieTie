@@ -352,13 +352,13 @@ func (c *MessageClient) reminderData(notification ReminderNotification) (map[str
 	data := make(map[string]templateValue)
 	notificationType := strings.TrimSpace(notification.NotificationType)
 	if notificationType == "" {
-		notificationType = "待办到期提醒"
+		notificationType = "待办提醒"
 	}
 	for _, field := range []struct{ key, text string }{
 		{c.options.ReminderTitleKey, notification.Title},
 		{c.options.ReminderContentKey, notification.Content},
 		{c.options.ReminderTypeKey, notificationType},
-		{c.options.ReminderSourceKey, "贴贴清单"},
+		{c.options.ReminderSourceKey, "贴贴AI清单"},
 	} {
 		if field.key == "" {
 			continue

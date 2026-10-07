@@ -96,6 +96,10 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, qoder.NewApiError(400, "invalid_profile", "请检查生日、性别和爱好，生日不能晚于今天。"))
 		return
 	}
+	if err := s.validateOwnedAvatar(r, body.Avatar); err != nil {
+		writeError(w, err)
+		return
+	}
 	profile := dbop.UserProfile{UserID: auth.UserIDFrom(r.Context()), Name: name, Gender: body.Gender, Birthday: body.Birthday, Hobbies: hobbies, Bio: strings.TrimSpace(body.Bio), Avatar: body.Avatar}
 	if len(body.Region) > 0 && string(body.Region) != "null" {
 		var selected regions.Location
@@ -126,9 +130,8 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"profile": saved, "memoryStatus": status})
 }
 
-// Local character assets are always accepted. WeChat profile avatars are
-// HTTPS URLs returned by wx.getUserProfile; limit them to HTTPS so a profile
-// cannot make clients load arbitrary insecure content.
+// Bundled assets and owned server images use root-relative paths. Older remote
+// profile images remain valid only over HTTPS; temporary device paths cannot be saved.
 func validProfileAvatar(value string) bool {
 	if value == "" {
 		return true

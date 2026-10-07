@@ -11,7 +11,10 @@ export default defineConfig({
       block.push('summary', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th', 'caption', 'colgroup', 'col')
     },
   }]],
-  defineConstants: { TARO_APP_API_BASE_URL: JSON.stringify(process.env.TARO_APP_API_BASE_URL || '') },
+  defineConstants: {
+    TARO_APP_API_BASE_URL: JSON.stringify(process.env.TARO_APP_API_BASE_URL || ''),
+    'process.env.TARO_APP_WECHAT_SI_ENABLED': JSON.stringify(process.env.TARO_APP_WECHAT_SI_ENABLED || 'false'),
+  },
   copy: {
     patterns: [{ from: 'src/assets', to: process.env.TARO_ENV === 'h5' ? 'dist-h5/assets' : 'dist/assets' }],
     options: {},

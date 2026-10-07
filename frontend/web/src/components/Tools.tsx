@@ -60,8 +60,8 @@ export function ReminderBoard({ state, onToggle, onCancel, onDelete, notify, pen
     day.reminders.push(reminder);
   }
   const emptyNote = pendingAssignee === null
-    ? completed.length ? '待完成的提醒都处理好啦。' : '还没有提醒，先添加一条吧。'
-    : `暂时没有提醒${{ both: '我们', self: '我', partner: 'TA' }[pendingAssignee]}的待完成事项。`;
+    ? completed.length ? '待完成的提醒都处理好啦' : '还没有提醒，先添加一条吧'
+    : `暂时没有提醒${{ both: '我们', self: '我', partner: 'TA' }[pendingAssignee]}的待完成事项`;
   return <div className="reminder-board">
     <section id="things-pending-list" aria-label="待完成" aria-live="polite">
       <div className="reminders-list">{pending.length ? pending.map((reminder) => <ReminderCard reminder={reminder} key={reminder.id} members={state.members} onToggle={onToggle} onCancel={onCancel} onDelete={onDelete} onError={notify} />) : <p className="empty-note">{emptyNote}</p>}</div>
@@ -71,7 +71,7 @@ export function ReminderBoard({ state, onToggle, onCancel, onDelete, notify, pen
       {completedDays.length ? completedDays.map((day) => <div className="reminder-day-group" key={day.key}>
         <h3 className="reminder-day-heading"><span className="reminder-day-date">{day.label}</span><span className="reminder-day-count">{day.reminders.length} 条</span></h3>
         <div className="reminders-list">{day.reminders.map((reminder) => <ReminderCard reminder={reminder} key={reminder.id} members={state.members} onToggle={onToggle} onDelete={onDelete} onError={notify} />)}</div>
-      </div>) : <p className="empty-note">还没有已完成的提醒。</p>}
+      </div>) : <p className="empty-note">还没有已完成的提醒</p>}
     </section>
   </div>;
 }

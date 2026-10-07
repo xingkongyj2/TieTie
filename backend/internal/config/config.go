@@ -31,6 +31,10 @@ type Config struct {
 	EnvironmentID                  string           // QODER_ENVIRONMENT_ID，留空自动探测
 	JWTSecret                      string           // JWT 签名密钥；生产环境必须通过 JWT_SECRET 设置
 	JWTTTL                         time.Duration    // 令牌有效期，默认 30 天
+	TencentASRAppID                string           // 腾讯云账号数字 AppID，非微信 AppID
+	TencentASRSecretID             string           // 腾讯云 ASR 访问密钥 ID，仅在后端配置
+	TencentASRSecretKey            string           // 腾讯云 ASR 签名密钥，禁止返回或记录
+	TencentASREngineModel          string           // 16 kHz ASR 模型，默认 16k_zh
 	WechatAppID                    string           // 微信小程序 AppID，必须与前端项目一致
 	WechatAppSecret                string           // 微信小程序密钥，仅保存在后端
 	WechatTimeout                  time.Duration    // 微信 code2Session 超时，默认 10s
@@ -101,6 +105,10 @@ func Load() Config {
 		EnvironmentID:                  os.Getenv("QODER_ENVIRONMENT_ID"),
 		JWTSecret:                      envOr("JWT_SECRET", "tietie-dev-secret-change-me"),
 		JWTTTL:                         jwtTTL(),
+		TencentASRAppID:                os.Getenv("TENCENT_ASR_APP_ID"),
+		TencentASRSecretID:             os.Getenv("TENCENT_ASR_SECRET_ID"),
+		TencentASRSecretKey:            os.Getenv("TENCENT_ASR_SECRET_KEY"),
+		TencentASREngineModel:          envOr("TENCENT_ASR_ENGINE_MODEL", "16k_zh"),
 		WechatAppID:                    os.Getenv("WECHAT_APP_ID"),
 		WechatAppSecret:                os.Getenv("WECHAT_APP_SECRET"),
 		WechatTimeout:                  time.Duration(envInt("WECHAT_TIMEOUT_SECONDS", 10, 60)) * time.Second,

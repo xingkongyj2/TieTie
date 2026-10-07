@@ -10,6 +10,13 @@ import './PartnerImpression.css'
 
 interface Props { member: Member; sessionId?: string; notify: (text: string) => void }
 
+const beijingDate = (value?: string): string => {
+  const timestamp = value ? Date.parse(value) : NaN
+  if (!Number.isFinite(timestamp)) return ''
+  const date = new Date(timestamp + 8 * 60 * 60 * 1000)
+  return `${date.getUTCFullYear()}.${String(date.getUTCMonth() + 1).padStart(2, '0')}.${String(date.getUTCDate()).padStart(2, '0')}`
+}
+
 export function PartnerImpression({ member, sessionId, notify }: Props) {
   const [impression, setImpression] = useState<Impression | null>(null)
   const [draft, setDraft] = useState('')
@@ -24,7 +31,15 @@ export function PartnerImpression({ member, sessionId, notify }: Props) {
   const mounted = useRef(false)
   const saveLock = useRef(false)
   const version = useRef(0)
+  const retryRequested = useRef(false)
   const processing = impression?.status === 'pending' || impression?.status === 'generating'
+  const scheduled = processing && Date.parse(impression?.nextAnalysisAt || '') > Date.now()
+  const generatedDate = beijingDate(impression?.generatedAt)
+  const reload = (retry = false) => {
+    retryRequested.current = retry
+    setLoading(true)
+    setRefresh((value) => value + 1)
+  }
 
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   useEffect(() => {
@@ -42,14 +57,22 @@ export function PartnerImpression({ member, sessionId, notify }: Props) {
         setImpression(result.impression)
         setError('')
         setLoading(false)
-        if (result.impression.status === 'pending' || result.impression.status === 'generating') timer = setTimeout(() => void load(false), 2500)
+        if (result.impression.status === 'pending' || result.impression.status === 'generating') {
+          const nextAnalysisAt = Date.parse(result.impression.nextAnalysisAt || '')
+          // A same-day analysis in another space is queued for tomorrow. Read
+          // once at that boundary instead of polling a deliberately idle job.
+          const delay = nextAnalysisAt > Date.now() ? Math.min(nextAnalysisAt - Date.now() + 250, 2_147_483_647) : 2500
+          timer = setTimeout(() => void load(false), delay)
+        }
       } catch (e) {
         if (controller.signal.aborted || ownVersion !== version.current) return
         setLoading(false)
         setError(e instanceof Error ? e.message : '印象暂时没加载出来，请再试一次。')
       } finally { polling = false }
     }
-    void load(refresh > 0)
+    const retry = retryRequested.current
+    retryRequested.current = false
+    void load(retry)
     const unsubscribe = onAppVisibilityChange(() => {
       if (timer) clearTimeout(timer)
       if (isAppVisible()) void load(false)
@@ -74,7 +97,9 @@ export function PartnerImpression({ member, sessionId, notify }: Props) {
       setImpression(result.impression)
       setMemoryPending(result.memoryStatus === 'pending')
       setRefresh((value) => value + 1)
-      notify(result.memoryStatus === 'pending' ? '已保存，记忆同步中。' : '已记住，正在更新印象。')
+      notify(result.impression.status === 'ready' || Date.parse(result.impression.nextAnalysisAt || '') > Date.now()
+        ? '已记住，印象会在明天更新。'
+        : result.memoryStatus === 'pending' ? '已保存，记忆同步中。' : '已记住，正在整理印象。')
     } catch (e) {
       if (mounted.current) {
         setSaveError(e instanceof Error ? e.message : '补充还没保存好，请重试。')
@@ -86,12 +111,14 @@ export function PartnerImpression({ member, sessionId, notify }: Props) {
 
   if (!sessionId) return <section className="impression-card"><p>绑定两人空间后查看印象。</p></section>
   return <div className="partner-impression">
-    <section className="impression-card" aria-labelledby="impression-title" aria-busy={loading || processing}>
-      <div className="impression-heading"><h2 id="impression-title"><Sparkles className="impression-title-icon" size={19} aria-hidden="true" /><span>贴贴眼中的{member.name}</span></h2><button type="button" className="impression-refresh" aria-label="更新对方的印象" disabled={saving || loading || processing} onClick={() => { setLoading(true); setRefresh((value) => value + 1) }}><RefreshCw size={15} aria-hidden="true" /></button></div>
+    <section className="impression-card" aria-labelledby="impression-title" aria-busy={loading || (processing && !scheduled)}>
+      <div className="impression-heading"><h2 id="impression-title"><Sparkles className="impression-title-icon" size={19} aria-hidden="true" /><span>贴贴眼中的{member.name}</span></h2><button type="button" className="impression-refresh" aria-label="刷新印象" disabled={saving || loading || (processing && !scheduled)} onClick={() => reload(impression?.status === 'failed')}><RefreshCw size={15} aria-hidden="true" /></button></div>
+      <p className="impression-update-note">{impression?.status === 'ready' && generatedDate ? `${generatedDate} 更新 · 每日更新一次` : '每日更新一次'}</p>
       {impression?.summary && <p className="impression-summary">{impression.summary}</p>}
-      {(loading || processing) && <div className="impression-loading" role="status"><span className="typing-dots"><i /><i /><i /></span>{impression?.summary ? '正在更新印象…' : '正在整理印象…'}</div>}
-      {!loading && impression?.status === 'failed' && <div className="impression-problem" role="alert"><p>{impression.error || '印象整理失败。'}</p><button type="button" onClick={() => { setLoading(true); setRefresh((value) => value + 1) }}>重试</button></div>}
-      {error && <div className="impression-problem" role="alert"><p>{error}</p><button type="button" disabled={saving} onClick={() => { setLoading(true); setRefresh((value) => value + 1) }}>重试</button></div>}
+      {(loading || (processing && !scheduled)) && <div className="impression-loading" role="status"><span className="typing-dots"><i /><i /><i /></span>{loading ? '正在加载印象…' : impression?.summary ? '正在更新印象…' : '正在整理印象…'}</div>}
+      {!loading && scheduled && <p className="impression-update-note" role="status">新空间的印象会在明天更新。</p>}
+      {!loading && impression?.status === 'failed' && <div className="impression-problem" role="alert"><p>{impression.error || '印象整理失败。'}</p><button type="button" disabled={saving} onClick={() => reload(true)}>重试</button></div>}
+      {error && <div className="impression-problem" role="alert"><p>{error}</p><button type="button" disabled={saving} onClick={() => reload(impression?.status === 'failed')}>重试</button></div>}
     </section>
     <Form className="impression-supplement" onSubmit={(event) => void submit(event)}>
       <label htmlFor="impression-input">补充关于{member.name}的信息</label>

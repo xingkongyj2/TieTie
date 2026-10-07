@@ -1,5 +1,5 @@
 import type { RelationshipState } from '../types'
-import { spaceBuddyArtwork } from './ipCharacters'
+import { tieTieAvatar } from './ipCharacters'
 
 /** Demo only: no real AI, weather service, payment, or notification is connected. */
 export const LOCAL_MOCK_NOTICE = '本地体验版 · 对话为模拟回复，数据仅保存在当前设备'
@@ -11,7 +11,7 @@ export const initialRelationshipState: RelationshipState = {
       id: 'ai',
       name: '贴贴',
       role: '你们的 AI 小管家',
-      avatar: spaceBuddyArtwork.blue.src,
+      avatar: tieTieAvatar,
       birthday: '',
       hobbies: ['记住小事', '好好说话', '偷偷助攻'],
       bio: '你们负责相爱，小事交给我记着 ฅ^•ﻌ•^ฅ',

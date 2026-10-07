@@ -1,6 +1,6 @@
 import { LogIn, UserPlus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
-import { SpaceBuddies } from './SpaceBuddies';
+import { PaperBuddyMotion } from './PaperBuddyMotion';
 
 interface Props {
   onLogin: (username: string, password: string) => Promise<void>;
@@ -54,7 +54,7 @@ export function LoginPage({ onLogin, onRegister, notify }: Props) {
 
   return <div className="app-shell login-page">
     <header className="login-header"><h1>贴贴清单</h1></header>
-    <SpaceBuddies className="login-buddies" />
+    <PaperBuddyMotion variant="bump" purpose="welcome" className="login-paper-buddies" paused={busy} />
 
     <div className="login-tabs" role="tablist">
       <button type="button" role="tab" aria-selected={mode === 'login'} className={mode === 'login' ? 'is-active' : ''} onClick={() => switchMode('login')}>登录</button>

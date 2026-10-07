@@ -2,8 +2,6 @@ package api
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -20,6 +18,17 @@ import (
 
 var impressionRequestKey = regexp.MustCompile(`^[A-Za-z0-9_-]{8,80}$`)
 
+type impressionStore interface {
+	GetBindingBySessionID(context.Context, string) (*dbop.Binding, error)
+	GetDailyImpression(context.Context, string, int64, time.Time) (*dbop.Impression, error)
+	EnsureDailyImpression(context.Context, string, int64, bool, time.Time) (*dbop.Impression, error)
+	ApplyMemoryAction(context.Context, string, dbop.MemoryRecord) (*dbop.MemoryRecord, error)
+	ImpressionSources(context.Context, string, int64) (dbop.ImpressionSources, error)
+	GetMemoryRecord(context.Context, string, string) (*dbop.MemoryRecord, error)
+	FinishImpression(context.Context, dbop.Impression, string, string) error
+	FinishCachedImpression(context.Context, dbop.Impression, dbop.Impression) error
+}
+
 // GET derives the target from the authenticated binding. A posted observation
 // is a confirmed profile fact attributed to the reporter, with target ownership.
 func (s *Server) handlePartnerImpression(w http.ResponseWriter, r *http.Request) {
@@ -32,10 +41,15 @@ func (s *Server) handlePartnerImpression(w http.ResponseWriter, r *http.Request)
 		writeError(w, err)
 		return
 	}
-	owner := auth.UserIDFrom(r.Context())
 	unlock := s.lockConversation(session)
 	defer unlock()
-	binding, err := s.DB.GetBindingBySessionID(r.Context(), session)
+	s.servePartnerImpression(w, r, s.DB, s.syncMemoryLocked)
+}
+
+func (s *Server) servePartnerImpression(w http.ResponseWriter, r *http.Request, store impressionStore, syncMemory func(context.Context, dbop.MemoryRecord) error) {
+	session := r.PathValue("id")
+	owner := auth.UserIDFrom(r.Context())
+	binding, err := store.GetBindingBySessionID(r.Context(), session)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -45,6 +59,17 @@ func (s *Server) handlePartnerImpression(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	target := binding.OtherUser(owner)
+	if r.Method == http.MethodGet {
+		cached, err := store.GetDailyImpression(r.Context(), session, target, time.Now().UTC())
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+		if cached != nil {
+			writeJSON(w, http.StatusOK, map[string]any{"impression": cached, "memoryStatus": ""})
+			return
+		}
+	}
 	memoryStatus := ""
 	if r.Method == http.MethodPost {
 		var body struct {
@@ -63,23 +88,20 @@ func (s *Server) handlePartnerImpression(w http.ResponseWriter, r *http.Request)
 		now := time.Now().UTC()
 		content, _ := json.Marshal(map[string]any{"schemaVersion": 1, "kind": "fact", "category": "profile", "scope": "space", "ownerId": target, "targetUserId": target, "content": body.Text, "sourceUserId": owner, "sourceType": "role_supplement", "sourceRequestId": body.RequestID, "confirmation": "已确认", "generatedAt": now, "updatedAt": now})
 		path := memoryspace.FactPath("profile", "space", target, fmt.Sprintf("supplement_%d_%s", owner, body.RequestID))
-		record, err := s.DB.ApplyMemoryAction(r.Context(), fmt.Sprintf("observation/%s/%d/%s", session, owner, body.RequestID), dbop.MemoryRecord{SessionID: session, Path: path, Scope: "space", OwnerID: target, SourceUserID: owner, SourceRequestID: body.RequestID, Category: "profile", Storage: "database_and_memory", PendingContent: string(content), Operation: "upsert", BindingCreatedAt: binding.CreatedAt})
+		record, err := store.ApplyMemoryAction(r.Context(), fmt.Sprintf("observation/%s/%d/%s", session, owner, body.RequestID), dbop.MemoryRecord{SessionID: session, Path: path, Scope: "space", OwnerID: target, SourceUserID: owner, SourceRequestID: body.RequestID, Category: "profile", Storage: "database_and_memory", PendingContent: string(content), Operation: "upsert", BindingCreatedAt: binding.CreatedAt})
 		if err != nil {
 			writeError(w, err)
 			return
 		}
 		memoryStatus = "synced"
-		if err := s.syncMemoryLocked(r.Context(), *record); err != nil {
+		if err := syncMemory(r.Context(), *record); err != nil {
 			memoryStatus = "pending"
 		}
 	}
-	sources, err := s.DB.ImpressionSources(r.Context(), session, target)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
+	// Supplements are durable facts immediately; today's completed profile stays
+	// stable and the next daily snapshot will incorporate them.
 	retry := r.URL.Query().Get("retry") == "true"
-	row, err := s.DB.EnsureImpression(r.Context(), session, target, impressionSourceHash(sources), retry)
+	row, err := store.EnsureDailyImpression(r.Context(), session, target, retry, time.Now().UTC())
 	if err != nil {
 		writeError(w, err)
 		return
@@ -93,45 +115,45 @@ const impressionInstructions = `你是贴贴，此次仅为角色信息页整理
 语气轻松自然，稍微活泼一点，像贴贴在聊日常。信息充足时自然点缀1至3个贴合内容的emoji，例如骑车🚴、爱画画🎨；信息很少时最多1个。表情只点缀有依据的信息，不用表情猜性格，不每句话都加，不堆叠表情，不添加无依据的夸赞或额外提示语。
 聊天发言有真实 userId。角色信息页手动补充（sourceType=role_supplement 或 profile/observations 条目）均是已确认的目标个人信息与偏好，直接用于总结，不要求本人核实，不写“未经确认”“还需核实”，也不必逐项强调“你提到”。保留来源不等于待确认。本人陈述与角色页补充都是事实来源；明确更正优先，确有相互矛盾的事实时保留不确定性，不把矛盾合成结论。玩笑、假设、提问、一次情绪不是习惯，单次提醒请求也不能推出关心人、作息或长期行为习惯，第三人的信息不要归到目标。sourceType=self_profile 是目标本人保存的小档案，data 包含当前已确认资料；同一档案只使用最新修订，不从历史档案恢复已删除的爱好或简介；空字段表示当前未提供。其他主题的生活习惯与职业事实仍按各自最新记忆使用。旧印象不是事实来源。总结不包含操作回执、协议说明或邀请补充文字，页面会提供输入提示。`
 
-// Derived impressions also depend on the generation contract. A wording fix
-// invalidates old cached summaries even when the user's evidence is unchanged.
-func impressionSourceHash(sources dbop.ImpressionSources) string {
-	sum := sha256.Sum256([]byte(impressionInstructions + "\x00" + sources.Hash()))
-	return hex.EncodeToString(sum[:])
+func (s *Server) runImpression(ctx context.Context, job dbop.Impression) error {
+	return s.runImpressionWithStore(ctx, job, s.DB)
 }
 
-func (s *Server) runImpression(ctx context.Context, job dbop.Impression) (workErr error) {
+func (s *Server) runImpressionWithStore(ctx context.Context, job dbop.Impression, store impressionStore) (workErr error) {
 	defer func() {
 		if workErr != nil {
 			save, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 			defer cancel()
-			_ = s.DB.FinishImpression(save, job, "", "这次没能整理好印象，请稍后重试。")
+			_ = store.FinishImpression(save, job, "", "这次没能整理好印象，请稍后重试。")
 		}
 	}()
-	binding, err := s.DB.GetBindingBySessionID(ctx, job.SessionID)
+	binding, err := store.GetBindingBySessionID(ctx, job.SessionID)
 	if err != nil {
 		return err
 	}
 	if binding == nil || (job.TargetID != binding.UserA && job.TargetID != binding.UserB) {
-		return s.DB.FinishImpression(ctx, job, "", "当前空间已退出。")
+		return store.FinishImpression(ctx, job, "", "当前空间已退出。")
 	}
-	sources, err := s.DB.ImpressionSources(ctx, job.SessionID, job.TargetID)
+	cached, err := store.GetDailyImpression(ctx, job.SessionID, job.TargetID, time.Now().UTC())
 	if err != nil {
 		return err
 	}
-	if impressionSourceHash(sources) != job.SourceHash {
-		_, err = s.DB.EnsureImpression(ctx, job.SessionID, job.TargetID, impressionSourceHash(sources), false)
+	if cached != nil {
+		return store.FinishCachedImpression(ctx, job, *cached)
+	}
+	sources, err := store.ImpressionSources(ctx, job.SessionID, job.TargetID)
+	if err != nil {
 		return err
 	}
 	if len(sources.Memories) == 0 && len(sources.Messages) == 0 {
-		return s.DB.FinishImpression(ctx, job, "关于TA，我还在慢慢了解 🌱。等我们多聊聊，我会记住TA的习惯和喜欢的事。", "")
+		return store.FinishImpression(ctx, job, "关于TA，我还在慢慢了解 🌱。等我们多聊聊，我会记住TA的习惯和喜欢的事。", "")
 	}
 	// Bounded real sources, shared channel only. Local outbox is valid saved
 	// evidence even when a cloud write has not finished; it is labeled by source.
 	facts := make([]json.RawMessage, 0, len(sources.Memories))
 	budget := 80 * 1024
 	for _, m := range sources.Memories {
-		record, err := s.DB.GetMemoryRecord(ctx, m.ID, job.SessionID)
+		record, err := store.GetMemoryRecord(ctx, m.ID, job.SessionID)
 		if err != nil {
 			return err
 		}
@@ -238,24 +260,16 @@ func (s *Server) runImpression(ctx context.Context, job dbop.Impression) (workEr
 				if err := json.Unmarshal([]byte(raw), &answer); err != nil || strings.TrimSpace(answer.Summary) == "" || utf8.RuneCountInString(answer.Summary) > 2000 {
 					return fmt.Errorf("invalid impression output")
 				}
-				latest, err := s.DB.ImpressionSources(ctx, job.SessionID, job.TargetID)
-				if err != nil {
-					return err
-				}
-				if impressionSourceHash(latest) != job.SourceHash {
-					_, err = s.DB.EnsureImpression(ctx, job.SessionID, job.TargetID, impressionSourceHash(latest), false)
-					return err
-				}
 				// Recheck binding after a remote generation to avoid publishing into an
 				// exited space. The API independently authorizes every read.
-				active, err := s.DB.GetBindingBySessionID(ctx, job.SessionID)
+				active, err := store.GetBindingBySessionID(ctx, job.SessionID)
 				if err != nil {
 					return err
 				}
-				if active == nil {
-					return s.DB.FinishImpression(ctx, job, "", "当前空间已退出。")
+				if active == nil || (job.TargetID != active.UserA && job.TargetID != active.UserB) || !active.CreatedAt.Equal(binding.CreatedAt) {
+					return store.FinishImpression(ctx, job, "", "当前空间已退出。")
 				}
-				return s.DB.FinishImpression(ctx, job, strings.TrimSpace(answer.Summary), "")
+				return store.FinishImpression(ctx, job, strings.TrimSpace(answer.Summary), "")
 			}
 		}
 		select {

@@ -30,10 +30,11 @@ type UserPayload struct {
 
 // AccountResult 是登录/注册/查询账号接口的统一响应体。
 type AccountResult struct {
-	Token     string          `json:"token,omitempty"`
-	User      UserPayload     `json:"user"`
-	Binding   *BindingPayload `json:"binding"`
-	IsNewUser *bool           `json:"isNewUser,omitempty"`
+	Token             string          `json:"token,omitempty"`
+	User              UserPayload     `json:"user"`
+	Binding           *BindingPayload `json:"binding"`
+	IsNewUser         *bool           `json:"isNewUser,omitempty"`
+	NeedsProfileSetup bool            `json:"needsProfileSetup,omitempty"`
 }
 
 func userPayload(u *dbop.User) UserPayload {

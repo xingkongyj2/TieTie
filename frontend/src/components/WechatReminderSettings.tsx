@@ -2,9 +2,9 @@ import Taro from '@tarojs/taro'
 import { useEffect, useRef, useState } from 'react'
 import { ApiError } from '../api/client'
 import { wechatSubscriptionApi, type SubscriptionResult, type WechatSubscription } from '../api/wechat-subscription'
-import { getToken } from '../lib/token'
 import { readStorage, removeStorage, writeStorage } from '../lib/storage'
 import { wechatSubscriptionErrorMessage } from '../lib/wechatSubscriptionError'
+import { useSharedWechatSubscription } from '../hooks/useWechatSubscription'
 import { Bell, CircleHelp } from './Icons'
 
 interface Props {
@@ -18,39 +18,29 @@ const pendingKey = (accountId: number | undefined, templateId: string) => `tieti
 
 /** Authorization is requested directly from this user click, never on page load. */
 export function WechatReminderSettings({ notify, accountId, onSubscriptionChange, onExplain }: Props) {
-  const [subscription, setSubscription] = useState<WechatSubscription | null>(null)
+  const { subscription, loading, error: refreshError, controller } = useSharedWechatSubscription()
   const [busy, setBusy] = useState(false)
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const mounted = useRef(true)
   const submitting = useRef(false)
   const pending = useRef<SubscriptionResult | null>(null)
-  const token = useRef(getToken())
-  const current = () => mounted.current && token.current === getToken()
+  const owner = useRef(controller)
+  owner.current = controller
+  const current = () => mounted.current && owner.current === controller && controller.isCurrent()
 
-  const reload = async () => {
-    setLoading(true); setError('')
-    try {
-      const result = await wechatSubscriptionApi.get()
-      if (current()) {
-        setSubscription(result)
-        onSubscriptionChange?.(result)
-        const saved = readStorage<SubscriptionResult | null>(pendingKey(accountId, result.templateId), () => null)
-        if (saved?.templateId === result.templateId && saved.requestId) {
-          pending.current = saved
-        }
-      }
-    } catch (e) {
-      if (current()) setError(e instanceof Error ? e.message : '暂时无法获取微信提醒状态。')
-    } finally {
-      if (current()) setLoading(false)
-    }
-  }
   useEffect(() => {
     mounted.current = true
-    void reload()
+    submitting.current = false
+    pending.current = null
+    setBusy(false)
+    setError('')
     return () => { mounted.current = false }
-  }, [])
+  }, [controller])
+  useEffect(() => {
+    if (!subscription?.templateId || !current()) return
+    const saved = readStorage<SubscriptionResult | null>(pendingKey(accountId, subscription.templateId), () => null)
+    if (saved?.templateId === subscription.templateId && saved.requestId) pending.current = saved
+  }, [controller, accountId, subscription?.templateId])
 
   const subscribe = async () => {
     if (submitting.current || !current() || !subscription?.enabled || !subscription.hasWechatIdentity) return
@@ -75,7 +65,7 @@ export function WechatReminderSettings({ notify, accountId, onSubscriptionChange
       if (!current()) return
       pending.current = null
       removeStorage(pendingKey(accountId, saved.templateId))
-      setSubscription(saved)
+      controller.update(saved)
       onSubscriptionChange?.(saved)
       notify(choice === 'accept' ? '微信提醒已订阅' : '这次未订阅微信提醒')
     } catch (e) {
@@ -86,8 +76,7 @@ export function WechatReminderSettings({ notify, accountId, onSubscriptionChange
       }
       setError(wechatSubscriptionErrorMessage(e))
     } finally {
-      submitting.current = false
-      if (current()) setBusy(false)
+      if (current()) { submitting.current = false; setBusy(false) }
     }
   }
 
@@ -101,6 +90,6 @@ export function WechatReminderSettings({ notify, accountId, onSubscriptionChange
         <span className="wechat-reminder-mark" aria-hidden="true"><Bell size={17} /></span>
       </button>
     </div>
-    {error && <p className="mine-wechat-reminder-error" role="alert">{error}</p>}
+    {(error || refreshError) && <p className="mine-wechat-reminder-error" role="alert">{error || refreshError}</p>}
   </section>
 }

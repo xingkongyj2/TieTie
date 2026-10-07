@@ -1,6 +1,7 @@
 import Taro from '@tarojs/taro'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { authApi, type AccountResult } from '../api/auth'
+import type { WechatLoginProfile } from '../api/wechat-login'
 import { clearToken, getToken, onAccountTokenInvalid, setToken } from '../lib/token'
 import { clearImagePreviewCache } from '../lib/files'
 import { ApiError, isAccountTokenInvalid } from '../api/client'
@@ -109,15 +110,15 @@ export function useAccount() {
     setAccount(result)
   }, [])
 
-  const wechatLogin = useCallback(async () => {
+  const wechatLogin = useCallback(async (profile?: WechatLoginProfile) => {
     const generation = ++sequence.current
-    const result = await authApi.wechatLogin()
+    const result = await authApi.wechatLogin(profile)
     if (generation !== sequence.current) return
     if (result.token) setToken(result.token)
     saveInvite(result)
     void clearImagePreviewCache()
     setError(''); setReady(true)
-    if (result.isNewUser) {
+    if (result.isNewUser || result.needsProfileSetup) {
       writeOnboarding(result.user.userId, 'profile')
       setOnboardingStep('profile')
     } else setOnboardingStep(readOnboarding(result.user.userId))

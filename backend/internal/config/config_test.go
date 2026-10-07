@@ -5,6 +5,21 @@ import (
 	"testing"
 )
 
+func TestLoadTencentASRConfiguration(t *testing.T) {
+	t.Setenv("TENCENT_ASR_APP_ID", "1250000000")
+	t.Setenv("TENCENT_ASR_SECRET_ID", "test-only-id")
+	t.Setenv("TENCENT_ASR_SECRET_KEY", "test-only-key")
+	t.Setenv("TENCENT_ASR_ENGINE_MODEL", "")
+	cfg := Load()
+	if cfg.TencentASRAppID != "1250000000" || cfg.TencentASRSecretID != "test-only-id" || cfg.TencentASRSecretKey != "test-only-key" || cfg.TencentASREngineModel != "16k_zh" {
+		t.Fatal("ASR credentials/default model were not loaded")
+	}
+	t.Setenv("TENCENT_ASR_ENGINE_MODEL", "16k_yue")
+	if Load().TencentASREngineModel != "16k_yue" {
+		t.Fatal("ASR model override was not loaded")
+	}
+}
+
 func TestLoadMySQLTLSSettings(t *testing.T) {
 	t.Setenv("MYSQL_HOST", "38.76.183.142")
 	t.Setenv("MYSQL_TLS_CA_FILE", "artifacts/mysql/ca.pem")

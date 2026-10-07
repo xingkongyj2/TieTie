@@ -12,6 +12,11 @@ type User struct {
 	Password  string    `json:"-"         gorm:"column:password;size:128;not null"`
 	Code      string    `json:"code"      gorm:"column:code;uniqueIndex;size:4;not null"`
 	CreatedAt time.Time `json:"createdAt" gorm:"column:created_at;autoCreateTime;type:datetime(6)"`
+	// Derived portraits stay private and are only written after successful analysis.
+	// Update-only fields keep existing account creation independent of this cache.
+	AIProfile           string     `json:"-" gorm:"column:ai_profile;type:text;<-:update"`
+	AIProfileAnalyzedAt *time.Time `json:"-" gorm:"column:ai_profile_analyzed_at;type:datetime(6);<-:update"`
+	AIProfileSessionID  string     `json:"-" gorm:"column:ai_profile_session_id;size:160;<-:update"`
 }
 
 // TableName 指定表名。

@@ -20,19 +20,9 @@
 .things-hero-title { display: block; margin-top: 9px; font-family: 'TieTie Reminder Titles', 'Yuanti SC', 'PingFang SC', sans-serif; font-size: 26px; line-height: 1.35; letter-spacing: 2px; transform: rotate(-2deg); transform-origin: left center; }
 .things-buddy-scene { position: relative; width: 144px; height: 144px; margin-left: -3px; pointer-events: none; }
 .things-buddy { display: block; width: 100%; height: 100%; max-width: none; object-fit: contain; filter: drop-shadow(0 8px 7px #2864ef0c); }
-.things-buddy-decor { position: absolute; inset: 0; width: 100%; height: 100%; }
 .things-page #things-reminders-panel.is-active .things-buddy { animation: things-buddy-enter .8s cubic-bezier(.22, 1, .36, 1) both; }
-.things-decor-fragment { position: absolute; inset: 0; width: 100%; height: 100%; }
-.things-decor-fragment-1 { transform-origin: 86.111111% 12.5%; --decor-delay: .25s; }
-.things-decor-fragment-2 { transform-origin: 5.555556% 12.5%; --decor-delay: .4s; }
-.things-decor-fragment-3 { transform-origin: 9.722222% 86.805556%; --decor-delay: .55s; }
-.things-page #things-reminders-panel.is-active .things-decor-fragment { animation: things-decor-enter .5s ease-out var(--decor-delay, .25s) both; }
 @keyframes things-buddy-enter {
   from { opacity: 0; transform: translateY(10px) scale(.94) rotate(-3deg); }
-  to { opacity: 1; transform: translateY(0) scale(1) rotate(0); }
-}
-@keyframes things-decor-enter {
-  from { opacity: 0; transform: translateY(3px) scale(.45) rotate(-12deg); }
   to { opacity: 1; transform: translateY(0) scale(1) rotate(0); }
 }
 .things-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
@@ -100,13 +90,15 @@
 .things-page .reminder-assignees { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .things-page .reminder-footer .avatar-tiny { width: 24px; height: 24px; }
 .things-page .is-completed { background: #fafafa; }
+.things-page .reminder-card.is-completed { padding-right: 74px; }
 .things-page .is-completed .reminder-title-row { align-items: center; }
 .things-page .is-completed .reminder-title-row .reminder-status { padding: 3px 6px; font-size: 10px; line-height: 1.3; }
 .things-page .is-completed .reminder-title-row .reminder-status.is-done { color: #5c88cf; background: #e2ecfd; }
 .things-page .is-completed .reminder-title-row .reminder-status.is-delivered { color: #337958; background: #e7f4ec; }
 .things-page .is-completed .reminder-title-row .reminder-status.is-cancelled { color: #aa6333; background: #fff0df; }
 .things-page .is-completed .reminder-main h3 { color: #202b40; }
-.things-page .is-completed .reminder-check { background: #e2ecfd; color: #5c88cf; }
+.things-page .is-completed .reminder-check { position: absolute; top: 50%; right: 15px; margin: 0; transform: translateY(-50%); background: #e2ecfd; color: #5c88cf; }
+.things-page .is-completed button.reminder-check:active:not(:disabled) { transform: translateY(-50%) scale(.975); }
 .things-page .is-completed .reminder-check::before { display: none; }
 .things-page .reminder-check.is-readonly { background: #eceff2; color: #9aa3ae; cursor: default; }
 .things-page .reminder-check.is-cancelled-mark { background: #eceff2; color: #9aa3ae; cursor: default; }
@@ -161,6 +153,5 @@
   .things-page .settings-card { padding-left: 13px; padding-right: 13px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .things-page #things-reminders-panel.is-active .things-buddy,
-  .things-page #things-reminders-panel.is-active .things-decor-fragment { animation: none; }
+  .things-page #things-reminders-panel.is-active .things-buddy { animation: none; }
 }

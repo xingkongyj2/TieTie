@@ -2,11 +2,8 @@ package api
 
 import (
 	"context"
-	cryptorand "crypto/rand"
 	"errors"
-	"math/big"
 	"net/http"
-	"net/url"
 	"strings"
 	"unicode/utf8"
 
@@ -15,17 +12,20 @@ import (
 	"tietie/backend/internal/wechat"
 )
 
-type wechatAccountStore interface {
-	GetOrCreateWechatUser(context.Context, string, string) (*dbop.User, bool, error)
+type wechatAccountReader interface {
 	GetLatestBindingByUser(context.Context, int64) (*dbop.Binding, error)
+	GetUserProfile(context.Context, int64) (*dbop.UserProfile, error)
 }
 
-// wechatProfileStore is implemented by the database. It is kept separate from
-// wechatAccountStore so the login flow remains easy to exercise with the small
-// account mocks used by the auth tests.
-type wechatProfileStore interface {
-	GetUserProfile(context.Context, int64) (*dbop.UserProfile, error)
-	SaveUserProfile(context.Context, dbop.UserProfile, ...bool) (string, error)
+type wechatReturningAccountStore interface {
+	wechatAccountReader
+	GetWechatUser(context.Context, string, string) (*dbop.User, error)
+}
+
+type wechatChosenAccountStore interface {
+	wechatAccountReader
+	GetOrCreateWechatUser(context.Context, string, string) (*dbop.User, bool, error)
+	SaveWechatChosenProfile(context.Context, int64, string, string, []byte) error
 }
 
 // handleAuthWechat accepts only a temporary wx.login code as proof of identity.
@@ -36,11 +36,11 @@ func (s *Server) handleAuthWechat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Code      string `json:"code"`
-		Nickname  string `json:"nickname"`
-		AvatarURL string `json:"avatarUrl"`
+		Code         string  `json:"code"`
+		Nickname     *string `json:"nickname"`
+		AvatarBase64 *string `json:"avatarBase64"`
 	}
-	if apiErr := decodeJSONBody(r, &body, 4096); apiErr != nil {
+	if apiErr := decodeJSONBody(r, &body, maxAvatarJSONBytes); apiErr != nil {
 		writeError(w, apiErr)
 		return
 	}
@@ -49,7 +49,20 @@ func (s *Server) handleAuthWechat(w http.ResponseWriter, r *http.Request) {
 		writeError(w, qoder.NewApiError(400, "invalid_wechat_code", "微信登录凭证无效，请重新点击登录。"))
 		return
 	}
-	result, err := s.wechatAccountResultWithProfile(r.Context(), body.Code, s.DB, body.Nickname, body.AvatarURL)
+	var result *AccountResult
+	var err error
+	if body.Nickname == nil && body.AvatarBase64 == nil {
+		result, err = s.wechatReturningAccountResult(r.Context(), body.Code, s.DB)
+	} else {
+		var nickname, avatar string
+		if body.Nickname != nil {
+			nickname = *body.Nickname
+		}
+		if body.AvatarBase64 != nil {
+			avatar = *body.AvatarBase64
+		}
+		result, err = s.wechatChosenAccountResult(r.Context(), body.Code, nickname, avatar, s.DB)
+	}
 	if err != nil {
 		writeError(w, err)
 		return
@@ -57,128 +70,114 @@ func (s *Server) handleAuthWechat(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (s *Server) wechatAccountResult(ctx context.Context, code string, accounts wechatAccountStore) (*AccountResult, error) {
-	return s.wechatAccountResultWithProfile(ctx, code, accounts, "", "")
+// Code-only login reads the saved profile and never creates or changes accounts.
+// A fresh code plus explicit profile choices is required to finish registration.
+func (s *Server) wechatReturningAccountResult(ctx context.Context, code string, accounts wechatReturningAccountStore) (*AccountResult, error) {
+	identity, err := s.exchangeWechatCode(ctx, code)
+	if err != nil {
+		return nil, err
+	}
+	if accounts == nil {
+		return nil, wechatAccountUnavailableError()
+	}
+	user, err := accounts.GetWechatUser(ctx, identity.AppID, identity.OpenID)
+	if err != nil {
+		return nil, wechatAccountUnavailableError()
+	}
+	if user == nil {
+		return nil, wechatProfileRequiredError()
+	}
+	profile, err := accounts.GetUserProfile(ctx, user.ID)
+	if err != nil {
+		return nil, wechatAccountUnavailableError()
+	}
+	if profile == nil || strings.TrimSpace(profile.Name) == "" || strings.TrimSpace(profile.Avatar) == "" {
+		return nil, wechatProfileRequiredError()
+	}
+	return s.wechatLoginResult(ctx, user, false, profile, accounts)
 }
 
-// wechatAccountResultWithProfile exchanges the one-time login code and, when
-// the client was able to obtain wx.getUserProfile data, stores that data in the
-// account profile. The profile is display data only; the server still obtains
-// the verified OpenID exclusively from jscode2session.
-func (s *Server) wechatAccountResultWithProfile(ctx context.Context, code string, accounts wechatAccountStore, nickname, avatarURL string) (*AccountResult, error) {
-	exchanger := s.Wechat
-	if exchanger == nil {
-		if s.Cfg == nil {
-			return nil, wechatAPIError(wechat.ErrNotConfigured)
-		}
-		exchanger = wechat.NewClient(s.Cfg.WechatAppID, s.Cfg.WechatAppSecret, s.Cfg.WechatTimeout)
+// Explicit profile choices are validated before consuming a code and stored
+// before issuing a login token, preserving the existing registration contract.
+func (s *Server) wechatChosenAccountResult(ctx context.Context, code, nickname, encoded string, accounts wechatChosenAccountStore) (*AccountResult, error) {
+	nickname = strings.TrimSpace(nickname)
+	if nickname == "" || !utf8.ValidString(nickname) || utf8.RuneCountInString(nickname) > 24 {
+		return nil, wechatProfileRequiredError()
 	}
-	identity, err := exchanger.ExchangeCode(ctx, code)
+	input, apiErr := validateAvatarInput(encoded)
+	if apiErr != nil {
+		return nil, apiErr
+	}
+	identity, err := s.exchangeWechatCode(ctx, code)
 	if err != nil {
-		return nil, wechatAPIError(err)
+		return nil, err
 	}
-	// The concrete DB is nil-safe, including when carried inside this interface.
+	avatar, apiErr := normalizeAvatarInput(input)
+	if apiErr != nil {
+		return nil, apiErr
+	}
+	if accounts == nil {
+		return nil, wechatAccountUnavailableError()
+	}
 	user, isNewUser, err := accounts.GetOrCreateWechatUser(ctx, identity.AppID, identity.OpenID)
-	if err != nil {
-		return nil, qoder.NewApiError(503, "wechat_account_unavailable", "暂时无法完成微信登录，请稍后重试。")
+	if err != nil || user == nil || s.Auth == nil {
+		return nil, wechatAccountUnavailableError()
 	}
-	// wx.getUserProfile is optional: users can decline it, and older bases may
-	// not expose it. Keep login successful and choose a stable local fallback
-	// avatar when no usable image was supplied.
-	s.saveWechatProfile(ctx, accounts, user, isNewUser, nickname, avatarURL)
+	if err := accounts.SaveWechatChosenProfile(ctx, user.ID, nickname, "image/jpeg", avatar); err != nil {
+		return nil, qoder.NewApiError(503, "wechat_profile_save_failed", "昵称和头像保存失败，请重试登录。")
+	}
+	profile, err := accounts.GetUserProfile(ctx, user.ID)
+	if err != nil || profile == nil {
+		return nil, wechatAccountUnavailableError()
+	}
+	return s.wechatLoginResult(ctx, user, isNewUser, profile, accounts)
+}
+
+func (s *Server) wechatLoginResult(ctx context.Context, user *dbop.User, isNewUser bool, profile *dbop.UserProfile, accounts wechatAccountReader) (*AccountResult, error) {
+	if s.Auth == nil {
+		return nil, wechatAccountUnavailableError()
+	}
+	needsSetup := (profile.Gender != "male" && profile.Gender != "female") || profile.Birthday == "" || profile.Region.CityCode == ""
 	binding, err := accounts.GetLatestBindingByUser(ctx, user.ID)
 	if err != nil {
-		return nil, qoder.NewApiError(503, "wechat_account_unavailable", "暂时无法完成微信登录，请稍后重试。")
-	}
-	if s.Auth == nil {
-		return nil, qoder.NewApiError(503, "wechat_account_unavailable", "暂时无法完成微信登录，请稍后重试。")
+		return nil, wechatAccountUnavailableError()
 	}
 	token, err := s.Auth.IssueToken(user.ID, user.Username)
 	if err != nil {
 		return nil, qoder.NewApiError(500, "internal_error", "会话服务发生错误，请稍后重试。")
 	}
-	result := &AccountResult{Token: token, User: userPayload(user), IsNewUser: &isNewUser}
+	s.wakeMemory()
+	result := &AccountResult{Token: token, User: userPayload(user), IsNewUser: &isNewUser, NeedsProfileSetup: needsSetup}
 	if binding != nil {
 		result.Binding = &BindingPayload{SessionID: binding.SessionID, PartnerID: binding.OtherUser(user.ID)}
 	}
 	return result, nil
 }
 
-// Default avatars are local assets, so they work even when the remote WeChat
-// avatar host is not listed in a mini-program's download domain allowlist.
-var wechatDefaultAvatars = []string{
-	"/avatars/cream-cat.png", "/avatars/peach-cat.png", "/avatars/golden-longhair-cat.png",
-	"/avatars/zodiac-rabbit.png", "/avatars/corgi-dog.png", "/avatars/otter.png", "/avatars/penguin.png",
-}
-
-func (s *Server) saveWechatProfile(ctx context.Context, accounts wechatAccountStore, user *dbop.User, isNewUser bool, nickname, avatarURL string) {
-	store, ok := accounts.(wechatProfileStore)
-	if !ok || user == nil {
-		return
-	}
-	profile, err := store.GetUserProfile(ctx, user.ID)
-	if err != nil || profile == nil {
-		return
-	}
-	name := strings.TrimSpace(nickname)
-	if utf8.RuneCountInString(name) == 0 || utf8.RuneCountInString(name) > 24 {
-		name = ""
-	}
-	avatar := strings.TrimSpace(avatarURL)
-	if !validWechatAvatarURL(avatar) {
-		avatar = ""
-	}
-	// Do not overwrite a name/avatar the user has chosen in the app on every
-	// subsequent login. Fill only new or still-empty profile fields.
-	if !isNewUser && profile.Name != "" {
-		name = profile.Name
-	}
-	if name == "" {
-		name = profile.Name
-		if name == "" {
-			name = user.Username // generated username is already a random fallback
+func (s *Server) exchangeWechatCode(ctx context.Context, code string) (wechat.Identity, error) {
+	exchanger := s.Wechat
+	if exchanger == nil {
+		if s.Cfg == nil {
+			return wechat.Identity{}, wechatAPIError(wechat.ErrNotConfigured)
 		}
+		exchanger = wechat.NewClient(s.Cfg.WechatAppID, s.Cfg.WechatAppSecret, s.Cfg.WechatTimeout)
 	}
-	if !isNewUser && profile.Avatar != "" {
-		avatar = profile.Avatar
-	}
-	if avatar == "" {
-		avatar = randomWechatAvatar()
-	}
-	if name == profile.Name && avatar == profile.Avatar {
-		return
-	}
-	profile.UserID = user.ID
-	profile.Name = name
-	profile.Avatar = avatar
-	if profile.Gender == "" {
-		profile.Gender = "unspecified"
-	}
-	if profile.Hobbies == nil {
-		profile.Hobbies = []string{}
-	}
-	// Profile persistence must not turn an otherwise valid login into a failed
-	// login. The next successful login can retry the best-effort update.
-	_, _ = store.SaveUserProfile(ctx, *profile, true)
-}
-
-func validWechatAvatarURL(value string) bool {
-	if value == "" || len(value) > 512 {
-		return false
-	}
-	if strings.HasPrefix(value, "/avatars/") && !strings.HasPrefix(value, "//") {
-		return true
-	}
-	u, err := url.Parse(value)
-	return err == nil && u.Scheme == "https" && u.Host != "" && u.User == nil
-}
-
-func randomWechatAvatar() string {
-	index, err := cryptorand.Int(cryptorand.Reader, big.NewInt(int64(len(wechatDefaultAvatars))))
+	identity, err := exchanger.ExchangeCode(ctx, code)
 	if err != nil {
-		return wechatDefaultAvatars[0]
+		return wechat.Identity{}, wechatAPIError(err)
 	}
-	return wechatDefaultAvatars[index.Int64()]
+	if strings.TrimSpace(identity.AppID) == "" || len(identity.AppID) > 32 || strings.TrimSpace(identity.OpenID) == "" || len(identity.OpenID) > 128 {
+		return wechat.Identity{}, wechatAPIError(wechat.ErrUnavailable)
+	}
+	return identity, nil
+}
+
+func wechatProfileRequiredError() *qoder.ApiError {
+	return qoder.NewApiError(400, "wechat_profile_required", "请填写 1-24 个字的昵称并选择头像后登录。")
+}
+
+func wechatAccountUnavailableError() *qoder.ApiError {
+	return qoder.NewApiError(503, "wechat_account_unavailable", "暂时无法完成微信登录，请稍后重试。")
 }
 
 func wechatAPIError(err error) *qoder.ApiError {

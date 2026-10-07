@@ -51,16 +51,21 @@ func CalculateCountdown(row Countdown, now time.Time) Countdown {
 		return row
 	}
 	if row.Repeat == "annual" {
+		month, sourceDay := date.Month(), date.Day()
+		year := today.Year()
+		if date.Year() > year {
+			year = date.Year() // The first occurrence cannot precede its source date.
+		}
 		occurrence := func(year int) time.Time {
-			day := date.Day()
-			if date.Month() == time.February && day == 29 && time.Date(year, 3, 0, 0, 0, 0, 0, weather.Shanghai).Day() == 28 {
+			day := sourceDay
+			if month == time.February && day == 29 && time.Date(year, 3, 0, 0, 0, 0, 0, weather.Shanghai).Day() == 28 {
 				day = 28
 			}
-			return time.Date(year, date.Month(), day, 0, 0, 0, 0, weather.Shanghai)
+			return time.Date(year, month, day, 0, 0, 0, 0, weather.Shanghai)
 		}
-		date = occurrence(today.Year())
+		date = occurrence(year)
 		if date.Before(today) {
-			date = occurrence(today.Year() + 1)
+			date = occurrence(year + 1)
 		}
 		row.LeapAdjusted = strings.HasSuffix(row.Date, "02-29") && date.Day() == 28
 	}
@@ -121,6 +126,9 @@ func (db *DB) ApplyCountdown(ctx context.Context, session, request string, actor
 				return err
 			}
 		}
+		if err := syncCountdownReminderSchedule(tx, row, now); err != nil {
+			return err
+		}
 		body, _ := json.Marshal(row)
 		return tx.Create(&CountdownReceipt{ID: receiptID, SessionID: session, CountdownID: row.ID, Operation: "save", Snapshot: string(body)}).Error
 	})
@@ -155,6 +163,9 @@ func (db *DB) DeleteCountdown(ctx context.Context, session, request string, acto
 			return err
 		}
 		if err := tx.Delete(&row).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("countdown_id=? AND binding_created_at=?", row.ID, b.CreatedAt).Delete(&CountdownReminderSchedule{}).Error; err != nil {
 			return err
 		}
 		row.UpdatedBy = actor

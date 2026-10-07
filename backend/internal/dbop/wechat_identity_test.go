@@ -5,6 +5,7 @@ import (
 	"database/sql/driver"
 	"errors"
 	"regexp"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -110,9 +111,62 @@ func TestWechatLookupPreservesOpenIDCaseAndAppScope(t *testing.T) {
 	} {
 		mock.ExpectQuery("SELECT .* FROM `wechat_identities`").WithArgs(tc.appID, tc.openID, 1).WillReturnRows(sqlmock.NewRows([]string{"app_id", "open_id", "user_id"}).AddRow(tc.appID, tc.openID, tc.userID))
 		mock.ExpectQuery("SELECT .* FROM `users`").WithArgs(tc.userID, 1).WillReturnRows(sqlmock.NewRows([]string{"id", "username", "password", "code"}).AddRow(tc.userID, "微信用户_test", "", "1234"))
-		user, fresh, err := db.GetOrCreateWechatUser(context.Background(), tc.appID, tc.openID)
-		if err != nil || fresh || user == nil || user.ID != tc.userID {
-			t.Fatalf("lookup did not preserve the app scope and case: user=%#v, new=%t, error=%v", user, fresh, err)
+		user, err := db.GetWechatUser(context.Background(), tc.appID, tc.openID)
+		if err != nil || user == nil || user.ID != tc.userID {
+			t.Fatalf("lookup did not preserve the app scope and case: user=%#v, error=%v", user, err)
+		}
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWechatReadOnlyLookupDoesNotCreateUnknownAccount(t *testing.T) {
+	db, mock := mockWechatDB(t)
+	expectWechatLookup(mock, 0)
+	user, err := db.GetWechatUser(context.Background(), "wx-test", "private-openid")
+	if err != nil || user != nil {
+		t.Fatalf("unknown identity should not create an account: %#v %v", user, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWechatReadOnlyLookupPropagatesFailures(t *testing.T) {
+	for _, missingUser := range []bool{false, true} {
+		db, mock := mockWechatDB(t)
+		want := errors.New("lookup failed")
+		if missingUser {
+			mock.ExpectQuery("SELECT .* FROM `wechat_identities`").WithArgs("wx-test", "private-openid", 1).WillReturnRows(sqlmock.NewRows([]string{"app_id", "open_id", "user_id"}).AddRow("wx-test", "private-openid", 7))
+			mock.ExpectQuery("SELECT .* FROM `users`").WithArgs(7, 1).WillReturnRows(sqlmock.NewRows([]string{"id"}))
+			want = gorm.ErrRecordNotFound
+		} else {
+			mock.ExpectQuery("SELECT .* FROM `wechat_identities`").WithArgs("wx-test", "private-openid", 1).WillReturnError(want)
+		}
+		user, err := db.GetWechatUser(context.Background(), "wx-test", "private-openid")
+		if user != nil || !errors.Is(err, want) {
+			t.Fatalf("read failure must not become a new registration: %#v %v", user, err)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestWechatReadOnlyLookupRejectsUnavailableDatabaseAndInvalidIdentity(t *testing.T) {
+	for _, db := range []*DB{nil, {}} {
+		if user, err := db.GetWechatUser(context.Background(), "wx-test", "private-openid"); user != nil || !errors.Is(err, errNoDB) {
+			t.Fatal("unavailable database must fail safely")
+		}
+	}
+	db, mock := mockWechatDB(t)
+	for _, tc := range []struct{ appID, openID string }{
+		{"", "private-openid"}, {"wx-test", ""}, {" \t ", "private-openid"}, {"wx-test", " \n "},
+		{strings.Repeat("a", 33), "private-openid"}, {"wx-test", strings.Repeat("o", 129)},
+	} {
+		if user, err := db.GetWechatUser(context.Background(), tc.appID, tc.openID); user != nil || err == nil {
+			t.Fatal("invalid identity must not query the database")
 		}
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {

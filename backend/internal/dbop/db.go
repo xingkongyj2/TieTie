@@ -190,12 +190,15 @@ func Open(cfg MySQLConfig) (*DB, error) {
 		&WechatSubscriptionReceipt{},
 		&WechatNotification{},
 		&UserProfile{},
+		&UserAvatar{},
 		&CareMode{},
 		&CareReport{},
 		&CarePreference{},
 		&ProfileActionReceipt{},
 		&Countdown{},
 		&CountdownReceipt{},
+		&CountdownReminderSchedule{},
+		&CountdownReminderDelivery{},
 		&Anniversary{},
 		&AnniversaryReminderSettings{},
 		&AnniversaryActionReceipt{},
@@ -232,6 +235,9 @@ func Open(cfg MySQLConfig) (*DB, error) {
 		return nil, err
 	}
 	if err := reconcileDeletedAnniversaries(gdb); err != nil {
+		return nil, err
+	}
+	if err := backfillCountdownReminderSchedules(gdb, time.Now()); err != nil {
 		return nil, err
 	}
 	return &DB{gdb: gdb}, nil
@@ -283,6 +289,7 @@ const (
 	claimLockImpressions          = "tietie_claim_impressions"
 	claimLockCareModes            = "tietie_claim_care_modes"
 	claimLockAnniversaryReminders = "tietie_claim_anniversary_reminders"
+	claimLockCountdownReminders   = "tietie_claim_countdown_reminders"
 )
 
 // claimWithLock 串行化"挑候选 + 改状态"这段领取动作。

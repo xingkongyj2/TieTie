@@ -84,7 +84,7 @@ func main() {
 		}()
 	} else {
 		close(workerDone)
-		logging.System().Info("后台队列已禁用，本实例仅提供 HTTP 服务", "event", "scheduler.disabled")
+		logging.System().Info("后台队列已禁用，本实例仅提供 HTTP 服务，微信订阅提醒不会投递", "event", "scheduler.disabled")
 	}
 	go func() {
 		<-ctx.Done()

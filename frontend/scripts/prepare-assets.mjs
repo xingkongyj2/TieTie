@@ -1,4 +1,4 @@
-import { readdir, readFile, writeFile, mkdir, copyFile } from 'node:fs/promises'
+import { readdir, readFile, writeFile, mkdir, copyFile, rm } from 'node:fs/promises'
 import path from 'node:path'
 import sharp from 'sharp'
 import React from 'react'
@@ -10,6 +10,7 @@ const source = path.join(root, 'web/public')
 const output = path.join(root, 'src/assets')
 await mkdir(path.join(output, 'avatars'), { recursive: true })
 await mkdir(path.join(output, 'ip/space-buddies-v1'), { recursive: true })
+await mkdir(path.join(output, 'ip/paper-buddies-v2'), { recursive: true })
 await mkdir(path.join(output, 'decor'), { recursive: true })
 await mkdir(path.join(output, 'fonts'), { recursive: true })
 // The Taro app only ships the small fallback set used when WeChat profile
@@ -23,6 +24,15 @@ await sharp(path.join(source, 'brand-notes.png')).resize(180, 180, { fit: 'insid
 for (const name of ['blue-buddy', 'ice-buddy']) {
   await sharp(path.join(source, 'ip/space-buddies-v1', `${name}.svg`), { density: 192 }).resize({ width: 360 }).png({ compressionLevel: 9 }).toFile(path.join(output, 'ip/space-buddies-v1', `${name}.png`))
 }
+// Animation artwork loads remotely; remove stale copies from older builds.
+for (const name of ['blue-buddy.png', 'ice-buddy.png']) {
+  await rm(path.join(output, 'ip/paper-buddies-v2', name), { force: true })
+}
+for (const name of ['duo.png', 'blue-buddy-avatar-256.png']) {
+  await copyFile(path.join(source, 'ip/paper-buddies-v2', name), path.join(output, 'ip/paper-buddies-v2', name))
+}
+// Top-card artwork renders at 144px; a 3x PNG keeps it sharp within the package budget.
+await sharp(path.join(source, 'ip/paper-buddies-v2/todo-duo.png')).resize({ width: 432, withoutEnlargement: true }).png({ compressionLevel: 9 }).toFile(path.join(output, 'ip/paper-buddies-v2/todo-duo.png'))
 for (const name of ['reminder-titles-b1adf8b8db9d.woff2', 'OFL.txt']) await copyFile(path.join(source, 'fonts', name), path.join(output, 'fonts', name))
 
 const svgs = {

@@ -67,6 +67,7 @@ export function createTransport(deps: TransportDependencies) {
       const timeoutMessage = subscriptionWrite ? '订阅结果保存超时，请点击重试保存。'
         : authAction ? `${authAction}请求超时，${authHint}` : `云端请求超时。${uncertain || '请刷新会话查看最新状态。'}`
       const networkMessage = subscriptionWrite ? '订阅结果保存失败，请检查网络后重试保存。'
+        : path === '/api/auth/wechat' ? '云端连接失败'
         : authAction ? `${authAction}连接失败，${authHint}` : `连接云端失败，请检查网络和服务地址。${uncertain}`
       signal?.addEventListener('abort', onAbort, { once: true })
       timer = setTimeout(() => {

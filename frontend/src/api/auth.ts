@@ -1,12 +1,7 @@
 import Taro from '@tarojs/taro'
 import { request } from './client'
-import { completeWechatLogin } from './wechat-login'
-
-const fallbackWechatAvatars = [
-  '/avatars/cream-cat.png', '/avatars/peach-cat.png', '/avatars/golden-longhair-cat.png',
-  '/avatars/zodiac-rabbit.png', '/avatars/corgi-dog.png', '/avatars/otter.png', '/avatars/penguin.png',
-]
-const randomFallbackWechatAvatar = () => fallbackWechatAvatars[Math.floor(Math.random() * fallbackWechatAvatars.length)]
+import { completeWechatLogin, startWechatLogin, type WechatLoginProfile } from './wechat-login'
+import { readWechatAvatar } from '../lib/wechat-avatar'
 
 export interface Binding {
   sessionId: string
@@ -19,40 +14,26 @@ export interface User {
   code: string
 }
 
-/** Optional display data returned by wx.getUserProfile. It is never used as
- * authentication proof; the server still verifies the one-time login code. */
-export interface WechatProfile {
-  nickname: string
-  avatarUrl: string
-}
-
 export interface AccountResult {
   token?: string
   user: User
   binding: Binding | null
   isNewUser?: boolean
-  wechatProfile?: WechatProfile
+  needsProfileSetup?: boolean
 }
 
 /** The account hook commits a login token only if its request is still current. */
 export const authApi = {
-  async wechatLogin(): Promise<AccountResult> {
+  async wechatLogin(profile?: WechatLoginProfile): Promise<AccountResult> {
     if (process.env.TARO_ENV !== 'weapp') throw new Error('请在微信小程序中使用微信登录。')
-    return completeWechatLogin({
-      // This call stays inside the button's user gesture. completeWechatLogin
-      // treats a refusal as optional and continues with wx.login.
-      getProfile: async () => {
-        try {
-          const result = await Taro.getUserProfile({ desc: '用于完善你的贴贴资料' })
-          return { nickname: String(result.userInfo?.nickName ?? '').trim(), avatarUrl: String(result.userInfo?.avatarUrl ?? '').trim() }
-        } catch {
-          // Keep a profile object in the request so the server can persist a
-          // different local default for each newly created account.
-          return { nickname: '', avatarUrl: randomFallbackWechatAvatar() }
-        }
-      },
+    if (!profile) return startWechatLogin({
       login: () => Taro.login({ timeout: 10_000 }),
-      exchange: (code, profile) => request<AccountResult>('/api/auth/wechat', { method: 'POST', body: { code, nickname: profile?.nickname, avatarUrl: profile?.avatarUrl } }),
+      exchange: code => request<AccountResult>('/api/auth/wechat', { method: 'POST', body: { code } }),
+    })
+    return completeWechatLogin(profile, {
+      readAvatar: readWechatAvatar,
+      login: () => Taro.login({ timeout: 10_000 }),
+      exchange: (code, selected) => request<AccountResult>('/api/auth/wechat', { method: 'POST', body: { code, ...selected } }),
     })
   },
   async register(username: string, password: string): Promise<AccountResult> {

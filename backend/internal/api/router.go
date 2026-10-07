@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"tietie/backend/internal/auth"
 	"tietie/backend/internal/config"
@@ -20,21 +21,23 @@ import (
 
 // Server 聚合全部 handler 依赖。
 type Server struct {
-	Cfg              *config.Config
-	Qoder            *qoder.Client
-	Auth             *auth.Service
-	DB               *dbop.DB // 可为 nil：未配置数据库时账号类接口返回 503
-	Weather          weather.Provider
-	Wechat           wechat.CodeExchanger
-	WechatMessages   wechat.MessageSender
-	weatherOnce      sync.Once
-	locksMu          sync.Mutex
-	sessionLocks     map[string]*conversationLock
-	wakeOnce         sync.Once
-	conversationWake chan struct{}
-	controlWake      chan struct{}
-	memoryWake       chan struct{}
-	welcomeWake      chan struct{}
+	Cfg                  *config.Config
+	Qoder                *qoder.Client
+	Auth                 *auth.Service
+	DB                   *dbop.DB // 可为 nil：未配置数据库时账号类接口返回 503
+	Weather              weather.Provider
+	Wechat               wechat.CodeExchanger
+	WechatMessages       wechat.MessageSender
+	weatherOnce          sync.Once
+	locksMu              sync.Mutex
+	sessionLocks         map[string]*conversationLock
+	wakeOnce             sync.Once
+	conversationWake     chan struct{}
+	controlWake          chan struct{}
+	memoryWake           chan struct{}
+	welcomeWake          chan struct{}
+	voiceSessionMu       sync.Mutex
+	voiceSessionRequests map[int64][]time.Time
 }
 
 // NewRouter 是全后端唯一的路由注册点。
@@ -48,15 +51,18 @@ func NewRouter(s *Server) http.Handler {
 	mux.Handle("/api/auth/wechat", http.HandlerFunc(s.handleAuthWechat))
 	mux.Handle("/api/assets/reminder-titles.woff", http.HandlerFunc(s.handleTitleFont))
 	mux.Handle("/api/assets/OFL.txt", http.HandlerFunc(s.handleTitleFontLicense))
+	mux.Handle("/api/assets/avatars/", http.HandlerFunc(s.handleAvatarAsset))
 
 	// ---- 需登录接口：JWT 鉴权 ----
 	authed := func(h func(http.ResponseWriter, *http.Request)) http.Handler {
 		return s.authGuard(http.HandlerFunc(h))
 	}
 	mux.Handle("/api/account/me", authed(s.handleMe))
+	mux.Handle("POST /api/account/voice-session", authed(s.handleVoiceSession))
 	mux.Handle("/api/account/wechat-subscription", authed(s.handleWechatSubscription))
 	mux.Handle("/api/account/profiles", authed(s.handleProfiles))
 	mux.Handle("/api/account/profile", authed(s.handleProfile))
+	mux.Handle("/api/account/avatar", authed(s.handleAvatarUpload))
 	mux.Handle("/api/account/regions", authed(s.handleRegions))
 	mux.Handle("/api/account/bind", authed(s.handleBind))
 	mux.Handle("/api/account/unbind", authed(s.handleUnbind))

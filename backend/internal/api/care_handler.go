@@ -339,7 +339,7 @@ func (s *Server) appendCareHistory(ctx context.Context, session string, result *
 		if report.Mode == "region_notice" {
 			source = "chat"
 		}
-		if report.Mode == "region_notice" || report.Mode == "anniversary" {
+		if report.Mode == "region_notice" || report.Mode == "anniversary" || report.Mode == "countdown" {
 			members, _, err := s.DB.CareMembers(ctx, session)
 			if err != nil {
 				return err
