@@ -43,6 +43,10 @@ button::after { border:0; }
 .mini-root .composer-area.is-voice-active .composer-stage { pointer-events:auto; }
 .mini-root .composer-area.is-voice-active .composer-voice-panel { pointer-events:none; }
 .mini-root .composer-area.is-voice-active .composer-voice-panel.is-transcribing { pointer-events:auto; }
+.mini-root .tab-page-scroll { padding-bottom:4px; }
+.mini-root .things-page .things-scroll { padding-bottom:4px; }
+.mini-root .things-page .things-scroll.is-placeholder { padding-bottom:4px; }
+.mini-root .mine-page .tab-page-scroll.mine-scroll { padding-bottom:4px; }
 .mini-root .composer-voice-panel { height:122px; gap:8px; border-radius:20px; background:linear-gradient(180deg,#fff9,#fff 28%); }
 .mini-root .composer-voice-hint { justify-content:center; height:32px; padding:0 4px; text-align:center; font-size:16px; line-height:24px; }
 .mini-root .composer-voice-field { justify-content:center; height:82px; padding:12px 15px; border:1px solid #dce8ff; border-radius:20px; background:linear-gradient(115deg,#edf4ff,#e7efff); }

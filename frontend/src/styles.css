@@ -637,7 +637,7 @@ h1, h2, h3, p { margin: 0; }
 .things-tabs button { position: relative; min-height: 48px; padding: 8px 2px 15px; background: transparent; color: #909bad; font-size: 16px; font-weight: 600; }
 .things-tabs button.is-active { color: var(--blue); }
 .things-tab-panel { padding-top: 16px; }
-.tab-page-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: none; padding: 0 23px 4px; }
+.tab-page-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-width: none; padding: 0 23px 28px; }
 .mine-page .tab-page-scroll { padding-top: max(20px, env(safe-area-inset-top)); }
 .tab-page-scroll::-webkit-scrollbar { display: none; }
 .tab-page-scroll .section-label { margin-top: 16px; }

@@ -6,7 +6,7 @@
   background: transparent;
 }
 
-.mine-page .tab-page-scroll.mine-scroll { padding: max(var(--page-title-top), env(safe-area-inset-top)) 24px 4px; }
+.mine-page .tab-page-scroll.mine-scroll { padding: max(var(--page-title-top), env(safe-area-inset-top)) 24px 18px; }
 .mini-root .mine-page .tab-page-scroll.mine-scroll { padding-top: calc(var(--page-title-top, 20px) + 6px); }
 .mine-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 8px; }
 .mine-header h1 { font-size: 20px; }
