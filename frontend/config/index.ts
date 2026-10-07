@@ -1,4 +1,5 @@
 import { defineConfig } from '@tarojs/cli'
+import path from 'node:path'
 
 export default defineConfig({
   projectName: 'tietie-miniprogram', date: '2026-10-05',
@@ -16,6 +17,11 @@ export default defineConfig({
     options: {},
   },
   mini: {
+    // 第三方依赖也需要转译：真机不支持未转换的 ?? 和 Unicode 属性正则。
+    compile: {
+      include: ['xls-reader', 'estree-util-is-identifier-name', 'micromark-util-character']
+        .map((name) => path.resolve(__dirname, '../node_modules', name)),
+    },
     postcss: {
       // 保留 H5 逻辑像素，避免自动 px→rpx 改变字体与间距。
       pxtransform: { enable: false },

@@ -28,6 +28,7 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
   const self = state.members.find((member) => member.id === 'self')!
   const [editorOpen, setEditorOpen] = useState(!!editProfileInitially)
   const [exitOpen, setExitOpen] = useState(false)
+  const [reminderHelp, setReminderHelp] = useState<'once' | 'permanent' | null>(null)
   const [softwarePanel, setSoftwarePanel] = useState<'about' | 'contact' | null>(null)
   const [savingProfile, setSavingProfile] = useState(false)
   const [exiting, setExiting] = useState(false)
@@ -38,7 +39,7 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
   const softwareScrollTop = useRef(0)
   const [restoreScrollTop, setRestoreScrollTop] = useState<number | undefined>()
   const saving = savingProfile
-  const pageOverlayOpen = editorOpen || exitOpen
+  const pageOverlayOpen = editorOpen || exitOpen || !!reminderHelp
   const gender = self.gender === 'male' ? '男生' : self.gender === 'female' ? '女生' : '暂不填写'
 
   useEffect(() => {
@@ -128,7 +129,7 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
         </button>
       </section>
 
-      {process.env.TARO_ENV === 'weapp' && <WechatReminderSettings key={self.userId} accountId={self.userId} notify={notify} onSubscriptionChange={onWechatSubscriptionChange} />}
+      {process.env.TARO_ENV === 'weapp' && <WechatReminderSettings key={self.userId} accountId={self.userId} notify={notify} onSubscriptionChange={onWechatSubscriptionChange} onExplain={setReminderHelp} />}
 
       <section className="mine-about" aria-labelledby="mine-about-title">
         <div className="mine-section-heading"><h2 id="mine-about-title"><span className="reminder-title-lettering">关于我</span></h2><button type="button" className="mine-edit-button" disabled={saving} onClick={() => setEditorOpen(true)}>编辑资料<ArrowUpRight size={16} aria-hidden="true" /></button></div>
@@ -159,6 +160,14 @@ export function Mine({ editProfileInitially, state, username, code, hasSession, 
 
       <footer className="mine-footer"><div className="mine-footer-actions">{hasSession && <button type="button" className="secondary-button" disabled={saving || exiting} onClick={() => setExitOpen(true)}><Unlink size={14} aria-hidden="true" />退出专属空间</button>}<button type="button" className="secondary-button" disabled={saving || exiting} onClick={() => { onLogout(); notify('已退出登录') }}><LogOut size={14} aria-hidden="true" />退出登录</button></div></footer>
     </ScrollView>
+    {reminderHelp && <Sheet title="关于微信提醒次数" className="wechat-reminder-help-sheet" onClose={() => setReminderHelp(null)}>{(close) => <div className="wechat-reminder-help-content">
+      {reminderHelp === 'permanent' ? <p>你已开启长期微信提醒，无需为每条提醒单独补充次数。可随时在微信中管理订阅。</p> : <>
+        <p>受微信订阅消息规则限制，<strong>每成功订阅一次，贴贴就能向你发送一条微信提醒。</strong></p>
+        <p>点击“提醒剩余次数”右侧的铃铛即可补充次数，每成功订阅一次，增加 1 次提醒机会。</p>
+        <p>每发送一条微信提醒，会使用 1 次机会。次数用完后，记得再点铃铛补充，让重要的小事都能及时送达。</p>
+      </>}
+      <button type="button" className="primary-button" onClick={close}>我知道了</button>
+    </div>}</Sheet>}
     {softwarePanel && <Sheet title={softwarePanel === 'about' ? '关于贴贴' : '联系贴贴'} className="mine-software-sheet" onClose={closeSoftwarePanel}>
       {softwarePanel === 'about' ? <div className="mine-software-content">
         <p className="mine-software-intro">让 AI 走进生活，主动记住小事。</p>

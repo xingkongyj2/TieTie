@@ -48,7 +48,11 @@ func deliverWechatNotification(ctx context.Context, store wechatNotificationStor
 	if !ready {
 		return nil
 	}
-	sendErr := sender.SendReminder(ctx, openID, wechat.ReminderNotification{Title: job.Title, Content: job.Content, DueAt: job.DueAt, Page: job.Page})
+	notificationType := "待办到期提醒"
+	if job.SourceType == "care" {
+		notificationType = job.Title
+	}
+	sendErr := sender.SendReminder(ctx, openID, wechat.ReminderNotification{NotificationType: notificationType, Title: job.Title, Content: job.Content, DueAt: job.DueAt, Page: job.Page})
 	state, reason := dbop.WechatNotificationSent, ""
 	retryable, unauthorized := false, false
 	if sendErr != nil {

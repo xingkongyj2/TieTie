@@ -75,6 +75,7 @@ go run ./cmd/server           # 或 make dev
 | `WECHAT_TIMEOUT_SECONDS` | 微信登录及订阅消息请求超时，默认 10 秒，范围 1–60 |
 | `WECHAT_REMINDER_TEMPLATE_ID` | 微信公众平台选定的订阅消息模板 ID；留空停用微信提醒 |
 | `WECHAT_REMINDER_TITLE_KEY` / `WECHAT_REMINDER_TIME_KEY` / `WECHAT_REMINDER_CONTENT_KEY` | 实际模板的标题、时间、内容关键词；默认 `thing1` / `time2` / `thing3`，多余字段显式留空 |
+| `WECHAT_REMINDER_TYPE_KEY` / `WECHAT_REMINDER_SOURCE_KEY` | 可选通知类型、消息来源关键词，默认留空；模板 3377 使用 `thing1` / `thing3` |
 | `WECHAT_MINIPROGRAM_STATE` | 点击推送打开的版本：`formal`（默认）/ `trial` / `developer` |
 | `WECHAT_REMINDER_SUBSCRIPTION_TYPE` | `once`（默认）；仅平台批准的长期模板可用 `permanent` |
 | `SCHEDULER_POLL_SECONDS` | 定时队列检查间隔，默认 1 秒，范围 1–60 |
@@ -152,7 +153,9 @@ docker build -t tietie-backend .      # 镜像只含后端，静态文件用卷�
 
 发送通过固定微信 HTTPS 地址获取并缓存 stable token，再调用订阅消息接口。明确限流或忙碌最多重试三次；授权版本未变时，明确拒绝退回预留次数，微信拒绝授权则作废对应额度。发送期间若用户重新授权，旧错误结果不清除新额度，也不退回旧版本预留次数，保守避免恢复已撤销的授权。发送超时、未知响应或进程在发送中退出标记 uncertain，不重复发送。领取后尚未发送的租约可以恢复，超过 24 小时的积压停止发送。后台队列关闭时也不发送微信消息。
 
-上线前在微信公众平台选择实际模板，并按 [`.env.example`](.env.example) 填写模板 ID、关键词编号、版本与 AppSecret，重启后端自动建表。用户需在「我的 → 微信提醒」点击授权；默认一次授权只可收到一条提醒，后台不能替用户授权。长期模板必须事先获得微信批准。模板当前尚未选定，mock 测试不代表真实发送已验收。参考 [稳定 token](https://developers.weixin.qq.com/miniprogram/dev/server/API/mp-access-token/api_getstableaccesstoken.html)及[消息发送接口](https://developers.weixin.qq.com/miniprogram/dev/server/API/mp-message-management/subscribe-message/api_sendmessage.html)。
+当前选用模板 3377「聊天消息通知」，模板 ID 为 `CInFuaL7JKsYeYecbmanbsZy8TY_31jj77fSZhUH9iM`。按 [`.env.example`](.env.example) 配置：`WECHAT_REMINDER_TITLE_KEY=`（留空），`WECHAT_REMINDER_TYPE_KEY=thing1`，`WECHAT_REMINDER_SOURCE_KEY=thing3`，`WECHAT_REMINDER_CONTENT_KEY=thing5`，`WECHAT_REMINDER_TIME_KEY=time6`。通知类型为「待办到期提醒」或早安/晚安/纪念日提醒，消息来自「贴贴清单」，备注是实际提醒内容（thing 字段最多 20 个字符），消息时间使用北京时间。
+
+在服务器填写 AppID、AppSecret 和上述模板配置，更新后端镜像并重新创建应用容器以加载环境变量。开发/体验版分别使用 `WECHAT_MINIPROGRAM_STATE=developer/trial`；服务实例的 `BACKGROUND_WORKERS_ENABLED=true`，共用生产数据库的本地实例保持 `false`。用手机微信登录小程序，在「我的 → 提醒剩余次数」点击右侧铃铛并允许订阅，确认次数增加，再发送「1分钟后提醒我喝水」，检查任务已保存后退出小程序等待微信通知。实际提醒回复保存后进入微信队列，每 5 秒检查一次；在 `logs/scheduler.log` 中搜索 `wechat.notification_result` / `wechat.notification_failed` 检查发送状态。默认一次授权只可收到一条提醒；长期模板必须事先获得微信批准。mock 测试不代表真实发送已验收。参考 [稳定 token](https://developers.weixin.qq.com/miniprogram/dev/server/API/mp-access-token/api_getstableaccesstoken.html)及[消息发送接口](https://developers.weixin.qq.com/miniprogram/dev/server/API/mp-message-management/subscribe-message/api_sendmessage.html)。
 
 ## 提醒落库、记忆与运行日志
 

@@ -165,7 +165,7 @@ Qoder 保留云端已有角色和系统提示词，应用只补充成员身份�
 
 AI 创建和手动创建的到期提醒，以及早安、晚安和纪念日提醒，在实际提醒内容保存后进入微信发送队列。普通聊天、提醒修改回执和地区未填写提示不会产生推送。提醒只发送给指定接收人，私密提醒仅发送给本人；点击微信消息进入对应空间的聊天页，打开时仍校验当前登录账号和绑定关系。
 
-启用步骤：在微信公众平台「功能 → 订阅消息」选择符合小程序类目的模板，在后端填写 `WECHAT_REMINDER_TEMPLATE_ID` 和实际关键词编号（标题、时间、内容），同时配置 AppID 和 AppSecret；开发/体验版使用 `WECHAT_MINIPROGRAM_STATE=developer/trial`，正式版使用 `formal`。完整变量见 [backend/.env.example](backend/.env.example)。更新并重启后端、重新构建小程序后，用户在「我的 → 微信提醒 → 接收提醒」主动授权。
+当前使用模板 3377「聊天消息通知」：通知类型 `thing1`、消息来自 `thing3`、备注 `thing5`、消息时间 `time6`；无单独标题字段。模板 ID 及字段配置见 [backend/.env.example](backend/.env.example)，同时配置 AppID 和 AppSecret；开发/体验版使用 `WECHAT_MINIPROGRAM_STATE=developer/trial`，正式版使用 `formal`。更新后端并重新加载环境变量后，用户在「我的 → 提醒剩余次数」点击右侧铃铛主动授权，再创建一分钟后的提醒进行真机测试。完整配置与排查步骤见 [后端说明](backend/README.md)。
 
 默认一次性订阅，每次授权可接收一条消息；次数用完需要再次授权。仅使用微信实际批准的长期订阅模板时，才可设置 `WECHAT_REMINDER_SUBSCRIPTION_TYPE=permanent`。模板未配置时关闭推送，不补发历史提醒。授权余额是本地发送预留，最终以微信返回结果为准；网络响应不明确时保留未知状态并停止重发，避免重复通知。真实发送仍需选定模板并进行真机联调。参考 [微信订阅消息接口](https://developers.weixin.qq.com/miniprogram/dev/server/API/mp-message-management/subscribe-message/api_sendmessage.html)。
 

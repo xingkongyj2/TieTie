@@ -56,7 +56,7 @@ func main() {
 		Auth:           auth.NewService(cfg.JWTSecret, cfg.JWTTTL),
 		DB:             db,
 		Wechat:         wechat.NewClient(cfg.WechatAppID, cfg.WechatAppSecret, cfg.WechatTimeout),
-		WechatMessages: wechat.NewMessageClient(wechat.MessageOptions{AppID: cfg.WechatAppID, AppSecret: cfg.WechatAppSecret, Timeout: cfg.WechatTimeout, ReminderTemplateID: cfg.WechatReminderTemplateID, ReminderTitleKey: cfg.WechatReminderTitleKey, ReminderTimeKey: cfg.WechatReminderTimeKey, ReminderContentKey: cfg.WechatReminderContentKey, MiniprogramState: cfg.WechatMiniprogramState}),
+		WechatMessages: wechat.NewMessageClient(wechat.MessageOptions{AppID: cfg.WechatAppID, AppSecret: cfg.WechatAppSecret, Timeout: cfg.WechatTimeout, ReminderTemplateID: cfg.WechatReminderTemplateID, ReminderTitleKey: cfg.WechatReminderTitleKey, ReminderTimeKey: cfg.WechatReminderTimeKey, ReminderContentKey: cfg.WechatReminderContentKey, ReminderTypeKey: cfg.WechatReminderTypeKey, ReminderSourceKey: cfg.WechatReminderSourceKey, MiniprogramState: cfg.WechatMiniprogramState}),
 	}
 	db.SetWechatNotifications(dbop.WechatNotificationOptions{Enabled: srv.WechatMessages.Enabled(), AppID: cfg.WechatAppID, TemplateID: cfg.WechatReminderTemplateID, SubscriptionType: cfg.WechatReminderSubscriptionType})
 	if cfg.JWTSecret == "tietie-dev-secret-change-me" {

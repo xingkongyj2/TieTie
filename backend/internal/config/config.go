@@ -38,6 +38,8 @@ type Config struct {
 	WechatReminderTitleKey         string           // 模板标题关键词名，默认 thing1；显式留空可省略
 	WechatReminderTimeKey          string           // 模板时间关键词名，默认 time2；显式留空可省略
 	WechatReminderContentKey       string           // 模板内容关键词名，默认 thing3；显式留空可省略
+	WechatReminderTypeKey          string           // 可选通知类型关键词名，如 thing1
+	WechatReminderSourceKey        string           // 可选消息来源关键词名，如 thing3
 	WechatMiniprogramState         string           // formal / trial / developer，默认 formal
 	WechatReminderSubscriptionType string           // once / permanent；默认 once，长期模板才可 permanent
 	SchedulerPollInterval          time.Duration    // 到期队列检查间隔，默认 1s
@@ -106,6 +108,8 @@ func Load() Config {
 		WechatReminderTitleKey:         envOrPresent("WECHAT_REMINDER_TITLE_KEY", "thing1"),
 		WechatReminderTimeKey:          envOrPresent("WECHAT_REMINDER_TIME_KEY", "time2"),
 		WechatReminderContentKey:       envOrPresent("WECHAT_REMINDER_CONTENT_KEY", "thing3"),
+		WechatReminderTypeKey:          os.Getenv("WECHAT_REMINDER_TYPE_KEY"),
+		WechatReminderSourceKey:        os.Getenv("WECHAT_REMINDER_SOURCE_KEY"),
 		WechatMiniprogramState:         envOr("WECHAT_MINIPROGRAM_STATE", "formal"),
 		WechatReminderSubscriptionType: envOr("WECHAT_REMINDER_SUBSCRIPTION_TYPE", "once"),
 		SchedulerPollInterval:          time.Duration(envInt("SCHEDULER_POLL_SECONDS", 1, 60)) * time.Second,

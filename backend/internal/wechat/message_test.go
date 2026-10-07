@@ -295,6 +295,11 @@ func TestMissingOrInvalidConfigurationNeverClaimsSuccess(t *testing.T) {
 		func(o *MessageOptions) { o.ReminderTemplateID = "" }, func(o *MessageOptions) { o.MiniprogramState = "production" },
 		func(o *MessageOptions) { o.ReminderTitleKey = "bogus1" }, func(o *MessageOptions) { o.ReminderTimeKey = "thing2" },
 		func(o *MessageOptions) { o.ReminderContentKey = o.ReminderTitleKey },
+		func(o *MessageOptions) { o.ReminderTypeKey = "time6" },
+		func(o *MessageOptions) { o.ReminderSourceKey = "bogus3" },
+		func(o *MessageOptions) { o.ReminderTypeKey = o.ReminderTitleKey },
+		func(o *MessageOptions) { o.ReminderSourceKey = o.ReminderContentKey },
+		func(o *MessageOptions) { o.ReminderTypeKey = "thing5"; o.ReminderSourceKey = "thing5" },
 		func(o *MessageOptions) { o.ReminderTitleKey = ""; o.ReminderTimeKey = ""; o.ReminderContentKey = "" },
 	} {
 		options := reminderTestOptions()
@@ -311,6 +316,54 @@ func TestMissingOrInvalidConfigurationNeverClaimsSuccess(t *testing.T) {
 		t.Fatal("nil sender must be disabled")
 	}
 	assertMessageKind(t, nilClient.SendReminder(context.Background(), "openid", reminderTestNotification()), MessageNotConfigured)
+}
+
+func TestSendReminderTemplate3377HasAllFourFields(t *testing.T) {
+	options := reminderTestOptions()
+	options.ReminderTemplateID = "CInFuaL7JKsYeYecbmanbsZy8TY_31jj77fSZhUH9iM"
+	options.ReminderTitleKey = ""
+	options.ReminderTypeKey = " thing1 "
+	options.ReminderSourceKey = " thing3 "
+	options.ReminderContentKey = "thing5"
+	options.ReminderTimeKey = "time6"
+	for _, notificationType := range []string{"", "早安提醒", "晚安提醒", "纪念日提醒"} {
+		t.Run(notificationType, func(t *testing.T) {
+			client := NewMessageClient(options)
+			notification := reminderTestNotification()
+			notification.NotificationType = notificationType
+			notification.Content = strings.Repeat("贴", 21)
+			sends := 0
+			client.httpClient.Transport = roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if r.URL.Path == "/cgi-bin/stable_token" {
+					return testWechatResponse(200, `{"access_token":"secret-token","expires_in":7200}`), nil
+				}
+				sends++
+				var body struct {
+					TemplateID string                   `json:"template_id"`
+					Data       map[string]templateValue `json:"data"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					t.Fatal(err)
+				}
+				wantType := notificationType
+				if wantType == "" {
+					wantType = "待办到期提醒"
+				}
+				if body.TemplateID != options.ReminderTemplateID || len(body.Data) != 4 ||
+					body.Data["thing1"].Value != wantType || body.Data["thing3"].Value != "贴贴清单" ||
+					body.Data["thing5"].Value != strings.Repeat("贴", 20) || body.Data["time6"].Value != "2026-10-05 12:30" {
+					t.Fatalf("template 3377 payload mismatch: %+v", body)
+				}
+				return testWechatResponse(200, `{"errcode":0}`), nil
+			})
+			if err := client.SendReminder(context.Background(), "verified-openid", notification); err != nil {
+				t.Fatal(err)
+			}
+			if sends != 1 {
+				t.Fatalf("send requests = %d, want 1", sends)
+			}
+		})
+	}
 }
 
 func TestReminderTemplateFormatsTextByUnicodeType(t *testing.T) {

@@ -239,6 +239,14 @@ h1, h2, h3, p { margin: 0; }
 .assistant-feedback.is-proactive .assistant-feedback-bubble { padding-left: 10px; color: #4e77ba; background: #edf4ff; }
 .assistant-feedback.is-proactive .assistant-feedback-bubble > svg { flex: none; }
 .assistant-feedback-retry { flex-shrink: 0; padding: 2px 0; color: #436ec7; background: none; font-size: inherit; font-weight: 600; }
+.message-bubble.reply-status { display: flex; align-items: baseline; justify-content: flex-start; gap: 4px; min-height: 34px; color: #7187ac; font-size: 13px; line-height: 1.65; }
+.reply-status > span:first-child { min-width: 0; }
+.reply-status-mark { display: inline-flex; align-items: center; align-self: center; flex: none; gap: 3px; width: 15px; height: 15px; color: #7798cf; }
+.reply-status-mark i { flex: none; width: 3px; height: 3px; border-radius: 50%; background: currentColor; animation: typing 1.2s ease-in-out infinite; }
+.reply-status-mark i:nth-child(2) { animation-delay: .15s; }
+.reply-status-mark i:nth-child(3) { animation-delay: .3s; }
+.reply-status-mark.is-replying { color: var(--blue); }
+.message-bubble.reply-status.is-error { color: #a35143; background: #fff1ed; }
 .typing-dots { display: inline-flex; gap: 3px; margin-left: 3px; }
 .typing-dots i { width: 3px; height: 3px; background: var(--blue); border-radius: 100%; animation: typing 1s infinite; }
 .typing-dots i:nth-child(2) { animation-delay: .15s; }
@@ -615,6 +623,8 @@ h1, h2, h3, p { margin: 0; }
 
 .composer-private-button { display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 5px 8px; border-radius: 8px; font-size: 11px; color: #8b919d; background: transparent; white-space: nowrap; margin-left: -4px; }
 .composer-private-button.is-selected { color: var(--blue); }
+/* @TA 时不能切换私密消息，但禁用状态的说明和图标仍须清晰可见。 */
+.composer-private-button.is-disabled, .composer-private-button.is-disabled span { color: #7b879a; opacity: 1; }
 .composer-private-control { position: relative; flex: 0 0 auto; }
 .message-private-label { display: inline-flex; align-items: center; gap: 3px; color: #8b919d; font-size: 9px; }
 

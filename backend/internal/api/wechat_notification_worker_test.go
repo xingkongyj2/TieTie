@@ -65,8 +65,24 @@ func TestWechatNotificationWorkerRecordsOutcomes(t *testing.T) {
 			if !errors.Is(err, tc.err) || !store.finished || !sender.sent || store.state != tc.state || store.retryable != tc.retryable || store.unauthorized != tc.unauthorized {
 				t.Fatalf("store=%+v sent=%v err=%v", store, sender.sent, err)
 			}
-			if sender.notification.Page != job.Page || sender.notification.Content != job.Content {
+			if sender.notification.Page != job.Page || sender.notification.Content != job.Content || sender.notification.NotificationType != "待办到期提醒" {
 				t.Fatal("lost notification content or chat link")
+			}
+		})
+	}
+}
+
+func TestWechatNotificationWorkerUsesCareNotificationType(t *testing.T) {
+	for _, title := range []string{"早安提醒", "晚安提醒", "纪念日提醒"} {
+		t.Run(title, func(t *testing.T) {
+			store := &notificationStoreMock{ready: true}
+			sender := &notificationSenderMock{}
+			job := dbop.WechatNotification{SourceType: "care", Title: title, Content: "提醒内容", DueAt: time.Now()}
+			if err := deliverWechatNotification(context.Background(), store, sender, job); err != nil {
+				t.Fatal(err)
+			}
+			if !sender.sent || sender.notification.NotificationType != title {
+				t.Fatalf("wrong care notification type: %+v", sender.notification)
 			}
 		})
 	}

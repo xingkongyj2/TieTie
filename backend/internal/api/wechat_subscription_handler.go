@@ -33,7 +33,7 @@ func (s *Server) wechatMessageSender() wechat.MessageSender {
 	if s.Cfg == nil {
 		return nil
 	}
-	return wechat.NewMessageClient(wechat.MessageOptions{AppID: s.Cfg.WechatAppID, AppSecret: s.Cfg.WechatAppSecret, Timeout: s.Cfg.WechatTimeout, ReminderTemplateID: s.Cfg.WechatReminderTemplateID, ReminderTitleKey: s.Cfg.WechatReminderTitleKey, ReminderTimeKey: s.Cfg.WechatReminderTimeKey, ReminderContentKey: s.Cfg.WechatReminderContentKey, MiniprogramState: s.Cfg.WechatMiniprogramState})
+	return wechat.NewMessageClient(wechat.MessageOptions{AppID: s.Cfg.WechatAppID, AppSecret: s.Cfg.WechatAppSecret, Timeout: s.Cfg.WechatTimeout, ReminderTemplateID: s.Cfg.WechatReminderTemplateID, ReminderTitleKey: s.Cfg.WechatReminderTitleKey, ReminderTimeKey: s.Cfg.WechatReminderTimeKey, ReminderContentKey: s.Cfg.WechatReminderContentKey, ReminderTypeKey: s.Cfg.WechatReminderTypeKey, ReminderSourceKey: s.Cfg.WechatReminderSourceKey, MiniprogramState: s.Cfg.WechatMiniprogramState})
 }
 func (s *Server) wechatSubscriptionType() string {
 	if s.Cfg != nil && s.Cfg.WechatReminderSubscriptionType == "permanent" {

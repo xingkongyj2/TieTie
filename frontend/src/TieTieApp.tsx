@@ -3,7 +3,7 @@ import { Fragment, useCallback, useEffect, useRef, useState, type CSSProperties,
 import Taro from '@tarojs/taro';
 import { ScrollView, View } from '@tarojs/components';
 import type { MiniFile } from './lib/files';
-import { nextFrame, cancelFrame, onAppVisibilityChange } from './lib/platform';
+import { nextFrame, cancelFrame } from './lib/platform';
 import { assetUrl } from './lib/assets';
 import { Avatar } from './components/Avatar';
 import { BindPage } from './components/BindPage';
@@ -28,6 +28,7 @@ import { useViewportHeight } from './hooks/useViewportHeight';
 import { useAnniversaries } from './hooks/useAnniversaries';
 import type { Message, Reminder } from './types';
 import { matchesMountedPrefix, mountedMessageKey, nextHistoryBatchEnd } from './lib/chatMounting';
+import { ChatScrollPolicy, chatMessageAnchor, chatMessageKey, chatTargetScrollTop, type ChatScrollTarget } from './lib/chatScroll';
 import { reminderLaunchStore } from './lib/reminderLaunch';
 import { wechatSubscriptionApi, type WechatSubscription } from './api/wechat-subscription';
 
@@ -132,8 +133,9 @@ export default function TieTieApp() {
   const [pullRefreshing, setPullRefreshing] = useState(false);
   const scrollSequence = useRef(0);
   const scrollFrame = useRef<number | undefined>(undefined);
+  const scrollPolicy = useRef(new ChatScrollPolicy());
+  const [scrollWake, setScrollWake] = useState(0);
   const chatViewportHeight = useRef(400);
-  const lastChat = useRef({ id: '', view: '' });
   const nearBottom = useRef(true);
   // Native scroll-view emits onScroll while scrollIntoView settles. Keep
   // that short programmatic window separate from a real touch gesture so
@@ -141,7 +143,6 @@ export default function TieTieApp() {
   const chatTouching = useRef(false);
   const chatTouchStartY = useRef<number | null>(null);
   const autoScrollUntil = useRef(0);
-  const followLatest = useRef(false);
   const userScrolledUp = useRef(false);
   const seenReminders = useRef<{ sessionId: string; ids: Set<string> }>({ sessionId: '', ids: new Set() });
   const viewOwner = useRef<number | undefined>(undefined);
@@ -158,10 +159,11 @@ export default function TieTieApp() {
   // during that handoff so the AI status never flashes away before its bubble.
   const waitingForMessageMount = feedback?.phase === 'complete' && mountedMessages.length < chat.messages.length;
   const showFeedback = feedback && (feedback.phase !== 'complete' || waitingForMessageMount)
+    && !chat.hasReplyPlaceholder
     && !chat.error && (!chat.turnError || feedback.phase === 'error')
     && !(feedback.phase === 'sending' && chat.silent)
     && !(feedback.phase === 'delayed' && feedback.message?.startsWith('消息发送状态待确认'));
-  const activeFeedback = !!showFeedback && feedback.phase !== 'complete';
+  const activeFeedback = chat.hasReplyPlaceholder || !!showFeedback && feedback.phase !== 'complete';
   const showCloudError = !!chat.error && !activeFeedback;
   const showLoadingNotice = chat.slowLoading && !chat.error;
   const emptyMode = !chat.messages.length && !activeFeedback ? chat.loading ? 'loading' : !chat.error && !chat.turnError ? 'welcome' : '' : '';
@@ -194,8 +196,7 @@ export default function TieTieApp() {
     setView('we'); setVisitedViews(new Set(['we'])); setEditProfileInitially(false); setTool(null); setPreviewImage(null); setToast('');
     setChatScrollTop(0); setPullRefreshing(false);
     seenReminders.current = { sessionId: '', ids: new Set() };
-    nearBottom.current = true; userScrolledUp.current = false; followLatest.current = false; autoScrollUntil.current = 0;
-    lastChat.current = { id: '', view: '' };
+    nearBottom.current = true; userScrolledUp.current = false; autoScrollUntil.current = 0;
   }, [account.account?.user.userId]);
   useEffect(() => {
     if (!nativeHistory || !account.account) {
@@ -215,27 +216,57 @@ export default function TieTieApp() {
     if (account.account?.binding && !chat.loading && !chat.busy) void reloadAnniversaries.current();
   }, [account.account?.binding?.sessionId, chat.messages.at(-1)?.id, chat.loading, chat.busy, view, tool]);
   const showLatest = useCallback(() => {
-    if (userScrolledUp.current || chatTouching.current) return;
-    nearBottom.current = true;
-    // Ignore the transient native onScroll event produced by this request.
-    autoScrollUntil.current = Date.now() + (followLatest.current ? 5000 : 650);
+    scrollPolicy.current.requestBottom();
+    setScrollWake(value => value + 1);
+  }, []);
+  const scrollToTarget = useCallback((target: ChatScrollTarget, anchor: string) => {
     const request = ++scrollSequence.current;
     if (scrollFrame.current !== undefined) cancelFrame(scrollFrame.current);
     scrollFrame.current = nextFrame(() => {
       scrollFrame.current = undefined;
-      if (userScrolledUp.current || chatTouching.current) return;
-      if (process.env.TARO_ENV === 'h5') {
-        // Scroll the chat element itself so the page header stays in place.
-        const scroller = document.getElementById('chat-scroll');
-        if (scroller) {
-          const top = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-          if (typeof scroller.scrollTo === 'function') scroller.scrollTo({ top, behavior: 'smooth' });
-          else scroller.scrollTop = top;
+      const isCurrent = () => request === scrollSequence.current && !chatTouching.current && scrollPolicy.current.pending === target;
+      if (!isCurrent()) return;
+      const commit = (top: number, currentTop: number) => {
+        if (!isCurrent() || !Number.isFinite(top)) return;
+        scrollPolicy.current.complete(target);
+        // A reply opens at its beginning, even when the user read older rows
+        // during generation. Later layout updates must keep that position.
+        nearBottom.current = target.kind === 'bottom';
+        userScrolledUp.current = target.kind === 'reply';
+        autoScrollUntil.current = Date.now() + 450;
+        if (Math.abs(top - currentTop) < 1) return;
+        if (process.env.TARO_ENV === 'h5') {
+          const scroller = document.getElementById('chat-scroll');
+          if (scroller) {
+            if (typeof scroller.scrollTo === 'function') scroller.scrollTo({ top, behavior: 'auto' });
+            else scroller.scrollTop = top;
+          }
+        } else {
+          // An equal previous prop can refer to a different actual position
+          // after manual scrolling. A sub-pixel nudge makes that request apply.
+          setChatScrollTop(previous => previous === top ? top + .5 : top);
         }
+      };
+      if (process.env.TARO_ENV === 'h5') {
+        const scroller = document.getElementById('chat-scroll');
+        const row = document.getElementById(anchor);
+        const bottom = document.getElementById('chat-bottom-b');
+        if (!scroller || !row || !bottom) return;
+        commit(chatTargetScrollTop(target.kind, scroller.scrollTop, scroller.getBoundingClientRect(), row.getBoundingClientRect(), bottom.getBoundingClientRect()), scroller.scrollTop);
       } else {
-        // A large, changing scrollTop is more reliable than scrollIntoView on
-        // older WeChat bases when native rows are still being appended.
-        setChatScrollTop(1_000_000 + request);
+        const query = Taro.createSelectorQuery();
+        query.select('#chat-scroll').boundingClientRect();
+        query.select('#chat-scroll').scrollOffset();
+        query.select(`#${anchor}`).boundingClientRect();
+        query.select('#chat-bottom-b').boundingClientRect();
+        query.exec(results => {
+          const [viewport, offset, row, bottom] = results as [
+            { top: number; height: number } | null, { scrollTop: number } | null,
+            { top: number } | null, { top: number; height: number } | null,
+          ];
+          if (!viewport || !offset || !row || !bottom) return;
+          commit(chatTargetScrollTop(target.kind, offset.scrollTop, viewport, row, bottom), offset.scrollTop);
+        });
       }
     });
   }, []);
@@ -243,9 +274,6 @@ export default function TieTieApp() {
     if (feedback?.phase !== 'complete' || waitingForMessageMount) return;
     chat.clearReplyFeedback();
   }, [feedback?.phase, waitingForMessageMount, chat.clearReplyFeedback]);
-  useEffect(() => {
-    if (!chat.submitting && !chat.busy) followLatest.current = false;
-  }, [chat.submitting, chat.busy]);
   useEffect(() => {
     if (!reminderLaunch || !account.ready || !account.account) return;
     goToView('we'); setTool(null); setPreviewImage(null); setEditProfileInitially(false);
@@ -260,27 +288,25 @@ export default function TieTieApp() {
     setReminderLaunch(null);
   }, [reminderLaunch, account.ready, account.account, chat.reload, showLatest, notify, goToView]);
   useEffect(() => {
-    const changedSession = lastChat.current.id !== chat.selectedId;
-    const openedChat = view === 'we' && lastChat.current.view !== 'we';
-    if (changedSession) {
-      nearBottom.current = true;
-      userScrolledUp.current = false;
-      followLatest.current = false;
-      autoScrollUntil.current = Date.now() + 260;
-    } else if (openedChat) {
-      // The chat layer stays mounted while another tab is visible. Preserve a
-      // deliberate reading position across that tab switch; only a session
-      // change resets it to the latest message.
-      autoScrollUntil.current = Date.now() + 260;
-    }
-    // The mini-program mounts a long history in bounded batches. Waiting for
-    // the final batch avoids landing halfway through the list while those
-    // rows are still being appended.
+    const owner = `${account.account?.user.userId ?? ''}:${chat.selectedId ?? ''}`;
+    scrollPolicy.current.observe(owner, chat.messages, chat.loaded, nearBottom.current && !userScrolledUp.current);
     const historyMounted = !nativeHistory || mountedMessages.length === chat.messages.length;
-    if (view === 'we' && historyMounted && (chat.messages.length || chat.replyFeedback)
-      && !userScrolledUp.current && (nearBottom.current || chat.submitting)) showLatest();
-    lastChat.current = { id: chat.selectedId ?? '', view };
-  }, [chat.selectedId, chat.messages, mountedMessages.length, chat.replyFeedback?.phase, chat.replyFeedback?.message, chat.submitting, view, !!state, showLatest, appHeight]);
+    const target = scrollPolicy.current.pending;
+    if (view !== 'we' || !historyMounted || !target || chatTouching.current || !state || account.onboardingStep) return;
+    let anchor = 'chat-bottom-b';
+    if (target.kind === 'reply') {
+      const index = mountedMessages.findIndex(message => chatMessageKey(message) === target.key);
+      if (index < 0) return;
+      anchor = chatMessageAnchor(mountedMessages[index]);
+      if (index === 0 || messageDay(mountedMessages[index - 1].createdAt) !== messageDay(mountedMessages[index].createdAt)) anchor += '-day';
+    }
+    scrollToTarget(target, anchor);
+    return () => {
+      scrollSequence.current += 1;
+      if (scrollFrame.current !== undefined) cancelFrame(scrollFrame.current);
+      scrollFrame.current = undefined;
+    };
+  }, [account.account?.user.userId, account.onboardingStep, chat.selectedId, chat.loaded, chat.messages, mountedMessages, view, !!state, scrollWake, scrollToTarget]);
   useEffect(() => {
     const frame = nextFrame(() => Taro.createSelectorQuery().select('#chat-scroll').boundingClientRect((rect) => {
       const bounds = Array.isArray(rect) ? rect[0] : rect;
@@ -288,9 +314,6 @@ export default function TieTieApp() {
     }).exec());
     return () => cancelFrame(frame);
   }, [view, appHeight, !!state]);
-  useEffect(() => onAppVisibilityChange((visible) => {
-    if (visible && view === 'we' && !userScrolledUp.current) { nearBottom.current = true; showLatest(); }
-  }), [view, showLatest]);
   useEffect(() => {
     if (!chat.selectedId || chat.loading) return;
     const seen = seenReminders.current;
@@ -315,12 +338,14 @@ export default function TieTieApp() {
 
   const ai = state.members.find((m) => m.id === 'ai')!;
   const proactiveFeedback = feedback?.phase === 'proactive_reminder' || feedback?.phase === 'proactive_update';
+  const preparingFirstWelcome = !chat.messages.length && !chat.canStop && !chat.silent;
   const feedbackText = feedback?.phase === 'error' ? feedback.message || '这次回复遇到问题，请重试。'
     : feedback?.phase === 'sent' ? '消息已发给对方'
       : feedback?.phase === 'stopped' ? '已停止'
         : feedback?.phase === 'stopping' ? '正在停止…'
           : feedback?.phase === 'proactive_reminder' ? `${ai.name}正在发送消息提醒`
             : feedback?.phase === 'proactive_update' ? `${ai.name}正在告诉你提醒的变化`
+              : preparingFirstWelcome ? `${ai.name}正在为你们准备欢迎语…`
               : feedback?.phase === 'delayed' ? '回复还需要一点时间'
                 : feedback?.phase === 'syncing' ? `${ai.name}正在整理回复`
                   : feedback?.phase === 'thinking' || feedback?.phase === 'replying' || feedback?.phase === 'complete' ? `${ai.name}正在回复`
@@ -369,7 +394,6 @@ export default function TieTieApp() {
     // normal "preserve my position" guard wins and the list oscillates.
     userScrolledUp.current = false;
     nearBottom.current = true;
-    followLatest.current = true;
     chatTouching.current = false;
     autoScrollUntil.current = Date.now() + 1200;
     const pending = chat.sendMessage(text, files, visibility, !!partner && mentionRanges(text, [partner.name]).length > 0);
@@ -393,10 +417,13 @@ export default function TieTieApp() {
       {(nativeHistory || showCloudError) && <div hidden={!showCloudError} style={nativeHistory && !showCloudError ? { display: 'none' } : undefined} className="cloud-error" role="alert">{showCloudError && <><span>{chat.error}</span><button disabled={chat.submitting} onClick={() => void chat.reload()}>重试连接</button></>}</div>}
       {(nativeHistory || showLoadingNotice) && <div hidden={!showLoadingNotice} style={nativeHistory && !showLoadingNotice ? { display: 'none' } : undefined} className="cloud-error cloud-loading-notice" role="status">{showLoadingNotice && <><span>连接云端用时较长，仍在尝试。超过 30 秒会停止等待并提示重试。</span><button onClick={() => void chat.reload()}>重新连接</button></>}</div>}
       <ScrollView id="chat-scroll" className={`chat-scroll ${!chat.messages.length && !activeFeedback ? 'is-empty' : ''}`} scrollY
-        scrollTop={nativeHistory ? chatScrollTop : undefined} scrollWithAnimation enhanced enableFlex showScrollbar={false}
+        scrollTop={nativeHistory ? chatScrollTop : undefined} scrollWithAnimation={false} enhanced enableFlex showScrollbar={false}
         refresherDefaultStyle="black" refresherBackground="transparent"
         onTouchStart={(event) => {
           chatTouching.current = true;
+          scrollSequence.current += 1;
+          if (scrollFrame.current !== undefined) cancelFrame(scrollFrame.current);
+          scrollPolicy.current.cancelBottom();
           autoScrollUntil.current = 0;
           const touch = (event as unknown as { touches?: Array<{ clientY?: number }> }).touches?.[0];
           chatTouchStartY.current = Number.isFinite(touch?.clientY) ? touch!.clientY! : null;
@@ -405,35 +432,24 @@ export default function TieTieApp() {
         onTouchMove={(event) => {
           const touch = (event as unknown as { touches?: Array<{ clientY?: number }> }).touches?.[0];
           const y = touch?.clientY;
-          if (chatTouching.current && chatTouchStartY.current !== null && Number.isFinite(y) && y! < chatTouchStartY.current - 8) {
+          if (chatTouching.current && chatTouchStartY.current !== null && Number.isFinite(y) && Math.abs(y! - chatTouchStartY.current) > 8) {
             nearBottom.current = false;
             userScrolledUp.current = true;
-            followLatest.current = false;
             autoScrollUntil.current = 0;
           }
         }}
-        onTouchEnd={() => { chatTouching.current = false; chatTouchStartY.current = null; }}
-        onTouchCancel={() => { chatTouching.current = false; chatTouchStartY.current = null; }}
-        refresherEnabled refresherTriggered={pullRefreshing || chat.refreshing} onRefresherRefresh={async () => {
+        onTouchEnd={() => { chatTouching.current = false; chatTouchStartY.current = null; setScrollWake(value => value + 1); }}
+        onTouchCancel={() => { chatTouching.current = false; chatTouchStartY.current = null; setScrollWake(value => value + 1); }}
+        refresherEnabled refresherTriggered={pullRefreshing} onRefresherRefresh={async () => {
           setPullRefreshing(true);
           await new Promise<void>((resolve) => nextFrame(resolve));
           try { await chat.reload(); } finally { setPullRefreshing(false); }
         }}
         onScroll={(event) => {
-          const keepFollowing = followLatest.current && (chat.submitting || chat.busy);
-          if (chat.loading || (!chatTouching.current && (Date.now() < autoScrollUntil.current || keepFollowing))) return;
+          if (chat.loading || (!chatTouching.current && Date.now() < autoScrollUntil.current)) return;
           const detail = event.detail as { scrollHeight?: number; scrollTop?: number; deltaY?: number };
-          const deltaY = Number(detail.deltaY);
           const scrollTop = Number(detail.scrollTop);
           const scrollHeight = Number(detail.scrollHeight);
-          // deltaY still identifies an upward gesture on older WeChat bases
-          // where scrollHeight is not included in the event detail.
-          if (chatTouching.current && Number.isFinite(deltaY) && deltaY < -1) {
-            nearBottom.current = false;
-            userScrolledUp.current = true;
-            followLatest.current = false;
-            return;
-          }
           if (!Number.isFinite(scrollTop) || !Number.isFinite(scrollHeight) || scrollHeight <= 0) return;
           const atBottom = scrollHeight - scrollTop - chatViewportHeight.current < 100;
           nearBottom.current = atBottom;
@@ -447,8 +463,8 @@ export default function TieTieApp() {
           </div>
         </> : null}</div>}
         <div className="messages">{mountedMessages.map((message, index) => <Fragment key={message.renderKey ?? message.id}>
-          {(index === 0 || messageDay(mountedMessages[index - 1].createdAt) !== messageDay(message.createdAt)) && <div className="chat-date"><span /><strong>{messageDayLabel(message.createdAt)}</strong><span /></div>}
-          <ChatMessage message={message} members={sharedMembers} onError={notify} onOpenImage={(src, alt) => setPreviewImage({ src, alt })} onAnswer={chat.answerAsk} answerDisabled={chat.submitting || chat.busy} onLayoutChange={() => { if (nearBottom.current) showLatest(); }} />
+          {(index === 0 || messageDay(mountedMessages[index - 1].createdAt) !== messageDay(message.createdAt)) && <div id={`${chatMessageAnchor(message)}-day`} className="chat-date"><span /><strong>{messageDayLabel(message.createdAt)}</strong><span /></div>}
+          <ChatMessage message={message} members={sharedMembers} onError={notify} onOpenImage={(src, alt) => setPreviewImage({ src, alt })} onAnswer={chat.answerAsk} answerDisabled={chat.submitting || chat.busy} />
         </Fragment>)}</div>
         {(nativeHistory || showFeedback) && <div hidden={!showFeedback} style={nativeHistory && !showFeedback ? { display: 'none' } : undefined} className={`assistant-feedback${feedback?.phase === 'error' ? ' is-error' : ''}${proactiveFeedback ? ' is-proactive' : ''}`} role={feedback?.phase === 'error' ? 'alert' : 'status'} aria-live="polite">{showFeedback && <><Avatar member={ai} /><div className="assistant-feedback-bubble">{proactiveFeedback && <Bell size={13} aria-hidden="true" />}<span>{feedbackText}</span>{feedback.phase !== 'sent' && feedback.phase !== 'stopped' && feedback.phase !== 'stopping' && feedback.phase !== 'error' && <span className="typing-dots" aria-hidden="true"><i /><i /><i /></span>}{chat.error && <button className="assistant-feedback-retry" disabled={chat.loading || chat.refreshing || chat.submitting} onClick={() => void chat.reload()}>重新同步</button>}</div></>}</div>}
         {(nativeHistory || chat.turnError && !activeFeedback) && <div hidden={!chat.turnError || activeFeedback} style={nativeHistory && (!chat.turnError || activeFeedback) ? { display: 'none' } : undefined} className="turn-error" role="alert">{chat.turnError && !activeFeedback ? chat.turnError : ''}</div>}

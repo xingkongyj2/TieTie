@@ -1,6 +1,7 @@
 import { AbortController } from '../lib/abort'
 import { isAppVisible, onAppVisibilityChange } from '../lib/platform'
 import { Textarea, Form, SubmitButton } from './Fields';
+import { Textarea as NativeTextarea } from '@tarojs/components'
 import { RefreshCw, Sparkles, ArrowUp } from './Icons'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { impressionApi, type Impression } from '../api/impression'
@@ -12,6 +13,7 @@ interface Props { member: Member; sessionId?: string; notify: (text: string) => 
 export function PartnerImpression({ member, sessionId, notify }: Props) {
   const [impression, setImpression] = useState<Impression | null>(null)
   const [draft, setDraft] = useState('')
+  const [inputFocused, setInputFocused] = useState(false)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -93,7 +95,12 @@ export function PartnerImpression({ member, sessionId, notify }: Props) {
     </section>
     <Form className="impression-supplement" onSubmit={(event) => void submit(event)}>
       <label htmlFor="impression-input">补充关于{member.name}的信息</label>
-      <Textarea id="impression-input" rows={4} maxLength={2000} disabled={saving} value={draft} placeholder="习惯、爱好、工作…" onChange={(event) => setDraft(event.target.value)} />
+      {process.env.TARO_ENV === 'weapp' ? <div className={`impression-input-frame${inputFocused ? ' is-focused' : ''}`}>
+        <NativeTextarea id="impression-input" className="h5-textarea impression-textarea" maxlength={2000} disabled={saving} value={draft}
+          placeholder="习惯、爱好、工作…" placeholderStyle="color:#b0b9c8;font-size:13px;line-height:24px;"
+          adjustPosition={false} onInput={(event) => setDraft(event.detail.value)}
+          onFocus={() => setInputFocused(true)} onBlur={() => setInputFocused(false)} />
+      </div> : <Textarea id="impression-input" rows={4} maxLength={2000} disabled={saving} value={draft} placeholder="习惯、爱好、工作…" onChange={(event) => setDraft(event.target.value)} />}
       <div className="impression-input-footer"><SubmitButton className="primary-button"  disabled={saving || !draft.trim()}>{saving ? '正在记住…' : '告诉贴贴'}<ArrowUp size={15} aria-hidden="true" /></SubmitButton></div>
       {saveError && <p className="impression-problem" role="alert">{saveError} 草稿已保留。</p>}
       {memoryPending && <p className="impression-sync" role="status">已保存，记忆同步中。</p>}

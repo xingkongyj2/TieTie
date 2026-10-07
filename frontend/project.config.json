@@ -1,7 +1,7 @@
 {
   "description": "贴贴清单 · Taro React 微信小程序",
   "projectname": "tietie-miniprogram",
-  "appid": "wx2b024606f9c7a021",
+  "appid": "wx5254fb4764d34a70",
   "compileType": "miniprogram",
   "miniprogramRoot": "./dist",
   "setting": {

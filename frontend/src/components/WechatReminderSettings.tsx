@@ -4,18 +4,20 @@ import { ApiError } from '../api/client'
 import { wechatSubscriptionApi, type SubscriptionResult, type WechatSubscription } from '../api/wechat-subscription'
 import { getToken } from '../lib/token'
 import { readStorage, removeStorage, writeStorage } from '../lib/storage'
-import { Bell } from './Icons'
+import { wechatSubscriptionErrorMessage } from '../lib/wechatSubscriptionError'
+import { Bell, CircleHelp } from './Icons'
 
 interface Props {
   notify: (text: string) => void
   accountId?: number
   onSubscriptionChange?: (subscription: WechatSubscription) => void
+  onExplain: (type: WechatSubscription['subscriptionType']) => void
 }
 
 const pendingKey = (accountId: number | undefined, templateId: string) => `tietie.wechat-subscription.pending.v1:${accountId ?? 'unknown'}:${templateId}`
 
 /** Authorization is requested directly from this user click, never on page load. */
-export function WechatReminderSettings({ notify, accountId, onSubscriptionChange }: Props) {
+export function WechatReminderSettings({ notify, accountId, onSubscriptionChange, onExplain }: Props) {
   const [subscription, setSubscription] = useState<WechatSubscription | null>(null)
   const [busy, setBusy] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -82,7 +84,7 @@ export function WechatReminderSettings({ notify, accountId, onSubscriptionChange
         pending.current = null
         if (subscription?.templateId) removeStorage(pendingKey(accountId, subscription.templateId))
       }
-      setError(e instanceof Error ? e.message : '微信授权未完成，请再试一次。')
+      setError(wechatSubscriptionErrorMessage(e))
     } finally {
       submitting.current = false
       if (current()) setBusy(false)
@@ -94,7 +96,7 @@ export function WechatReminderSettings({ notify, accountId, onSubscriptionChange
 
   return <section className="mine-wechat-reminders" aria-label="微信提醒">
     <div className="wechat-reminder-row">
-      <div className="wechat-reminder-copy"><span>提醒剩余次数</span><strong>{count}</strong></div>
+      <div className="wechat-reminder-copy"><span className="wechat-reminder-label">提醒剩余次数<button type="button" className="wechat-reminder-help" aria-label="了解微信提醒次数" onClick={() => onExplain(subscription?.subscriptionType ?? 'once')}><CircleHelp size={13} strokeWidth={1.7} aria-hidden="true" /></button></span><strong>{count}</strong></div>
       <button type="button" className={`wechat-reminder-button${buttonDisabled ? ' is-disabled' : ''}`} aria-disabled={buttonDisabled} aria-busy={busy} aria-label="开启微信提醒" onClick={() => { if (!buttonDisabled) void subscribe() }}>
         <span className="wechat-reminder-mark" aria-hidden="true"><Bell size={17} /></span>
       </button>

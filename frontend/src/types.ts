@@ -101,6 +101,8 @@ export interface Message {
   localStatus?: 'sending' | 'sent' | 'failed' | 'uncertain'
   /** Keeps the rendered row stable when a local send receives its cloud event ID. */
   renderKey?: string
+  /** Local presentation only: a stable AI row waiting for its cloud message. */
+  replyStatus?: { phase: 'thinking' | 'replying' | 'stopping' | 'stopped' | 'error'; welcome?: boolean; message?: string }
   replyMode?: 'silent'
   visibility?: MessageVisibility
   id: string

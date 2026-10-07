@@ -8,6 +8,8 @@ import { ChatImage, MarkdownMessage } from './MarkdownMessage';
 import { isVisibleChatMessage } from '../lib/chatMessages';
 import { attachmentDisplayName } from '../lib/attachments';
 import { WeatherCard } from './WeatherCard';
+import { chatMessageAnchor } from '../lib/chatScroll';
+import { replyStatusText } from '../lib/replyPresentation';
 
 function messageTime(message: Message): string {
   const timestamp = Date.parse(message.createdAt ?? '');
@@ -27,11 +29,14 @@ export function ChatMessage({ message, members, onError, onOpenImage, onAnswer, 
   const isReminder = message.sender === 'ai' && message.source === 'reminder';
   const isReminderUpdate = message.sender === 'ai' && message.source === 'reminder_update';
   const ask = message.kind === 'ask' ? message.ask ?? [] : [];
-  return <div className={`message-row ${isSelf ? 'message-self' : ''} ${message.sender === 'ai' ? 'message-ai' : ''}`}>
+  return <div id={chatMessageAnchor(message)} className={`message-row ${isSelf ? 'message-self' : ''} ${message.sender === 'ai' ? 'message-ai' : ''}`}>
     <Avatar member={{ ...member, name }} showAILabel={message.sender === 'ai'} />
     <div className="message-content">
       <div className="message-meta"><span>{name}</span>{message.visibility === 'private' && <span className="message-private-label"><LockKeyhole size={10} aria-hidden="true" />仅自己可见</span>}<time dateTime={message.createdAt}>{messageTime(message)}</time></div>
-      {message.weatherCards?.length ? <div className="message-bubble has-weather-card">{message.weatherCards.map((card, index) => <WeatherCard key={index} card={card} />)}</div> : ask.length ? <AskCard disabled={answerDisabled} message={message} questions={ask} onAnswer={onAnswer} onError={onError} /> : <div className={`message-bubble ${isReminder || isReminderUpdate ? 'has-reminder-type' : ''}`}>
+      {message.replyStatus ? <div className={`message-bubble reply-status${message.replyStatus.phase === 'error' ? ' is-error' : ''}`} role={message.replyStatus.phase === 'error' ? 'alert' : 'status'} aria-live="polite">
+        <span>{replyStatusText(message.replyStatus, name)}</span>
+        <span className={`reply-status-mark${message.replyStatus.phase === 'replying' ? ' is-replying' : ''}`} aria-hidden="true">{(message.replyStatus.phase === 'thinking' || message.replyStatus.phase === 'replying') && <><i /><i /><i /></>}</span>
+      </div> : message.weatherCards?.length ? <div className="message-bubble has-weather-card">{message.weatherCards.map((card, index) => <WeatherCard key={index} card={card} />)}</div> : ask.length ? <AskCard disabled={answerDisabled} message={message} questions={ask} onAnswer={onAnswer} onError={onError} /> : <div className={`message-bubble ${isReminder || isReminderUpdate ? 'has-reminder-type' : ''}`}>
         {(isReminder || isReminderUpdate) && <span className={`message-type-badge${isReminderUpdate ? ' is-update' : ''}`}><Bell size={12} aria-hidden="true" />{isReminder ? '消息提醒' : '提醒状态更新'}</span>}
         {message.sender === 'ai' ? <MarkdownMessage text={message.text} memberNames={members.filter((m) => m.id !== 'ai').map((m) => m.name)} onOpenImage={onOpenImage} onLayoutChange={onLayoutChange} /> : message.text && <div className="message-text"><MentionText text={message.text} names={members.filter((m) => m.id !== 'ai').map((m) => m.name)} /></div>}
         {message.files?.length ? <div className="message-files" role="list" aria-label="消息附件">{message.files.map((file, index) => <span className="message-file" role="listitem" key={`${file}-${index}`}>

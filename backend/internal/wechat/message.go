@@ -25,10 +25,11 @@ const (
 // ReminderNotification is the reminder preview shown in WeChat. Page must name
 // a page in this mini-program; full reminder content remains in the chat.
 type ReminderNotification struct {
-	Title   string
-	Content string
-	DueAt   time.Time
-	Page    string
+	NotificationType string
+	Title            string
+	Content          string
+	DueAt            time.Time
+	Page             string
 }
 
 type MessageSender interface {
@@ -46,6 +47,8 @@ type MessageOptions struct {
 	ReminderTitleKey   string
 	ReminderTimeKey    string
 	ReminderContentKey string
+	ReminderTypeKey    string
+	ReminderSourceKey  string
 	MiniprogramState   string
 	Timeout            time.Duration
 }
@@ -111,6 +114,8 @@ func NewMessageClient(options MessageOptions) *MessageClient {
 	options.ReminderTitleKey = strings.TrimSpace(options.ReminderTitleKey)
 	options.ReminderTimeKey = strings.TrimSpace(options.ReminderTimeKey)
 	options.ReminderContentKey = strings.TrimSpace(options.ReminderContentKey)
+	options.ReminderTypeKey = strings.TrimSpace(options.ReminderTypeKey)
+	options.ReminderSourceKey = strings.TrimSpace(options.ReminderSourceKey)
 	options.MiniprogramState = strings.TrimSpace(options.MiniprogramState)
 	if options.MiniprogramState == "" {
 		options.MiniprogramState = "formal"
@@ -138,7 +143,7 @@ func validMessageOptions(options MessageOptions) bool {
 	if options.MiniprogramState != "formal" && options.MiniprogramState != "trial" && options.MiniprogramState != "developer" {
 		return false
 	}
-	keys := []string{options.ReminderTitleKey, options.ReminderTimeKey, options.ReminderContentKey}
+	keys := []string{options.ReminderTitleKey, options.ReminderTimeKey, options.ReminderContentKey, options.ReminderTypeKey, options.ReminderSourceKey}
 	seen := map[string]bool{}
 	for i, key := range keys {
 		if key == "" {
@@ -345,9 +350,15 @@ func keywordKind(key string) string {
 
 func (c *MessageClient) reminderData(notification ReminderNotification) (map[string]templateValue, error) {
 	data := make(map[string]templateValue)
+	notificationType := strings.TrimSpace(notification.NotificationType)
+	if notificationType == "" {
+		notificationType = "待办到期提醒"
+	}
 	for _, field := range []struct{ key, text string }{
 		{c.options.ReminderTitleKey, notification.Title},
 		{c.options.ReminderContentKey, notification.Content},
+		{c.options.ReminderTypeKey, notificationType},
+		{c.options.ReminderSourceKey, "贴贴清单"},
 	} {
 		if field.key == "" {
 			continue

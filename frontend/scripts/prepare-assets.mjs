@@ -38,7 +38,7 @@ const svgs = {
 for (const [name, svg] of Object.entries(svgs)) await sharp(Buffer.from(svg), { density: 192 }).png({ compressionLevel: 9 }).toFile(path.join(output, 'decor', `${name}.png`))
 
 // 直接从原 Lucide 几何生成 SVG 遮罩。currentColor 保留所有父级颜色与动画。
-const names = new Set()
+const names = new Set(['CircleHelp'])
 const files = [path.join(root, 'web/src/App.tsx'), ...(await readdir(path.join(root, 'web/src/components'))).filter(name => name.endsWith('.tsx')).map(name => path.join(root, 'web/src/components', name))]
 for (const file of files) {
   const text = await readFile(file, 'utf8')

@@ -67,13 +67,13 @@ npm test
 npm run build
 ```
 
-`npm run build` 同时准备资源、输出 `dist/`，并校验页面文件和主包大小。开发时使用 `npm run dev` 持续构建。当前 `frontend/.env.local` 配置 `TARO_APP_API_BASE_URL=http://38.76.183.142:4173`，直接访问现有服务器，不依赖本机后端。只有需要本地后端调试时才按 `backend/README.md` 启动，并将该变量改为本机地址。
+`npm run build` 同时准备资源、输出 `dist/`，并校验页面文件、JavaScript/正则兼容性和主包大小。开发时使用 `npm run dev` 持续构建。`frontend/.env.local` 中的 `TARO_APP_API_BASE_URL` 指定本地 Go 后端：仅模拟器测试可用 `http://127.0.0.1:4173`；真机测试使用 `http://电脑的局域网IP:4173`，改完后重新构建。按 `backend/README.md` 启动本地后端，数据库连接参数也需适合本机运行环境。
 
 微信构建会展开裸 `:first-child` / `:last-child` 选择器，聚焦效果使用组件的 `is-focused` 状态，避免 H5 的 `:has()` 与通配符阻止 WXSS 编译。macOS 上若微信开发者工具安装在默认路径，包检查还会调用其原生 `wcsc` 编译器检查全部 WXSS；其他安装位置可通过 `WECHAT_WXSS_COMPILER` 指定可执行文件。未找到原生编译器时会明确提示仍需在开发者工具中确认编译。
 
 1. 检查 `frontend/project.config.json` 中的 `appid` 与微信后台的小程序 AppID 一致。当前已填写项目的 AppID。开发者工具直接使用 Taro 编译结果，关闭再次转 ES5、样式补全和代码压缩。AppSecret 只用于需要它的服务端微信能力，不要写入前端。
 2. 在微信开发者工具中导入 **`frontend/` 目录**。项目配置中的 `miniprogramRoot` 为 `dist/`，不要把 Taro 的 `src/` 当作小程序编译目录。
-3. 当前开发版通过 `.env.local` 访问 `http://38.76.183.142:4173`。在开发者工具本地调试设置中临时关闭合法域名校验；使用本机后端时才改为 `http://127.0.0.1:4173`。手机上的 `127.0.0.1` 指向手机自身，真机需使用手机可访问的 API 地址。
+3. 在开发者工具本地调试设置中临时关闭合法域名校验。手机上的 `127.0.0.1` 指向手机自身，真机测试本地后端时需在 `.env.local` 填写电脑的局域网 IP，后端以 `HOST=0.0.0.0` 启动，并确保手机与电脑在同一 Wi-Fi。若本地后端共用服务器数据库，通过启动环境变量指定本机可连接的 `MYSQL_HOST`，同时设 `BACKGROUND_WORKERS_ENABLED=false`，避免和服务器重复运行后台任务。电脑 IP 改变后需更新前端地址并重新构建。
 4. 体验版、正式版构建前明确设置 API 地址。示例地址需替换成自己的服务：
 
    ```bash

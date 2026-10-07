@@ -6,6 +6,7 @@ import { isTurnCancellationMarker, isVisibleChatMessage } from '../lib/chatMessa
 import { AbortController } from '../lib/abort'
 import type { MiniFile } from '../lib/files'
 import { isAppVisible, onAppVisibilityChange } from '../lib/platform'
+import { ReplyPresentation, type ReplyFeedback } from '../lib/replyPresentation'
 
 const isRemoteBusy = (session: CloudSession | null) =>
   !!session && ['running', 'rescheduling', 'canceling'].includes(session.status.toLowerCase())
@@ -17,6 +18,7 @@ interface CloudState {
   selectedId: string | null
   session: CloudSession | null
   messages: Message[]
+  presentedMessages: Message[]
   members: CloudMember[]
   reminders: CloudReminder[]
   remindersError: string
@@ -36,9 +38,6 @@ interface CloudState {
   replyFeedback: ReplyFeedback | null
 }
 
-type ReplyPhase = 'sending' | 'waiting' | 'thinking' | 'replying' | 'syncing' | 'delayed' | 'stopping' | 'stopped' | 'sent' | 'error' | 'complete' | 'proactive_reminder' | 'proactive_update'
-interface ReplyFeedback { phase: ReplyPhase; message?: string }
-
 interface PendingTurn {
   startedAt: number
   messageIds: Set<string>
@@ -55,7 +54,7 @@ interface PendingTurn {
 
 const initialState: CloudState = {
   replyMode: '',
-  selectedId: null, session: null, messages: [], members: [], reminders: [], remindersError: '', cursor: null, lastIdleEventId: null,
+  selectedId: null, session: null, messages: [], presentedMessages: [], members: [], reminders: [], remindersError: '', cursor: null, lastIdleEventId: null,
   loaded: false, loading: true, slowLoading: false, refreshing: false, error: '', submitting: false, stopping: false, pending: false,
   thinking: false, streaming: false,
   turnError: '', replyFeedback: null,
@@ -126,10 +125,19 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
   const localMessageSequence = useRef(0)
   const pendingTurns = useRef(new Map<string, PendingTurn>())
   const readRef = useRef<(options?: { full?: boolean }) => Promise<void>>(async () => {})
+  const replyPresentation = useRef(new ReplyPresentation())
 
   const update = useCallback((patch: Partial<CloudState>) => {
     if (!mounted.current) return
     current.current = { ...current.current, ...patch }
+    const snapshot = current.current
+    snapshot.presentedMessages = replyPresentation.current.present({
+      owner: scopeRef.current, messages: snapshot.messages, loaded: snapshot.loaded,
+      busy: snapshot.pending || isRemoteBusy(snapshot.session) || snapshot.thinking,
+      terminated: snapshot.session?.status.toLowerCase() === 'terminated',
+      silent: snapshot.replyMode === 'silent', turnError: snapshot.turnError, feedback: snapshot.replyFeedback,
+      pending: snapshot.selectedId ? pendingTurns.current.get(snapshot.selectedId) : undefined,
+    })
     setState(current.current)
   }, [])
 
@@ -603,7 +611,6 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
   // row can replace the reply indicator without a blank frame. The view hides
   // this phase as soon as the new row is mounted.
   const replyFeedback = state.replyFeedback
-    ?? (busy || state.thinking ? { phase: 'waiting' } as ReplyFeedback : null)
   const clearReplyFeedback = useCallback(() => {
     if (!mounted.current || current.current.replyFeedback?.phase !== 'complete') return
     update({ replyFeedback: null })
@@ -615,7 +622,8 @@ export function useCloudChat(pinnedId: string | null, onSessionForbidden?: () =>
   const canStop = !!(state.selectedId && pendingTurns.current.get(state.selectedId) && !pendingTurns.current.get(state.selectedId)?.silent)
   return {
     selectedId: state.selectedId, session: state.session, pinned: !!pinnedId,
-    messages: state.messages, loaded: state.loaded, loading: state.loading, slowLoading: state.slowLoading, refreshing: state.refreshing,
+    messages: state.presentedMessages, hasReplyPlaceholder: state.presentedMessages.some(message => !!message.replyStatus),
+    loaded: state.loaded, loading: state.loading, slowLoading: state.slowLoading, refreshing: state.refreshing,
     members: state.members, reminders: state.reminders, remindersError: state.remindersError,
     error: state.error, submitting: state.submitting, stopping: state.stopping, busy, awaitingAsk, canSend, canStop,
     thinking: state.thinking, streaming: state.streaming, replyFeedback,

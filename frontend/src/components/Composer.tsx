@@ -25,6 +25,7 @@ export function Composer({ members, sending, processing, stopping, disabled = fa
   const partner = members.find((member) => member.id === 'partner' && member.userId && member.name !== '另一位成员');
   const names = partner ? [partner.name] : [];
   const toPartner = mentionRanges(text, names).length > 0;
+  const privateControlDisabled = sending || disabled || processing || toPartner;
   const hasContent = !!text.trim() || files.length > 0;
   // WeChat applies a native disabled color to the button. These icons are
   // CSS-mask views, so paint the mask itself while the compact composer is
@@ -170,7 +171,7 @@ export function Composer({ members, sending, processing, stopping, disabled = fa
       </div>
       <div className="composer-toolbar">
       <div className="composer-private-control">
-        <button type="button" className={`composer-private-button ${!toPartner && visibility === 'private' ? 'is-selected' : ''}`} disabled={sending || disabled || processing || toPartner} aria-pressed={!toPartner && visibility === 'private'} onClick={() => setVisibility((current) => current === 'private' ? 'shared' : 'private')}><EyeOff size={13} /><span>消息TA不可见</span></button>
+        <button type="button" className={`composer-private-button${!toPartner && visibility === 'private' ? ' is-selected' : ''}${privateControlDisabled ? ' is-disabled' : ''}`} disabled={privateControlDisabled} aria-pressed={!toPartner && visibility === 'private'} onClick={() => setVisibility((current) => current === 'private' ? 'shared' : 'private')}><EyeOff size={13} style={privateControlDisabled ? { color: '#7b879a', backgroundColor: '#7b879a' } : undefined} /><span>消息TA不可见</span></button>
       </div>
       <button type="button" className="attachment-button" aria-label="添加附件或图片" title="添加附件或图片" disabled={sending || disabled || processing} onClick={() => void selectFiles()}><Paperclip size={19} strokeWidth={2} /></button>
       {processing ? <button type="button" className="send-button stop-button" aria-label="停止AI处理" aria-busy={stopping} disabled={stopping} onClick={() => void onStop().catch((error) => onError(error instanceof Error ? error.message : '停止失败，请再试一次。'))}>{stopping ? <span className="spinner" aria-hidden="true" /> : <Square size={15} fill="currentColor" strokeWidth={2} aria-hidden="true" />}</button>
