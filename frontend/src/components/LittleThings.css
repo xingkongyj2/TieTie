@@ -6,7 +6,7 @@
   font-display: swap;
 }
 .things-page { background: transparent; color: #202b40; }
-.things-page .things-scroll { padding: 0 24px 30px; }
+.things-page .things-scroll { padding: 0 24px 4px; }
 .things-header { display: flex; align-items: center; justify-content: center; flex-shrink: 0; gap: 12px; padding: max(var(--page-title-top), env(safe-area-inset-top)) 24px 0; margin-bottom: 3px; }
 .things-heading { width: 100%; min-width: 0; }
 .things-hero { position: relative; padding: 18px 21px 19px; overflow: hidden; border: 0; border-radius: 28px; background: #f8f9fb; }
@@ -48,7 +48,7 @@
 .things-page #things-countdown-tab { --tab-label-scale-y: 1.02; }
 .things-page .things-tab-panel { padding-top: 0; }
 /* 状态占位随当前 tab 撑满标题与底栏之间的可用空间。 */
-.things-page .things-scroll.is-placeholder { padding-bottom: 0; }
+.things-page .things-scroll.is-placeholder { padding-bottom: 4px; }
 .things-page .things-tab-panel.is-active.is-placeholder { display: flex; flex-direction: column; flex: 1; }
 .things-page #things-reminders-panel > .things-section-heading { margin-top: 24px; }
 .things-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; margin: 0 2px 12px; }
